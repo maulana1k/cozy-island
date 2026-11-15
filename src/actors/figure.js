@@ -187,7 +187,7 @@ export function createFigure({
   return {
     group,
     // How far to lower the figure so it sits on the ground, or on a seat of a given height.
-    sitDrop: (PELVIS_Y - 0.1) * scale,
+    sitDrop: (PELVIS_Y - 0.15) * scale,
     seatLift: (top) => top + 0.07 - PELVIS_Y * scale,
     setCarry(on) { if (load) load.visible = on; },
     // speed (m/s) drives the stride. opts: sitting, sitGround, wobble 0..1, air (-1 falling .. 1 rising,

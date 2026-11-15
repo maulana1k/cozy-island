@@ -73,7 +73,7 @@ function buildPath(points, width, material) {
   const samples = [];
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i], b = points[i + 1];
-    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.8));
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.4));
     for (let j = 0; j < n; j++) samples.push({ x: a.x + (b.x - a.x) * (j / n), z: a.z + (b.z - a.z) * (j / n) });
   }
   samples.push(points[points.length - 1]);
@@ -84,7 +84,7 @@ function buildPath(points, width, material) {
     const wobble = 1 + Math.sin(i * 1.7) * 0.12;
     for (const side of [-1, 1]) {
       const x = p.x + dz * side * (width / 2) * wobble, z = p.z - dx * side * (width / 2) * wobble;
-      positions.push(x, heightAt(x, z) + 0.05, z);
+      positions.push(x, heightAt(x, z) + 0.012, z); // barely above the ground, so feet stand on it rather than in it
     }
     if (i < samples.length - 1) { const k = i * 2; indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
   }
@@ -103,7 +103,7 @@ function buildSquare(material, radius = 5.2) {
   for (let i = 0; i < pos.count; i++) {
     const wobble = i === 0 ? 1 : 1 + Math.sin(i * 2.3) * 0.05;
     const x = VILLAGE_CENTER.x + pos.getX(i) * wobble, z = VILLAGE_CENTER.z + pos.getZ(i) * wobble;
-    pos.setXYZ(i, x, heightAt(x, z) + 0.06, z);
+    pos.setXYZ(i, x, heightAt(x, z) + 0.014, z);
   }
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, material);
@@ -192,7 +192,7 @@ export function createVillage(scene) {
     cream: flat(0xfaf3e2), barnSeam: flat(0x9c4636),
     leaf: flat(PALETTE.leafA), dark: flat(0x4a3a3a), seam: flat(0x9a7350), thatchDark: flat(PALETTE.thatchDark),
     window: new THREE.MeshStandardMaterial({ color: 0xcfe6ee, roughness: 0.4, emissive: PALETTE.windowGlow, emissiveIntensity: 0 }),
-    path: new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
+    path: new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
   };
 
   const group = new THREE.Group();

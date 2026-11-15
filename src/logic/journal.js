@@ -2,16 +2,19 @@
 export const DISCOVERIES = [
   { id: 'lantern', label: 'Light a lantern' },
   { id: 'door', label: 'Open a door' },
-  { id: 'bell', label: 'Ring the village bell' },
+  { id: 'bell', label: 'Ring the camp bell' },
+  { id: 'flag', label: 'Raise the camp flag' },
   { id: 'seat', label: 'Sit down for a while' },
   { id: 'tree', label: 'Shake a tree' },
   { id: 'campfire', label: 'Tend a campfire' },
-  { id: 'villager', label: 'Nudge a villager' },
+  { id: 'villager', label: 'Nudge a fellow scout' },
   { id: 'chickens', label: 'Shoo the chickens' },
   { id: 'cat', label: 'Pet the cat' },
+  { id: 'sheep', label: 'Pet a sheep' },
   { id: 'place-dock', label: 'Walk to the end of the dock' },
   { id: 'place-lookout', label: 'Climb to the lookout' },
   { id: 'place-camp', label: 'Visit the beach camp' },
+  { id: 'place-windmill', label: 'Visit the windmill' },
 ];
 
 export function createJournal() {

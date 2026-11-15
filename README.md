@@ -2,8 +2,9 @@ Classification: INTERNAL
 
 # Cozy Island
 
-A small, calm 3D island to wander around. Explore a traditional wooden village, poke at
-things, and nudge the villagers. There is nothing to win or finish.
+A small, calm 3D island to wander around, themed as a student scout camp: a meeting hall,
+cabins, a guard post, a farm, tents and a flagpole. Poke at things and nudge your fellow
+scouts. There is nothing to win or finish.
 
 ## Run it
 
@@ -23,13 +24,15 @@ Then open the address it prints (normally http://localhost:5173).
 | Space | Hop |
 | E | Use the thing in front of you |
 | M | Mute or unmute |
+| Esc | Menu and journal |
 | Drag the mouse | Turn the camera |
 | Scroll | Zoom |
 
 ## Things to try
 
 Light the lanterns and campfires, open doors, ring the bell, sit on a log, shake a tree,
-shoo the chickens, pet the cat, and bump into a villager.
+shoo the chickens, pet the cat and the sheep, visit the windmill, and bump into a villager.
+Press Esc for the menu, which has a journal of things to find.
 
 ## Notes
 

@@ -3,9 +3,9 @@ import { skyColors, sunDirection, nightFactor } from '../logic/dayCycle.js';
 import { createRng } from '../logic/rng.js';
 import { SEED } from '../config.js';
 
-const SUN_SCALE = 0.85;
-const AMBIENT_SCALE = 1.6;
-const FOG_DENSITY = 0.0032;
+const SUN_SCALE = 1.0;
+const AMBIENT_SCALE = 1.25;
+const FOG_DENSITY = 0.0026;
 const SHADOW_HALF = 42;
 
 function buildDome() {

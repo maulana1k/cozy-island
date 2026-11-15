@@ -86,6 +86,27 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
 - The bell moves to the northern edge of the square. Seats are logs by the
   two fires plus the lookout bench.
 
+### Later changes asked for by the owner during the build
+
+- **Theme:** a student scouting event on a small island. The villagers are
+  five scouts and their leader, all in neckerchiefs; the player is a scout too.
+- **Layout:** buildings are scattered, not in a ring, and each has a purpose:
+  a meeting hall, three cabins, a farm barn with a crop field, and a guard
+  post with a lookout deck by the dock path. Scout tents stand in rows beside
+  the parade ground, plus the beach camp. A flagpole (raise/lower with E), a
+  windmill and a sheep meadow were added.
+- **Look:** taken from the owner's reference pictures as style direction only
+  (designer's call: an original character and world, not a copy): golden dry
+  grass with swaying tufts, chunky flat-shaded trees, a clear blue sky,
+  kid-sized characters, tiled roofs with chimney smoke, gulls, rabbits and sheep.
+- **Interface:** start screen, clock and day counter, step count, minimap,
+  pop-up notices, and an Esc menu with a journal of 15 optional things to
+  find, sound toggle and time-of-day buttons. This replaces the earlier
+  "only a hint and a prompt on screen" rule. The journal is not a quest:
+  nothing is required or rewarded.
+- **Tests:** the owner asked to stop writing test files part-way; rules
+  added after that (interaction picking, scout behaviour, sound) are untested.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

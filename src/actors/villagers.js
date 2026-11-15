@@ -6,9 +6,14 @@ import { heightAt } from '../logic/terrain.js';
 import { VILLAGER_SPOTS, getColliders, groundAt } from '../logic/layout.js';
 import { PALETTE, SEED, VILLAGER_COUNT, VILLAGER_RADIUS, NUDGE_TIME } from '../config.js';
 
-const ACCENTS = ['hat', 'scarf', 'bow', 'cap', 'apron', 'flower'];
-const ACCENT_COLORS = [0xd9a05b, 0xff8f6b, 0xe07a94, 0x7fa9c9, 0xfff3c4, 0xff9db5];
-const HAIR = [0x5b4336, 0x8a5a3c, 0x3d3230, 0xc98f5a, 0x6b4a3a, 0x4a3b36];
+// Five scouts and their leader (the one in the wide hat).
+const ACCENTS = ['hat', 'cap', 'bow', 'cap', null, 'cap'];
+const SHIRTS = [0xc9b27a, 0xd8c08a, 0xd8c08a, 0xcdb98a, 0xd8c08a, 0xcbb780];
+const NECKERCHIEFS = [0x3f8f6a, 0xe8503a, 0xf2b63b, 0x4f7fc9, 0xe8503a, 0xf2b63b];
+const ACCENT_COLORS = [0xb89a5e, 0x6f8f5a, 0xe07a94, 0x6f8f5a, 0xfff3c4, 0x6f8f5a];
+const HAIR = [0x5b4336, 0x8a5a3c, 0x3d3230, 0xc98f5a, 0xd8d2c8, 0x4a3b36];
+const SKIN = [0xf1c7a0, 0xc98d62, 0xe6b48a, 0x9a6a4a, 0xf3d2b4, 0xd9a273];
+const SHORTS = [0x5f7fa6, 0x8a6a4a, 0x6f8f6a, 0x4f5f7a, 0xa66a5f, 0x7a6fa6];
 const EMOTES = ['heart', 'note', 'surprise'];
 
 export function createVillagers(scene, deps) {
@@ -20,7 +25,7 @@ export function createVillagers(scene, deps) {
   for (let i = 0; i < VILLAGER_COUNT; i++) {
     const brain = createVillager(`villager-${i}`, VILLAGER_SPOTS[i + 1], rng);
     brain.timer = 0.5 + rng() * 4;
-    const figure = createFigure({ bodyColor: PALETTE.villagers[i], accent: ACCENTS[i], accentColor: ACCENT_COLORS[i], hairColor: HAIR[i] });
+    const figure = createFigure({ bodyColor: SHIRTS[i], neckerchief: NECKERCHIEFS[i], accent: ACCENTS[i], accentColor: ACCENT_COLORS[i], hairColor: HAIR[i], skinColor: SKIN[i], shortsColor: SHORTS[i] });
     scene.add(figure.group);
     villagers.push({ brain, figure, heading: rng() * 6.28, wobble: 0, hop: 0, position: { x: brain.x, z: brain.z } });
   }

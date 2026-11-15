@@ -9,32 +9,31 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export const VILLAGE_CENTER = { x: 10, z: 8 };
 // The village fire burns in the middle of the square; the bell stands at its northern edge.
 export const VILLAGE_FIRE = { x: VILLAGE_CENTER.x, z: VILLAGE_CENTER.z };
-export const BELL = { x: VILLAGE_CENTER.x + 0.3, z: VILLAGE_CENTER.z - 4.7 };
+export const BELL = { x: 12.5, z: 2.8 };
+export const FLAGPOLE = { x: 14.2, z: 10.6 };
+// The farm: a crop field beside the barn.
+export const FIELD = { x: 26.5, z: 31.5, rot: 0.5, width: 5, length: 7 };
 
 // Houses stand on short stilts; `floor` is how far the floor is above the ground.
 export const COTTAGE_SIZE = { width: 5, depth: 4, floor: 0.55 };
 
-// Cottages sit in an arc that is open to the south, where the player starts.
-const COTTAGE_RING = [
-  { angle: 150, radius: 12 },
-  { angle: 205, radius: 11.5 },
-  { angle: 252, radius: 13 },
-  { angle: 300, radius: 12 },
-  { angle: 345, radius: 12.5 },
-  { angle: 32, radius: 12.5 },
+// The scout camp's buildings are scattered around the parade ground, each with its own job.
+// `rot` turns the front (+z) of the building; width/depth are its footprint; `floor` is the
+// height of the floor above the ground (cabins stand on short stilts).
+const BUILDINGS = [
+  { type: 'hall', x: 9, z: -7, rot: 0, width: 8, depth: 5.5, floor: 0.35 },
+  { type: 'cabin', x: -3, z: 6, rot: 1.3, width: 5, depth: 4, floor: 0.55 },
+  { type: 'cabin', x: -1, z: 16, rot: 0.9, width: 5, depth: 4, floor: 0.55 },
+  { type: 'cabin', x: 22, z: 2, rot: -1.9, width: 5, depth: 4, floor: 0.55 },
+  { type: 'barn', x: 33, z: 27, rot: -2.03, width: 6.5, depth: 5, floor: 0 },
+  { type: 'guard', x: 44, z: 11, rot: 0.15, width: 3, depth: 3, floor: 0 },
 ];
 
-export const COTTAGES = COTTAGE_RING.map((c, i) => {
-  const x = VILLAGE_CENTER.x + Math.cos(c.angle * DEG) * c.radius;
-  const z = VILLAGE_CENTER.z + Math.sin(c.angle * DEG) * c.radius;
-  const rot = Math.atan2(VILLAGE_CENTER.x - x, VILLAGE_CENTER.z - z); // front (+z) faces the square
-  const half = COTTAGE_SIZE.depth / 2;
-  return {
-    id: `cottage-${i}`, x, z, rot,
-    wallColor: PALETTE.walls[i], roofColor: PALETTE.roofs[i],
-    door: { x: x + Math.sin(rot) * half, z: z + Math.cos(rot) * half, rot },
-  };
-});
+export const COTTAGES = BUILDINGS.map((b, i) => ({
+  id: `cottage-${i}`, ...b,
+  wallColor: PALETTE.walls[i], roofColor: PALETTE.roofs[i],
+  door: { x: b.x + Math.sin(b.rot) * (b.depth / 2), z: b.z + Math.cos(b.rot) * (b.depth / 2), rot: b.rot },
+}));
 
 const doorFront = (c, d) => ({ x: c.door.x + Math.sin(c.door.rot) * d, z: c.door.z + Math.cos(c.door.rot) * d });
 
@@ -54,6 +53,9 @@ export const CAMPFIRE = { x: Math.cos(128 * DEG) * 53, z: Math.sin(128 * DEG) * 
 export const LOOKOUT = { x: HILL.x, z: HILL.z };
 export const CAMPFIRES = [{ id: 'fire-village', ...VILLAGE_FIRE, lit: true }, { id: 'fire-camp', ...CAMPFIRE, lit: false }];
 export const CHICKEN_YARD = { x: 25, z: 23, r: 3 };
+// A windmill stands on the north-east meadow, with sheep grazing beside it.
+export const WINDMILL = { x: 30, z: -22 };
+export const SHEEP_MEADOW = { x: 23.5, z: -17, r: 3.2 };
 export const CAT_SPOT = { x: 4.6, z: 8.8 };
 
 const facing = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
@@ -71,15 +73,22 @@ export const SEATS = [
   seat('bench-2', 'bench', lookoutSeat, { x: lookoutSeat.x * 3, z: lookoutSeat.z * 3 }),
 ];
 
-// Canvas tents pitched around the camp fire on the beach, openings facing the fire.
-export const TENTS = [60, 185, 250].map((a, i) => {
-  const p = around(CAMPFIRE, a, 5.4);
-  return { id: `tent-${i}`, x: p.x, z: p.z, rot: facing(p, CAMPFIRE) };
-});
+// Canvas tents: three around the beach camp fire, and the scouts' rows beside the parade ground.
+const tentAt = (id, p, lookAt) => ({ id, x: p.x, z: p.z, rot: facing(p, lookAt) });
+export const TENTS = [
+  ...[60, 185, 250].map((a, i) => tentAt(`tent-${i}`, around(CAMPFIRE, a, 5.4), CAMPFIRE)),
+  tentAt('tent-3', { x: 15.5, z: 16 }, VILLAGE_CENTER), tentAt('tent-4', { x: 19, z: 17.5 }, VILLAGE_CENTER),
+  tentAt('tent-5', { x: -8, z: 12 }, VILLAGE_CENTER), tentAt('tent-6', { x: -9.5, z: 15.5 }, VILLAGE_CENTER),
+];
 
 // Dirt paths: from the square to every door, the dock, the campfire and the lookout.
 export const PATHS = [
-  ...COTTAGES.map((c) => [VILLAGE_CENTER, doorFront(c, 0.4)]),
+  ...COTTAGES.map((c) => {
+    // The far-off barn and guard post branch off the dock path instead of crossing the camp.
+    if (c.type === 'barn') return [{ x: 24, z: 11 }, { x: 29.5, z: 19 }, doorFront(c, 0.4)];
+    if (c.type === 'guard') return [{ x: 40, z: 15 }, doorFront(c, 0.4)];
+    return [VILLAGE_CENTER, doorFront(c, 0.4)];
+  }),
   [VILLAGE_CENTER, { x: 24, z: 11 }, { x: 40, z: 15 }, { x: DOCK.x, z: DOCK.z }],
   [VILLAGE_CENTER, PLAYER_START, { x: 3, z: 24 }, { x: -14, z: 35 }, { x: CAMPFIRE.x + 2.6, z: CAMPFIRE.z - 3.2 }],
   [VILLAGE_CENTER, { x: 1, z: -2 }, { x: -6, z: -11 }, { x: -11, z: -14 }, { x: -15, z: -18.5 }, { x: LOOKOUT.x + 1.2, z: LOOKOUT.z + 1.6 }],
@@ -162,11 +171,13 @@ export function getScatter() {
   const keepClear = [
     ...SEATS.map((s) => ({ ...s, r: 2 })), ...LANTERNS.map((l) => ({ ...l, r: 1.5 })),
     ...VILLAGER_SPOTS.map((s) => ({ ...s, r: 2.6 })),
-    { ...PLAYER_START, r: 3 }, { ...CAMPFIRE, r: 8.5 }, { ...BELL, r: 2 }, { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
-    { ...LOOKOUT, r: 4.5 },
+    { ...PLAYER_START, r: 3 }, { ...CAMPFIRE, r: 8.5 }, { ...BELL, r: 2 }, { ...FLAGPOLE, r: 2 }, { ...FIELD, r: 5.5 },
+    ...TENTS.map((t) => ({ ...t, r: 3 })), { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
+    { ...LOOKOUT, r: 4.5 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
   ];
   const clearOf = (p, list, extra = 0) => list.every((o) => dist(p, o) > (o.r || 0) + extra);
-  const clearOfCottages = (p, d) => COTTAGES.every((c) => dist(p, c) > d);
+  // Bigger buildings need a wider berth.
+  const clearOfCottages = (p, d) => COTTAGES.every((c) => dist(p, c) > d + Math.max(0, (Math.max(c.width, c.depth) - 5) / 2));
 
   function place(count, prefix, ok, makeExtra) {
     const out = [];
@@ -180,9 +191,9 @@ export function getScatter() {
     return out;
   }
 
-  const trees = place(40, 'tree',
+  const trees = place(70, 'tree',
     (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 45.5 && distanceToPath(p.x, p.z) > 2.4
-      && clearOfCottages(p, 5.6) && dist(p, VILLAGE_CENTER) > 9 && clearOf(p, keepClear, 0.6) && out.every((o) => dist(p, o) > 3.4),
+      && clearOfCottages(p, 5.6) && dist(p, VILLAGE_CENTER) > 9 && clearOf(p, keepClear, 0.6) && out.every((o) => dist(p, o) > 2.9),
     () => ({ scale: 0.85 + rng() * 0.5, rot: rng() * Math.PI * 2, kind: Math.floor(rng() * 3) }));
 
   const bushes = place(30, 'bush',
@@ -227,7 +238,7 @@ export function getColliders() {
   if (colliderCache) return colliderCache;
   const s = getScatter();
   colliderCache = [
-    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: COTTAGE_SIZE.width / 2, hd: COTTAGE_SIZE.depth / 2, rot: c.rot, tall: true })),
+    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: c.width / 2, hd: c.depth / 2, rot: c.rot, tall: true })),
     ...FENCES.map(fenceBox),
     ...s.trees.map((t) => ({ x: t.x, z: t.z, r: 0.4 * t.scale })),
     ...s.rocks.map((r) => ({ x: r.x, z: r.z, r: 0.5 * r.scale })),
@@ -236,9 +247,11 @@ export function getColliders() {
       ? { x: st.x, z: st.z, hw: 0.85, hd: 0.3, rot: st.rot }
       : { x: st.x, z: st.z, hw: 0.8, hd: 0.3, rot: st.rot })),
     { x: BELL.x, z: BELL.z, r: 0.45 },
+    { x: FLAGPOLE.x, z: FLAGPOLE.z, r: 0.22 },
     ...CAMPFIRES.map((f) => ({ x: f.x, z: f.z, r: 0.8 })),
     ...TENTS.map((t) => ({ x: t.x, z: t.z, hw: 1.25, hd: 1.35, rot: t.rot })),
     { x: BOAT.x, z: BOAT.z, r: 1.2 },
+    { x: WINDMILL.x, z: WINDMILL.z, r: 2.4 },
   ];
   return colliderCache;
 }

@@ -20,7 +20,7 @@ function insideTall(x, z, colliders) {
 export function createFollowCamera(camera) {
   const target = new THREE.Vector3();
   let initialised = false;
-  let pitch = 24 * DEG, wantDistance = CAMERA.distance, distance = CAMERA.distance;
+  let pitch = 19 * DEG, wantDistance = CAMERA.distance, distance = CAMERA.distance;
   const offset = new THREE.Vector3();
 
   const rig = {

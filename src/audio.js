@@ -121,6 +121,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     squeak() { tone(680, { type: 'sine', dur: 0.14, gain: 0.1, to: 1150 }); tone(D5 * 2, { type: 'sine', dur: 0.2, gain: 0.04, delay: 0.1 }); },
     cluck() { for (let i = 0; i < 3; i++) tone(520 + Math.random() * 180, { type: 'triangle', dur: 0.07, gain: 0.07, delay: i * 0.1 + Math.random() * 0.03, to: 380 }); },
     purr() { for (let i = 0; i < 9; i++) tone(92, { type: 'triangle', dur: 0.07, gain: 0.09, delay: i * 0.075 }); tone(A5, { type: 'sine', dur: 0.4, gain: 0.03, delay: 0.1 }); },
+    baa() { tone(340, { type: 'sawtooth', dur: 0.5, gain: 0.035, to: 300 }); tone(345, { type: 'triangle', dur: 0.5, gain: 0.06, to: 296 }); },
     step() { hiss({ type: 'lowpass', freq: 650, dur: 0.06, gain: 0.035 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };

@@ -1,7 +1,7 @@
 // Things the player can use with E: lanterns, doors, the bell, seats, trees and campfires.
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
-import { COTTAGES, COTTAGE_SIZE, LANTERNS, BELL, SEATS, CAMPFIRES } from '../logic/layout.js';
+import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
@@ -73,7 +73,7 @@ export function createProps(scene, deps) {
     holder.position.set(c.x, heightAt(c.x, c.z) - 0.05, c.z);
     holder.rotation.y = c.rot;
     const hinge = new THREE.Group();
-    hinge.position.set(-0.5, COTTAGE_SIZE.floor, COTTAGE_SIZE.depth / 2 + 0.07);
+    hinge.position.set(-0.5, c.floor, c.depth / 2 + 0.07);
     const leaf = mesh(new THREE.BoxGeometry(1.0, 1.8, 0.07), flat(0x9c6f48), 0.5, 0.9, 0);
     hinge.add(leaf, mesh(new THREE.BoxGeometry(1.0, 0.08, 0.09), woodDark, 0.5, 1.35, 0), mesh(new THREE.BoxGeometry(1.0, 0.08, 0.09), woodDark, 0.5, 0.45, 0));
     hinge.add(mesh(new THREE.SphereGeometry(0.05, 8, 8), flat(0xe8c36a), 0.86, 0.9, 0.06));
@@ -82,7 +82,7 @@ export function createProps(scene, deps) {
     const door = { open: false, angle: 0 };
     interactables.push({
       id: `door-${i}`, kind: 'door', position: { x: c.door.x + Math.sin(c.rot) * 0.5, z: c.door.z + Math.cos(c.rot) * 0.5 },
-      markerY: holder.position.y + COTTAGE_SIZE.floor + 2.3,
+      markerY: holder.position.y + c.floor + 2.3,
       prompt: () => (door.open ? 'E — close door' : 'E — open door'),
       interact() { door.open = !door.open; audio.play('door'); },
     });
@@ -118,6 +118,34 @@ export function createProps(scene, deps) {
     updaters.push((dt) => {
       rung += dt;
       pivot.rotation.z = rung < 1.5 ? Math.sin(rung * 10) * 0.55 * Math.exp(-rung * 2.2) : 0;
+    });
+  }
+
+  // ---- Camp flag ----------------------------------------------------------
+  {
+    const y = heightAt(FLAGPOLE.x, FLAGPOLE.z);
+    const g = new THREE.Group();
+    g.add(mesh(new THREE.CylinderGeometry(0.06, 0.09, 6.4, 8), flat(0xfaf3e2), 0, 3.2, 0));
+    g.add(mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe9c46a, roughness: 0.4, metalness: 0.5 }), 0, 6.45, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.3, 8), stone, 0, 0.12, 0));
+    const flag = new THREE.Group();
+    const cloth = mesh(new THREE.BoxGeometry(1.5, 0.95, 0.03), flat(0x4f9a6a), 0.82, 0, 0);
+    const stripe = mesh(new THREE.BoxGeometry(1.5, 0.22, 0.04), flat(0xf2c94c), 0.82, 0, 0, false);
+    const badge = mesh(new THREE.OctahedronGeometry(0.2, 0), flat(0xfaf3e2), 0.6, 0, 0, false); badge.scale.z = 0.15;
+    flag.add(cloth, stripe, badge);
+    g.add(flag);
+    g.position.set(FLAGPOLE.x, y, FLAGPOLE.z);
+    group.add(g);
+    const state = { up: false, h: 1.3 };
+    interactables.push({
+      id: 'flag', kind: 'flag', position: { x: FLAGPOLE.x, z: FLAGPOLE.z }, markerY: y + 2.4,
+      prompt: () => (state.up ? 'E — lower flag' : 'E — raise flag'),
+      interact() { state.up = !state.up; audio.play('lantern'); },
+    });
+    updaters.push((dt, elapsed) => {
+      state.h += ((state.up ? 5.75 : 1.3) - state.h) * Math.min(1, dt * 1.6);
+      flag.position.y = state.h;
+      flag.rotation.y = Math.sin(elapsed * 1.7) * 0.22 + Math.sin(elapsed * 3.1) * 0.06;
     });
   }
 

@@ -1,6 +1,6 @@
 // On-screen interface: start screen, clock and stats, minimap, notices and the pause menu.
 import { ISLAND_RADIUS, GRASS_RADIUS, HILL } from './config.js';
-import { COTTAGES, COTTAGE_SIZE, PATHS, DOCK, TENTS, CAMPFIRES, BELL } from './logic/layout.js';
+import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, BELL, WINDMILL } from './logic/layout.js';
 
 const MAP_SIZE = 168;        // CSS pixels
 const MAP_WORLD = 70;        // metres from the centre to the edge of the map
@@ -16,10 +16,10 @@ function drawStaticMap(ctx, scale) {
   ctx.beginPath(); ctx.arc(c, c, c - 1, 0, Math.PI * 2); ctx.clip();
   ctx.fillStyle = '#8fd6d6'; ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
   ctx.fillStyle = '#f7ecca'; ctx.beginPath(); ctx.arc(c, c, ISLAND_RADIUS * k, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#b5e09c'; ctx.beginPath(); ctx.arc(c, c, GRASS_RADIUS * k, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(120, 180, 110, 0.55)'; ctx.beginPath(); ctx.arc(px(HILL.x), pz(HILL.z), HILL.radius * 0.55 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ecc86e'; ctx.beginPath(); ctx.arc(c, c, GRASS_RADIUS * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(205, 160, 70, 0.55)'; ctx.beginPath(); ctx.arc(px(HILL.x), pz(HILL.z), HILL.radius * 0.55 * k, 0, Math.PI * 2); ctx.fill();
   // Paths
-  ctx.strokeStyle = '#ecd7ae'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#faeccb'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (const path of PATHS) { ctx.beginPath(); path.forEach((p, i) => (i ? ctx.lineTo(px(p.x), pz(p.z)) : ctx.moveTo(px(p.x), pz(p.z)))); ctx.stroke(); }
   // Dock
   ctx.strokeStyle = '#b98a5e'; ctx.lineWidth = 2.6;
@@ -28,8 +28,8 @@ function drawStaticMap(ctx, scale) {
   // Houses
   for (const h of COTTAGES) {
     ctx.save(); ctx.translate(px(h.x), pz(h.z)); ctx.rotate(-h.rot);
-    ctx.fillStyle = '#c9944f'; ctx.strokeStyle = '#8c6444'; ctx.lineWidth = 0.8;
-    const w = COTTAGE_SIZE.width * k * 1.25, d = COTTAGE_SIZE.depth * k * 1.25;
+    ctx.fillStyle = '#d9634a'; ctx.strokeStyle = '#8c4a3a'; ctx.lineWidth = 0.8;
+    const w = h.width * k * 1.25, d = h.depth * k * 1.25;
     ctx.fillRect(-w / 2, -d / 2, w, d); ctx.strokeRect(-w / 2, -d / 2, w, d);
     ctx.restore();
   }
@@ -38,6 +38,9 @@ function drawStaticMap(ctx, scale) {
     ctx.fillStyle = '#e9a27a'; ctx.beginPath();
     ctx.moveTo(px(t.x), pz(t.z) - 3.4); ctx.lineTo(px(t.x) + 3.2, pz(t.z) + 2.6); ctx.lineTo(px(t.x) - 3.2, pz(t.z) + 2.6); ctx.closePath(); ctx.fill();
   }
+  // Windmill
+  ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = '#8c6444'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(px(WINDMILL.x), pz(WINDMILL.z), 3.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px(WINDMILL.x) - 5, pz(WINDMILL.z) - 5); ctx.lineTo(px(WINDMILL.x) + 5, pz(WINDMILL.z) + 5); ctx.moveTo(px(WINDMILL.x) + 5, pz(WINDMILL.z) - 5); ctx.lineTo(px(WINDMILL.x) - 5, pz(WINDMILL.z) + 5); ctx.stroke();
   // Fires and bell
   for (const f of CAMPFIRES) { ctx.fillStyle = '#ff8a3c'; ctx.beginPath(); ctx.arc(px(f.x), pz(f.z), 2.2, 0, Math.PI * 2); ctx.fill(); }
   ctx.fillStyle = '#e9c46a'; ctx.beginPath(); ctx.arc(px(BELL.x), pz(BELL.z), 1.8, 0, Math.PI * 2); ctx.fill();
@@ -80,7 +83,7 @@ export function createHUD(handlers) {
   // ---- Start screen
   const start = el('div', 'overlay start');
   const startCard = el('div', 'card');
-  startCard.append(el('h1', null, 'Cozy Island'), el('p', 'sub', 'A quiet little island with a wooden village. Nothing to win, nowhere to be.'), el('p', 'press', 'Press any key or click to begin'));
+  startCard.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'A student scout camp on a quiet little island. Nothing to win, nowhere to be.'), el('p', 'press', 'Press any key or click to begin'));
   start.append(startCard);
 
   // ---- Pause menu

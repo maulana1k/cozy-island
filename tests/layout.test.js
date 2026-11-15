@@ -17,17 +17,15 @@ test('cottages do not overlap each other', () => {
   for (let i = 0; i < COTTAGES.length; i++) for (let j = i + 1; j < COTTAGES.length; j++)
     expect(Math.hypot(COTTAGES[i].x - COTTAGES[j].x, COTTAGES[i].z - COTTAGES[j].z)).toBeGreaterThan(6.5);
 });
-test('cottages ring the village centre with doors facing it', () => {
+test('every building door faces away from its own walls', () => {
   for (const c of COTTAGES) {
-    const d = Math.hypot(c.x - VILLAGE_CENTER.x, c.z - VILLAGE_CENTER.z);
-    expect(d).toBeGreaterThanOrEqual(9); expect(d).toBeLessThanOrEqual(14);
-    const doorDist = Math.hypot(c.door.x - VILLAGE_CENTER.x, c.door.z - VILLAGE_CENTER.z);
-    expect(doorDist).toBeLessThan(d);
+    const p = doorFront(c, 0.6);
+    expect(Math.hypot(p.x - c.x, p.z - c.z)).toBeGreaterThan(c.depth / 2);
   }
 });
 test('counts', () => {
   const s = getScatter();
-  expect(s.trees).toHaveLength(40); expect(s.bushes).toHaveLength(30);
+  expect(s.trees).toHaveLength(70); expect(s.bushes).toHaveLength(30);
   expect(s.flowers).toHaveLength(150); expect(s.rocks).toHaveLength(25);
   expect(LANTERNS).toHaveLength(8); expect(SEATS).toHaveLength(5); expect(VILLAGER_SPOTS.length).toBeGreaterThanOrEqual(10);
 });

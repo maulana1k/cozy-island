@@ -10,7 +10,7 @@ const STEP_LENGTH = 1.0;
 // opts.groundAt lets the world add walkable surfaces (the dock) on top of the terrain.
 export function createPlayer(scene, opts = {}) {
   const groundAt = opts.groundAt || heightAt;
-  const figure = createFigure({ bodyColor: PALETTE.player, accent: 'scarf', accentColor: 0xfff3c4 });
+  const figure = createFigure({ bodyColor: PALETTE.player, accent: 'hat', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x6f9a5a });
   scene.add(figure.group);
 
   const position = new THREE.Vector3(PLAYER_START.x, groundAt(PLAYER_START.x, PLAYER_START.z), PLAYER_START.z);
@@ -53,7 +53,7 @@ export function createPlayer(scene, opts = {}) {
           facing.x = dx; facing.z = dz;
           targetSpeed = (input.run ? RUN_SPEED : WALK_SPEED) * wadeSpeedFactor(groundAt(position.x, position.z));
         }
-        speed += (targetSpeed - speed) * Math.min(1, dt * 12);
+        speed += (targetSpeed - speed) * Math.min(1, dt * 8);
         if (speed > 0.01) {
           const prev = { x: position.x, z: position.z };
           let next = { x: position.x + facing.x * speed * dt, z: position.z + facing.z * speed * dt };
@@ -88,7 +88,7 @@ export function createPlayer(scene, opts = {}) {
       const want = Math.atan2(facing.x, facing.z);
       let diff = want - heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      heading += diff * Math.min(1, dt * (player.sitting ? 30 : 12));
+      heading += diff * Math.min(1, dt * (player.sitting ? 30 : 10));
 
       player.speed = speed;
       player.moving = speed > 0.3;

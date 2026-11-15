@@ -8,12 +8,13 @@ import { createInput } from './input.js';
 import { createPlayer } from './actors/player.js';
 import { createVillagers } from './actors/villagers.js';
 import { createAnimals } from './actors/animals.js';
+import { createWildlife } from './actors/wildlife.js';
 import { createFollowCamera } from './camera.js';
 import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
-import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE } from './logic/layout.js';
+import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL } from './logic/layout.js';
 import { pickInteractable } from './logic/interact.js';
 import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
@@ -26,7 +27,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6d9b8);
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1200);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1200);
 
 // Debug aids: ?t=0.95 starts at that time of day, ?freeze stops the clock.
 const params = new URLSearchParams(location.search);
@@ -46,6 +47,7 @@ const rig = createFollowCamera(camera);
 const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed });
 const villagers = createVillagers(scene, { ui, audio, player });
 const animals = createAnimals(scene, { ui, audio, player });
+const wildlife = createWildlife(scene, { ui, audio });
 props.onBell((pos) => villagers.hearBell(pos));
 let stepCount = 0, dayNumber = 1;
 player.onStep = (inWater) => { stepCount++; audio.play(inWater ? 'splash' : 'step'); };
@@ -71,10 +73,10 @@ const hud = createHUD({
 });
 hud.setJournal(journal.list());
 const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.z + Math.cos(DOCK.rot) * (DOCK.length - 1.5) };
-const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 3.5], ['place-camp', CAMPFIRE, 6]];
+const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 3.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5]];
 
 const staticColliders = getColliders();
-const interactables = [...props.interactables, ...villagers.interactables, ...animals.interactables];
+const interactables = [...props.interactables, ...villagers.interactables, ...animals.interactables, ...wildlife.interactables];
 const playerXZ = { x: 0, z: 0 };
 
 // The first key press or click leaves the start screen. Browsers only allow sound after that.
@@ -89,6 +91,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && !e.repeat) toggleMenu();
 });
 window.addEventListener('pointerdown', wake);
+// Debug aids for automated screenshots: ?play skips the start screen, ?x=&z=&yaw= place the player and camera.
+if (params.has('play')) wake();
+if (params.has('x')) { player.position.x = Number(params.get('x')); player.position.z = Number(params.get('z') || 0); }
+if (params.has('yaw')) rig.yaw = Number(params.get('yaw'));
 // Leaving the window pauses the game, so nothing happens while you are away.
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });
 
@@ -129,11 +135,12 @@ function frame(now = performance.now()) {
   } else if (input.consumeMute()) toggleSound();
   audio.setNight(night);
 
-  const colliders = staticColliders.concat(villagers.colliders());
+  const colliders = staticColliders.concat(villagers.colliders(), wildlife.colliders());
   if (!paused) {
     player.update(dt, input, rig.yaw, colliders, elapsed);
     villagers.update(dt, elapsed, player);
     animals.update(dt, elapsed, player);
+    wildlife.update(dt, elapsed, player);
   }
 
   // What would E do right now?

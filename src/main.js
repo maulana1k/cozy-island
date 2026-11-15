@@ -139,6 +139,7 @@ if (params.has('play')) wake();
 if (params.has('x')) { player.position.x = Number(params.get('x')); player.position.z = Number(params.get('z') || 0); player.position.y = groundAt(player.position.x, player.position.z); }
 if (params.has('yaw')) rig.yaw = Number(params.get('yaw'));
 if (params.has('journal')) hud.toggleJournal();
+if (params.has('ride')) zipline.interactables[0].interact();
 if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0, Number(params.get('found')) || 5).forEach(discover);
 // Leaving the window pauses the game, so nothing happens while you are away.
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });

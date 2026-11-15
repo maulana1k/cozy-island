@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import {
-  COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD,
+  COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD, HILL_PATH, RAILINGS,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
-import { texture, mergeStatic } from './build.js';
+import { texture, mergeStatic, stick, shared } from './build.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -183,6 +183,50 @@ function buildWindmill(mats) {
   return { g, hub };
 }
 
+// The hill trail: timber steps set into the slope between log edging, and a lashed wooden
+// railing with diagonal braces wherever the ground falls away.
+function buildHillTrail() {
+  const g = new THREE.Group();
+  const LOG = 0xb98a5e, STEP = 0x9a7350, POLE = 0xd8bb72, ROPE = 0xe9dcc0;
+  const W = 1.05; // half the width of the steps
+  for (let i = 1; i < HILL_PATH.length - 1; i++) {
+    const a = HILL_PATH[i], b = HILL_PATH[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z), dx = (b.x - a.x) / len, dz = (b.z - a.z) / len;
+    const at = (d, side) => { const x = a.x + dx * d + dz * side, z = a.z + dz * d - dx * side; return [x, heightAt(x, z), z]; };
+    // log edging down both sides, in short lengths so it follows the slope
+    const pieces = Math.max(1, Math.round(len / 2.2));
+    for (let k = 0; k < pieces; k++) for (const side of [-W, W]) {
+      const p0 = at((k / pieces) * len, side), p1 = at(((k + 1) / pieces) * len, side);
+      g.add(stick([p0[0], p0[1] + 0.07, p0[2]], [p1[0], p1[1] + 0.07, p1[2]], 0.08, LOG, 7));
+    }
+    // a timber riser wherever the trail is climbing
+    for (let d = 0.4; d < len - 0.2; d += 0.8) {
+      const here = at(d, 0), ahead = at(d + 0.6, 0);
+      if (Math.abs(ahead[1] - here[1]) < 0.1) continue;
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 0.2, 0.17, 0.2), shared(STEP));
+      riser.position.set(here[0], here[1] + 0.07, here[2]); riser.rotation.y = Math.atan2(dx, dz); riser.castShadow = true; riser.receiveShadow = true;
+      g.add(riser);
+    }
+  }
+  for (const [a, b] of RAILINGS) {
+    const len = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(len / 1.5));
+    const post = (k) => { const x = a.x + ((b.x - a.x) * k) / n, z = a.z + ((b.z - a.z) * k) / n; return [x, heightAt(x, z), z]; };
+    for (let k = 0; k <= n; k++) {
+      const p = post(k);
+      g.add(stick([p[0], p[1] - 0.25, p[2]], [p[0], p[1] + 1.02, p[2]], 0.05, POLE, 6));
+      // rope lashing where the rail meets the post
+      const lash = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.068, 0.09, 7), shared(ROPE)); lash.position.set(p[0], p[1] + 0.92, p[2]); g.add(lash);
+      if (k === n) break;
+      const q = post(k + 1);
+      g.add(stick([p[0], p[1] + 0.95, p[2]], [q[0], q[1] + 0.95, q[2]], 0.045, POLE, 6));   // top rail
+      g.add(stick([p[0], p[1] + 0.28, p[2]], [q[0], q[1] + 0.28, q[2]], 0.03, POLE, 6));    // low rail
+      // a diagonal brace, leaning the other way in each bay
+      const lo = k % 2 ? q : p, hi = k % 2 ? p : q;
+      g.add(stick([lo[0], lo[1] + 0.28, lo[2]], [hi[0], hi[1] + 0.95, hi[2]], 0.03, POLE, 6));
+    }
+  }
+  return g;
+}
+
 export function createVillage(scene) {
   const mats = {
     stone: flat(PALETTE.stone, { map: texture('stone', 2, 1) }), stoneDark: flat(PALETTE.stoneDark, { map: texture('stone', 2, 1) }),
@@ -201,6 +245,7 @@ export function createVillage(scene) {
   PATHS.forEach((p, i) => group.add(buildPath(p, i < COTTAGES.length ? 1.4 : 1.8, mats.path)));
   group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
+  group.add(buildHillTrail());
   TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
   group.add(buildDock(mats));
   // None of the scenery so far moves: weld it into a handful of meshes.

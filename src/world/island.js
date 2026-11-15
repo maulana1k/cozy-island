@@ -18,7 +18,7 @@ function buildTerrain() {
   const grass = C(PALETTE.grass), grassDark = C(PALETTE.grassDark), grassHill = C(PALETTE.grassHill);
   const sand = C(PALETTE.sand), sandWet = C(PALETTE.sandWet);
   const trail = C(0xedd2a0), trailEdge = C(0xc9a26a), soil = C(0xc4914f), meadow = C(0x9cc468), meadowDark = C(0x7fae56);
-  const forest = C(0xc9b866), forestSoil = C(0xb39a58), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xb3a8ad);
+  const forest = C(0xc9b866), forestSoil = C(0xb39a58), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xdcc08c);
   const c = new THREE.Color();
   const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
   const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);
@@ -30,9 +30,10 @@ function buildTerrain() {
     if (r < GRASS_RADIUS + 1) {
       // Dry golden grass with darker and barer patches, lighter up the hill.
       c.copy(grass).lerp(grassDark, blotch(x, z) * 0.55).lerp(soil, smooth((speck(x * 0.35, z * 0.35) - 0.72) / 0.2) * 0.45);
-      c.lerp(grassHill, Math.min(1, Math.max(0, (h - 2) / HILL.height)) * 0.8);
+      const hillT = Math.min(1, Math.max(0, (h - 2) / 6));
+      c.lerp(grassHill, hillT * 0.8);
       // Jungle floor: greener, with dark leaf-litter soil showing through.
-      const j = jungleAt(x, z);
+      const j = jungleAt(x, z) * (1 - hillT * 0.85); // the hill is open golden grass, not jungle floor
       if (j > 0) c.lerp(forest, j * 0.7).lerp(forestSoil, j * smooth((speck(x * 0.6, z * 0.6) - 0.55) / 0.3) * 0.45);
       // Lush meadow round the pond, mud at its edge, a dark bed under the water.
       c.lerp(meadow, smooth(1 - (pd - POND.rw - 2) / 8)).lerp(meadowDark, smooth(1 - (pd - POND.rw - 2) / 8) * blotch(x * 2, z * 2) * 0.5);

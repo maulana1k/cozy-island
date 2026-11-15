@@ -166,7 +166,24 @@ export const PATHS = [
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
 ];
-const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1], HILL_PATH = PATHS[COTTAGES.length + 2];
+const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1];
+export const HILL_PATH = PATHS[COTTAGES.length + 2];
+
+// Railings: a lashed wooden rail down the drop side of the hill trail, and round the lookout.
+// Each entry is one straight run [from, to].
+export const RAILINGS = (() => {
+  const runs = [];
+  for (let i = 1; i < HILL_PATH.length - 1; i++) {
+    const a = HILL_PATH[i], b = HILL_PATH[i + 1], len = dist(a, b), dx = (b.x - a.x) / len, dz = (b.z - a.z) / len;
+    const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    // the rail goes on whichever side the ground falls away
+    const side = heightAt(mid.x + dz * 2, mid.z - dx * 2) < heightAt(mid.x - dz * 2, mid.z + dx * 2) ? 1 : -1;
+    const off = 1.5, trim = i === HILL_PATH.length - 2 ? 1.6 : 0.3;
+    runs.push([{ x: a.x + dx * 0.3 + dz * side * off, z: a.z + dz * 0.3 - dx * side * off }, { x: b.x - dx * trim + dz * side * off, z: b.z - dz * trim - dx * side * off }]);
+  }
+  for (const a of [224, 246, 268, 290]) runs.push([around(LOOKOUT, a, 6.0), around(LOOKOUT, a + 22, 6.0)]);
+  return runs;
+})();
 
 function distanceToSegment(x, z, a, b) {
   const dx = b.x - a.x, dz = b.z - a.z;
@@ -198,14 +215,13 @@ export const LANTERNS = [
   around(VILLAGE_CENTER, 62, 5.6), around(VILLAGE_CENTER, 118, 5.6),
   alongPath(DOCK_PATH, 20, 1.5), alongPath(DOCK_PATH, 38, -1.5),
   alongPath(FIRE_PATH, 22, 1.5), alongPath(FIRE_PATH, 40, -1.5),
-  alongPath(HILL_PATH, 14, 1.5), alongPath(HILL_PATH, 27, -1.5),
+  alongPath(HILL_PATH, 14, 2.1), alongPath(HILL_PATH, 27, -2.1),
 ].map((p, i) => ({ id: `lantern-${i}`, x: p.x, z: p.z }));
 
 export const FENCES = [
   [around(CHICKEN_YARD, 20, 3.6), around(CHICKEN_YARD, 80, 3.6)],
   [around(CHICKEN_YARD, 80, 3.6), around(CHICKEN_YARD, 140, 3.6)],
   [around(CHICKEN_YARD, 320, 3.6), around(CHICKEN_YARD, 20, 3.6)],
-  ...[224, 246, 268, 290].map((a) => [around(LOOKOUT, a, 6.0), around(LOOKOUT, a + 22, 6.0)]),
 ];
 
 // Standing spots villagers stroll between. The first has open ground all around it.
@@ -352,7 +368,7 @@ export function getColliders() {
   const s = getScatter();
   colliderCache = [
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: c.width / 2, hd: c.depth / 2, rot: c.rot, tall: true, building: true })),
-    ...FENCES.map(fenceBox),
+    ...FENCES.map(fenceBox), ...RAILINGS.map(fenceBox),
     ...s.trees.map((t) => ({ x: t.x, z: t.z, r: 0.4 * t.scale })),
     ...s.rocks.map((r) => ({ x: r.x, z: r.z, r: 0.5 * r.scale })),
     ...LANTERNS.map((l) => ({ x: l.x, z: l.z, r: 0.15 })),

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, zoneAt } from '../logic/terrain.js';
 import { getScatter, distanceToPath, jungleAt, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
-import { POND } from '../config.js';
+import { POND, HILL } from '../config.js';
 import { createRng } from '../logic/rng.js';
 import { PALETTE, SEED } from '../config.js';
 
@@ -230,6 +230,7 @@ export function createScatter(scene) {
   while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 40) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.25) continue;
+    if (Math.hypot(x - HILL.x, z - HILL.z) < 7.6) continue; // the summit camp is trodden bare
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 6.2 || Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 2.6) continue;
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < Math.max(c.width, c.depth) / 2 + 1)) continue;
     if (Math.hypot(x - FIELD.x, z - FIELD.z) < 5 || TENTS.some((t) => Math.hypot(x - t.x, z - t.z) < 1.9)) continue;
@@ -241,7 +242,7 @@ export function createScatter(scene) {
     if (inCamp && rng() < 0.7) continue;
     const pd = Math.hypot(x - POND.x, z - POND.z);
     if (pd < POND.rw + 1.3) continue; // bare mud at the water's edge
-    const lush = Math.max(jungleAt(x, z), pd < POND.rw + 9 ? 1 : 0);
+    const lush = Math.max(heightAt(x, z) > 3.2 ? 0 : jungleAt(x, z), pd < POND.rw + 9 ? 1 : 0);
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0);
     const s = 0.75 + rng() * 0.6; dummy.scale.set(s, s * (inCamp ? 0.45 + rng() * 0.3 : 0.7 + rng() * 0.8), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
@@ -257,6 +258,7 @@ export function createScatter(scene) {
   while (fernCount < FERNS && guard++ < FERNS * 40) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 46, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (jungleAt(x, z) < 0.6 || zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.4) continue;
+    if (Math.hypot(x - HILL.x, z - HILL.z) < 9) continue;
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < Math.max(c.width, c.depth) / 2 + 1.5) || Math.hypot(x - FIELD.x, z - FIELD.z) < 5.5 || Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 4) continue;
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0); dummy.scale.setScalar(0.6 + rng() * 0.9); dummy.updateMatrix();
     ferns.setMatrixAt(fernCount, dummy.matrix);

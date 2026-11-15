@@ -1,6 +1,6 @@
 // Fixed positions of everything on the island. The same every run.
 import { createRng } from './rng.js';
-import { heightAt, zoneAt, nearestOnTrail } from './terrain.js';
+import { heightAt, zoneAt, nearestOnTrail, landR } from './terrain.js';
 import { SEED, PALETTE, HILL, PLAYER_START, POND, HILL_TRAIL } from '../config.js';
 
 const DEG = Math.PI / 180;
@@ -291,7 +291,7 @@ export function groundAt(x, z) {
 
 // How deep in the jungle a spot is: 0 in and around the camp, 1 well outside it.
 export function jungleAt(x, z) {
-  const d = Math.hypot(x - 10, z - 8), r = Math.hypot(x, z);
+  const d = Math.hypot(x - 10, z - 8), r = landR(x, z);
   const t = Math.min(1, Math.max(0, (d - 23) / 6)) * Math.min(1, Math.max(0, (47 - r) / 4));
   return t * t * (3 - 2 * t);
 }

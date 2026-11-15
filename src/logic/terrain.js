@@ -1,6 +1,6 @@
 import {
   ISLAND_RADIUS, GRASS_RADIUS, SEA_FLOOR_RADIUS, GRASS_HEIGHT, HILL,
-  MAX_WADE_DEPTH, MIN_WADE_SPEED, SEED, POND, KNOLL, CAMP_FLAT, SHOULDER, HILL_TRAIL,
+  MAX_WADE_DEPTH, MIN_WADE_SPEED, SEED, POND, KNOLL, CAMP_FLAT, SHOULDER, HILL_TRAIL, WILD,
 } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -18,6 +18,17 @@ function noise(x, z) {
   const fx = smooth(x - ix), fz = smooth(z - iz);
   const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
   return (a + (b - a) * fx + (c - a) * fz + (a - b - c + d) * fx * fz) * 2 - 1;
+}
+
+// The land is two overlapping rounds: the camp's island and the wild jungle behind the hill.
+// `wildEq` measures the wild round on the island's own scale, so "distance from the middle"
+// works for both: the smaller of the two is how far inland a spot is.
+const wildEq = (x, z) => ISLAND_RADIUS + Math.hypot(x - WILD.x, z - WILD.z) - WILD.radius;
+export const landR = (x, z) => Math.min(Math.hypot(x, z), wildEq(x, z));
+// How many metres past the rope into the wild jungle a spot is; negative on the camp side.
+export function wildDepth(x, z) {
+  const r0 = Math.hypot(x, z);
+  return wildEq(x, z) < r0 ? r0 - WILD.border : -1;
 }
 
 const NOISE_AMPLITUDE = 0.3;
@@ -49,7 +60,7 @@ function hillHeight(x, z, r) {
 
 // The lie of the land before anything is dug into it.
 function rawHeight(x, z) {
-  const r = Math.hypot(x, z);
+  const r0 = Math.hypot(x, z), eq = wildEq(x, z), r = Math.min(r0, eq);
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
   else if (r <= ISLAND_RADIUS) {
@@ -71,6 +82,15 @@ function rawHeight(x, z) {
     h += 0.45 * fade * away * noise(x / 22 + 7, z / 22 + 3);
   }
   h += hill;
+  // The wild jungle: the ground climbs away from the rope into rough country, up to a far mountain.
+  if (eq < r0) {
+    const w = smooth((GRASS_RADIUS - 2 - eq) / 22);
+    if (w > 0) {
+      const dW = Math.hypot(x - WILD.x, z - WILD.z), dP = Math.hypot(x - WILD.x + 34, z - WILD.z - 14);
+      h += w * (2.6 + 2.2 * noise(x / 17 + 31, z / 17 + 13) + 1.0 * noise(x / 6 + 5, z / 6 + 77));
+      h += 30 * smooth(1 - dW / 50) * (1 + 0.22 * noise(x / 13, z / 13 + 50)) + 15 * smooth(1 - dP / 30);
+    }
+  }
   const kd = Math.hypot(x - KNOLL.x, z - KNOLL.z);
   if (kd < KNOLL.r) h += KNOLL.height * smooth(1 - kd / KNOLL.r);
   // The pond: a shallow bowl with a gentle bank around it.
@@ -82,7 +102,7 @@ function rawHeight(x, z) {
 
 export function zoneAt(x, z) {
   if (heightAt(x, z) < 0) return 'water';
-  return Math.hypot(x, z) < GRASS_RADIUS ? 'grass' : 'sand';
+  return landR(x, z) < GRASS_RADIUS ? 'grass' : 'sand';
 }
 
 // 1 on dry land, falling to MIN_WADE_SPEED at knee depth.

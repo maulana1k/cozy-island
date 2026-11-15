@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { heightAt, zoneAt } from '../logic/terrain.js';
-import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND } from '../config.js';
+import { heightAt, zoneAt, landR, wildDepth } from '../logic/terrain.js';
+import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
 
@@ -19,6 +19,7 @@ function buildTerrain() {
   const sand = C(PALETTE.sand), sandWet = C(PALETTE.sandWet);
   const trail = C(0xedd2a0), trailEdge = C(0xc9a26a), soil = C(0xc4914f), meadow = C(0x9cc468), meadowDark = C(0x7fae56);
   const forest = C(0xc9b866), forestSoil = C(0xb39a58), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xdcc08c);
+  const wildFloor = C(0x55793f);
   const c = new THREE.Color();
   const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
   const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);
@@ -26,7 +27,7 @@ function buildTerrain() {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = heightAt(x, z);
     pos.setY(i, h);
-    const r = Math.hypot(x, z), pd = Math.hypot(x - POND.x, z - POND.z);
+    const r = landR(x, z), pd = Math.hypot(x - POND.x, z - POND.z), wd = wildDepth(x, z);
     if (r < GRASS_RADIUS + 1) {
       // Dry golden grass with darker and barer patches, lighter up the hill.
       c.copy(grass).lerp(grassDark, blotch(x, z) * 0.55).lerp(soil, smooth((speck(x * 0.35, z * 0.35) - 0.72) / 0.2) * 0.45);
@@ -41,6 +42,8 @@ function buildTerrain() {
       if (h < 0 && pd < POND.rw + 1) c.lerp(bed, smooth(-h / 0.3));
       // Bare rock near the top of the hill.
       c.lerp(rock, smooth((h - ROCK_HEIGHT) / 1.2) * (0.6 + speck(x, z) * 0.4));
+      // Past the rope the ground turns dark and damp under the big trees.
+      if (wd > -6) c.lerp(wildFloor, smooth((wd + 6) / 9) * (0.75 + blotch(x * 1.7, z * 1.7) * 0.25));
       c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
     } else {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
@@ -81,10 +84,11 @@ const waterFragment = /* glsl */ `
   uniform vec3 uFogColor;
   uniform float uFogDensity;
   uniform float uShore;
+  uniform vec3 uWild;
   varying vec3 vWorld;
   varying float vWave;
   void main() {
-    float r = length(vWorld.xz);
+    float r = min(length(vWorld.xz), uShore + length(vWorld.xz - uWild.xy) - uWild.z);
     float ang = atan(vWorld.z, vWorld.x);
     float depthT = smoothstep(uShore - 2.0, uShore + 22.0, r);
     vec3 col = mix(uShallow, uDeep, depthT);
@@ -133,6 +137,7 @@ function buildWater() {
       uFogColor: { value: new THREE.Color(0xf6d9b8) },
       uFogDensity: { value: 0.004 },
       uShore: { value: ISLAND_RADIUS },
+      uWild: { value: new THREE.Vector3(WILD.x, WILD.z, WILD.radius) },
     },
   });
   const mesh = new THREE.Mesh(geo, mat);

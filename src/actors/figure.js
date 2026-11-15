@@ -32,6 +32,11 @@ function weld(segment, cast = true) {
 // Where the player is, so far-off people can be animated less often.
 const viewer = { x: 0, z: 0 };
 let frameCount = 0;
+// The ground under any spot, so feet can be planted on it. Set once by the game.
+let groundUnder = null;
+export function setGround(fn) { groundUnder = fn; }
+const solePoint = new THREE.Vector3();
+
 export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; }
 
 function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
@@ -179,7 +184,9 @@ export function createFigure({
   for (const seg of [armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, ...accents]) weld(seg, false);
   group.scale.setScalar(scale);
 
-  let phase = 0, lastElapsed = null, gait = 0, run = 0;
+  let phase = 0, lastElapsed = null, gait = 0, run = 0, footLift = 0;
+  // The underside of a shoe, in the shin's own frame: heel, middle and toe.
+  const soleY = -P.shin + 0.02 - 0.0475 * P.limb, SOLE = [[-0.07, 0], [0.035, -0.004], [0.14, 0]].map(([z, dy]) => new THREE.Vector3(0, soleY + dy, z * P.limb));
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
   const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0 };
@@ -374,7 +381,21 @@ export function createFigure({
       neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.09 * gait * (1 + run * 0.6);
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
-      else inner.position.set(0, 0, 0);
+      else {
+        // Feet on the ground: find the lowest point of either shoe and move the body so that it
+        // rests exactly on the ground under it. A foot can never sink in, and never hovers.
+        const planted = groundUnder && !far && !o.sitting && !o.sitGround && o.air === undefined && o.pose !== 'hang';
+        if (planted) {
+          inner.position.set(0, 0, 0);
+          group.updateMatrixWorld(true);
+          let pen = -Infinity;
+          for (const L of [legL, legR]) for (const pt of SOLE) { solePoint.copy(pt).applyMatrix4(L.knee.matrixWorld); pen = Math.max(pen, groundUnder(solePoint.x, solePoint.z) - (o.sink || 0) - solePoint.y); }
+          // Up at once (a foot must never be inside a step); down a touch more gently.
+          const want = clamp(pen, -0.12, 0.7);
+          footLift = want > footLift || dt <= 0 ? want : footLift + (want - footLift) * ease(30);
+        } else if (!groundUnder || o.sitting || o.sitGround || o.air !== undefined || o.pose === 'hang') footLift += (0 - footLift) * ease(20);
+        inner.position.set(0, footLift / scale, 0);
+      }
     },
   };
 }

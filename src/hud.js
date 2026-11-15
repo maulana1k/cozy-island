@@ -1,6 +1,6 @@
 // On-screen interface. During play it is just white text and line icons over the picture,
 // with no panels. The journal is a notebook and the map is a paper sheet you hold up.
-import { ISLAND_RADIUS, GRASS_RADIUS, HILL, POND } from './config.js';
+import { ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from './config.js';
 import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, TOWER, getScatter } from './logic/layout.js';
 import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
@@ -45,9 +45,15 @@ function drawPaperMap(c) {
   c.beginPath(); c.moveTo(0, MAP / 2); c.lineTo(MAP, MAP / 2); c.stroke();
   // the island: surf, sand with a wobbly edge, then the land
   const blobPath = (radius, wob) => { c.beginPath(); for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2, r = radius + Math.sin(a * 7) * wob + Math.sin(a * 13 + 1) * wob * 0.6; const x = MCX + Math.cos(a) * r * MK, y = MCY + Math.sin(a) * r * MK; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.closePath(); };
+  // the wild jungle behind the hill, running off the edge of the sheet
+  const wildBlob = (radius, wob) => { c.beginPath(); for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2, r = radius + Math.sin(a * 9) * wob + Math.sin(a * 17 + 2) * wob * 0.6; const x = mx(WILD.x) + Math.cos(a) * r * MK, y = mz(WILD.z) + Math.sin(a) * r * MK; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.closePath(); };
+  c.fillStyle = 'rgba(255,255,255,0.75)'; wildBlob(WILD.radius + 2.2, 0.9); c.fill();
+  c.fillStyle = '#f6e3b6'; wildBlob(WILD.radius, 0.8); c.fill();
   c.fillStyle = 'rgba(255,255,255,0.75)'; blobPath(ISLAND_RADIUS + 2.2, 0.9); c.fill();
   c.fillStyle = '#f6e3b6'; blobPath(ISLAND_RADIUS, 0.8); c.fill();
   c.fillStyle = '#c7cf8a'; blobPath(GRASS_RADIUS, 0.7); c.fill();
+  c.fillStyle = '#7da36a'; wildBlob(WILD.radius - 12, 0.7); c.fill();
+  c.fillStyle = '#6a9460'; for (let i = 0; i < 260; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 260) * (WILD.radius - 15), x = mx(WILD.x + Math.cos(a) * d), y = mz(WILD.z + Math.sin(a) * d); if (Math.hypot(x - MCX, y - MCY) > WILD.border * MK + 5) { c.beginPath(); c.arc(x, y, 5.5, 0, Math.PI * 2); c.fill(); } }
   c.fillStyle = '#ecd58f'; c.beginPath(); c.arc(mx(10), mz(8), 26 * MK, 0, Math.PI * 2); c.fill(); // the camp clearing
   // the hill, in rings
   for (const [r, col] of [[1, '#b9c383'], [0.72, '#cfc98c'], [0.45, '#e0d29a'], [0.22, '#efe0b0']]) { c.fillStyle = col; c.beginPath(); c.ellipse(mx(HILL.x), mz(HILL.z), HILL.radius * r * MK, HILL.radius * r * MK * 0.94, 0.5, 0, Math.PI * 2); c.fill(); }
@@ -77,6 +83,9 @@ function drawPaperMap(c) {
   c.strokeStyle = '#7a5a3c'; c.lineWidth = 2; c.fillStyle = '#fff'; c.beginPath(); c.arc(mx(WINDMILL.x), mz(WINDMILL.z), 6, 0, Math.PI * 2); c.fill(); c.stroke();
   c.beginPath(); c.moveTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) + 10); c.moveTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) + 10); c.stroke();
   c.fillStyle = '#6a3f9c'; c.fillRect(mx(FLAGPOLE.x), mz(FLAGPOLE.z) - 12, 11, 7); c.fillStyle = '#7a5a3c'; c.fillRect(mx(FLAGPOLE.x) - 1, mz(FLAGPOLE.z) - 12, 2, 13);
+  // the rope across the neck of land, and a warning
+  { const ax = Math.atan2(WILD.z, WILD.x); c.strokeStyle = '#d9453a'; c.lineWidth = 3.5; c.setLineDash([9, 6]); c.beginPath(); c.arc(MCX, MCY, WILD.border * MK, ax - 0.5, ax + 0.5); c.stroke(); c.setLineDash([]);
+    c.save(); c.translate(118, 62); c.rotate(-0.05); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 22px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('WILD JUNGLE', 0, 0); c.fillStyle = '#c62f24'; c.font = '800 14px ui-rounded, system-ui, sans-serif'; c.fillText('DANGER · KEEP OUT', 0, 22); c.restore(); }
   // labels on paper tags, each with a line to its place
   c.font = '700 15px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
   for (const [text, at, lx, ly] of LABELS) {
@@ -89,8 +98,8 @@ function drawPaperMap(c) {
     c.shadowColor = 'transparent'; c.fillStyle = '#3d4a5c'; c.fillText(text, 0, 1); c.restore();
   }
   // title and compass
-  c.save(); c.translate(40, 58); c.rotate(-0.045); c.textAlign = 'left'; c.fillStyle = '#3f6f9a'; c.font = '800 34px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('SCOUT CAMP ISLAND', 0, 0); c.restore();
-  c.save(); c.translate(86, 290); c.strokeStyle = '#3f6f9a'; c.fillStyle = '#3f6f9a'; c.lineWidth = 2;
+  c.save(); c.translate(690, 46); c.rotate(0.03); c.textAlign = 'right'; c.fillStyle = '#3f6f9a'; c.font = '800 34px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('SCOUT CAMP ISLAND', 0, 0); c.restore();
+  c.save(); c.translate(56, 668); c.strokeStyle = '#3f6f9a'; c.fillStyle = '#3f6f9a'; c.lineWidth = 2;
   c.beginPath(); c.moveTo(0, -24); c.lineTo(6, 0); c.lineTo(0, 24); c.lineTo(-6, 0); c.closePath(); c.fill();
   c.beginPath(); c.moveTo(-24, 0); c.lineTo(0, -5); c.lineTo(24, 0); c.lineTo(0, 5); c.closePath(); c.stroke();
   c.font = '800 13px ui-rounded, system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('N', 0, -34); c.fillText('S', 0, 36); c.fillText('W', -34, 1); c.fillText('E', 34, 1); c.restore();
@@ -145,6 +154,7 @@ export function createHUD(handlers) {
   // ---- Pop-ups
   const toasts = el('div', 'toasts');
   const banner = el('div', 'banner'); const bannerBig = el('div', 'big'); const bannerSmall = el('div', 'small'); banner.append(bannerBig, el('i'), bannerSmall);
+  const danger = el('div', 'danger'); const alertBox = el('div', 'alert'); alertBox.append(el('div', 'big', '⚠ DANGER ⚠'), el('div', 'small', 'Wild jungle. It is not safe here. Go back to camp!'));
   const bubble = el('div', 'bubble'); const bubbleName = el('div', 'who'); const bubbleText = el('div', 'said'); bubble.append(bubbleName, bubbleText);
 
   // ---- Journal: a spiral notebook
@@ -184,7 +194,7 @@ export function createHUD(handlers) {
   menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, lookRow, soundRow, timeRow, controls);
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(night, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, night, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -252,9 +262,11 @@ export function createHUD(handlers) {
       setTimeout(() => t.classList.add('out'), 2600);
       setTimeout(() => t.remove(), 3200);
     },
-    toggleMap() { hud.mapOpen = !hud.mapOpen; sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(); },
+    toggleMap() { hud.mapOpen = !hud.mapOpen; sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen && hud.bagOpen) hud.toggleBag(); },
     setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.textContent = on ? 'Sound: on' : 'Sound: off'; },
     setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look' : 'Camera: hold and drag'; },
+    // 0 = safe; toward 1 the edges of the picture turn red and the warning shows.
+    setDanger(level) { danger.style.opacity = level; root.classList.toggle('danger-on', level > 0); },
     setSleeping(on) { root.classList.toggle('asleep', on); },
     setActivity(label) { nowLine.textContent = label; },
     setJoin() {}, // the join hint now lives in the key list

@@ -12,6 +12,10 @@ export const HILL = { x: -18, z: -22, radius: 30, height: 13, plateau: 6.5 };
 export const SHOULDER = { x: -37, z: -3, radius: 12, height: 4.5 };
 // The trail that winds up the hill. A level bed is cut into the hillside along it.
 export const HILL_TRAIL = [{ x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 }, { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }];
+// Behind the hill the land runs on into a wide wild jungle, far bigger than the camp's corner of
+// the island. A rope marks the `border` (metres from the middle of camp); nobody gets more than
+// `limit` metres past it.
+export const WILD = { x: -76, z: -93, radius: 84, border: 61.5, limit: 6.5 };
 export const MAX_WADE_DEPTH = 0.45;
 // A shallow pond you can wade right across, and a knoll the windmill stands on.
 export const POND = { x: -26, z: 12, rw: 6, bank: 4, depth: 0.4 };

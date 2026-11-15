@@ -162,6 +162,13 @@
     #hud .act.main { background: #e8563f !important; color: #fff !important; box-shadow: 0 3px 0 #b83e2c; }
     #hud .act:hover { transform: translateY(-2px); }
 
+    /* Past the rope: red edges and a warning */
+    #hud .danger { position: absolute; inset: 0; opacity: 0; transition: opacity 0.5s ease; background: radial-gradient(ellipse at center, rgba(120, 10, 0, 0) 42%, rgba(170, 20, 10, 0.62) 100%); }
+    #hud .alert { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 0.3s ease; white-space: nowrap; }
+    #hud.danger-on .alert { opacity: 1; animation: pulse 0.9s ease-in-out infinite; }
+    #hud .alert .big { font-size: 40px; font-weight: 800; letter-spacing: 4px; color: var(--gold); }
+    #hud .alert .small { font-size: 17px; font-weight: 800; margin-top: 4px; }
+
     /* Asleep */
     #hud .sleep { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(20, 26, 60, 0.55); opacity: 0; transition: opacity 0.8s ease; }
     #hud.asleep .sleep { opacity: 1; }
@@ -171,6 +178,8 @@
     /* Start screen and pause menu: white words over the picture */
     #hud .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: auto; transition: opacity 0.4s ease; text-align: center; }
     #hud .overlay.off { opacity: 0; pointer-events: none; }
+    /* Hidden screens must not catch clicks: their buttons would otherwise still work while invisible. */
+    #hud .overlay.off button, #hud .sheet.off button { pointer-events: none; }
     #hud .start { background: linear-gradient(rgba(30, 40, 70, 0.05), rgba(30, 40, 70, 0.22)); }
     #hud h1 { margin: 0; font-size: clamp(48px, 9vw, 96px); font-weight: 800; letter-spacing: -1px; line-height: 0.95; transform: rotate(-2deg); text-shadow: 0 3px 0 rgba(20, 20, 40, 0.18), var(--shade); }
     #hud .start .sub { margin: 14px 0 60px; font-size: 22px; font-weight: 700; letter-spacing: 3px; }

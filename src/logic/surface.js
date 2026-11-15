@@ -1,5 +1,5 @@
 // What kind of ground is underfoot. Each kind looks, sounds and feels different to walk on.
-import { heightAt } from './terrain.js';
+import { heightAt, landR } from './terrain.js';
 import { platformAt, distanceToPath, jungleAt, VILLAGE_CENTER } from './layout.js';
 import { POND, GRASS_RADIUS, HILL } from '../config.js';
 
@@ -26,7 +26,7 @@ export function surfaceAt(x, z) {
   if (h < 0) return 'water';
   const pd = pondDistance(x, z);
   if (pd < POND.rw + 1.5) return 'mud';
-  if (Math.hypot(x, z) >= GRASS_RADIUS) return 'sand';
+  if (landR(x, z) >= GRASS_RADIUS) return 'sand';
   if (distanceToPath(x, z) < 0.95 || Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 5) return 'dirt';
   if (pd < POND.rw + 9) return 'meadow';
   if (h > ROCK_HEIGHT && Math.hypot(x - HILL.x, z - HILL.z) < HILL.radius) return 'rock';

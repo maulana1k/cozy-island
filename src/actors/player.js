@@ -187,6 +187,7 @@ export function createPlayer(scene, opts = {}) {
         pose: act ? act.pose : undefined,
         sitting: player.sitting && !onGround, sitGround: (player.sitting && onGround) || !!(act && act.sit), air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
+        sink: player.surface === 'mud' ? 0.05 : 0,
       });
     },
   };

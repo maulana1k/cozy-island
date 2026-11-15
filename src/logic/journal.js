@@ -29,6 +29,7 @@ export const DISCOVERIES = [
   { id: 'place-camp', cat: 'places', label: 'Visit the beach camp', hint: 'South-west, down on the sand.' },
   { id: 'place-windmill', cat: 'places', label: 'Visit the windmill', hint: 'On the knoll to the north-east.' },
   { id: 'place-lookout', cat: 'places', label: 'Reach the summit camp', hint: 'Take the winding hill trail.' },
+  { id: 'place-wild', cat: 'places', label: 'Find the edge of the wild jungle', hint: 'Behind the hill, where the rope is.' },
   { id: 'collect', cat: 'pack', label: 'Pick something up', hint: 'Shells, sticks, flowers: look on the ground.' },
   { id: 'eat', cat: 'pack', label: 'Eat a snack', hint: 'Open your backpack with B.' },
   { id: 'drink', cat: 'pack', label: 'Drink some water', hint: 'From your flask, or at a water barrel.' },

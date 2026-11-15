@@ -21,7 +21,7 @@ import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
 import { createCrowd, blockAt, blockProgress, JOIN } from './actors/schedule.js';
-import { setViewer } from './actors/figure.js';
+import { setViewer, setGround } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
 import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
 import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
@@ -30,6 +30,9 @@ import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
 import { START_TIME, POND } from './config.js';
 import { createPickups } from './world/pickups.js';
+import { createWilds } from './world/wilds.js';
+import { wildDepth } from './logic/terrain.js';
+import { WILD } from './config.js';
 import { ITEMS, FLASK_SIPS, SIP } from './logic/items.js';
 import { createBag } from './logic/bag.js';
 import { createStats, STAT_LABEL } from './logic/stats.js';
@@ -61,10 +64,12 @@ const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(b
 createCampProps(scene);
 const scatter = createScatter(scene);
 const pond = createPond(scene);
+const wilds = createWilds(scene);
 const input = createInput(window, canvas);
 const player = createPlayer(scene, { groundAt, surfaceAt, surfaces: SURFACES });
 const rig = createFollowCamera(camera);
 const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed, onShake: (t) => shakeFruit(t) });
+setGround(groundAt); // every figure plants its feet on this
 const crowd = createCrowd(); // the camp timetable everyone follows
 const villagers = createVillagers(scene, { ui, audio, player, crowd });
 const activities = createActivities(scene, { ui, audio, crowd });
@@ -175,6 +180,7 @@ function dropItem(id) {
 }
 function toggleBag() { if (hud.started) { hud.toggleBag(); audio.play('ui'); syncLook(); } }
 // Feeling hungry, thirsty or out of puff: a gentle nudge, never a punishment.
+let inWild = false, wildNag = 0, growlAt = 0;
 let wasWinded = false, nagFood = 0, nagWater = 0;
 function feel(dt) {
   const near = player.sitting && props.fireNear(player.position.x, player.position.z);
@@ -442,7 +448,7 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
     zipline.update(dt, elapsed, player);
     player.update(dt, input, rig.yaw, colliders, elapsed);
     buildings.update(dt, elapsed, player);
@@ -453,8 +459,23 @@ function step() {
     wildlife.update(dt, elapsed, player);
     pond.update(dt, elapsed, night);
     pickups.update(dt, player.position);
+    wilds.update(elapsed, night, player.position);
     if (!sleeping) feel(dt);
     for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] <= elapsed) { const fn = pending[i][1]; pending.splice(i, 1); fn(); }
+  }
+  // Past the rope into the wild jungle: a warning that grows, then a firm stop.
+  if (!paused && !player.riding) {
+    const depth = wildDepth(player.position.x, player.position.z);
+    if (depth > 0) {
+      if (!inWild) { inWild = true; audio.play('alarm'); discover('place-wild'); growlAt = elapsed + 1.5; }
+      hud.setDanger(Math.min(1, 0.4 + depth / WILD.limit * 0.6));
+      if (elapsed > growlAt) { growlAt = elapsed + 3 + Math.random() * 3; audio.play('growl'); }
+      if (depth > WILD.limit) {
+        const k = (WILD.border + WILD.limit) / Math.hypot(player.position.x, player.position.z);
+        player.position.x *= k; player.position.z *= k;
+        if (elapsed > wildNag) { wildNag = elapsed + 2.5; player.gesture('bonk', 0.7); audio.play('alarm'); say('Too dangerous! Turn back to camp.', '⚠️'); }
+      }
+    } else if (inWild) { inWild = false; hud.setDanger(0); say('Phew. Back on safe ground.', '😮‍💨'); }
   }
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.

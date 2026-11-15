@@ -3,7 +3,7 @@ import { createFigure } from './figure.js';
 import { createVillager, stepVillager, nudgeVillager, hearBell, waitAMoment } from '../logic/villagerBrain.js';
 import { createRng } from '../logic/rng.js';
 import { heightAt } from '../logic/terrain.js';
-import { VILLAGER_SPOTS, getColliders } from '../logic/layout.js';
+import { VILLAGER_SPOTS, getColliders, groundAt } from '../logic/layout.js';
 import { PALETTE, SEED, VILLAGER_COUNT, VILLAGER_RADIUS, NUDGE_TIME } from '../config.js';
 
 const ACCENTS = ['hat', 'scarf', 'bow', 'cap', 'apron', 'flower'];
@@ -54,7 +54,7 @@ export function createVillagers(scene, deps) {
         const dx = player.position.x - b.x, dz = player.position.z - b.z, d = Math.hypot(dx, dz);
         // Walking into a villager nudges them; a villager walking into the player just waits.
         if (d < VILLAGER_RADIUS + player.radius + 0.12) {
-          if (player.moving) nudge(v, { x: player.position.x, z: player.position.z });
+          if (player.pushing) nudge(v, { x: player.position.x, z: player.position.z });
           else if (b.state === 'walk' && dx * b.facing.x + dz * b.facing.z > 0) waitAMoment(b, 1);
         }
         stepVillager(b, dt, world);
@@ -68,9 +68,9 @@ export function createVillagers(scene, deps) {
         let diff = want - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         v.heading += diff * Math.min(1, dt * 7);
 
-        v.figure.group.position.set(b.x, heightAt(b.x, b.z) + hopY, b.z);
+        v.figure.group.position.set(b.x, groundAt(b.x, b.z) + hopY, b.z);
         v.figure.group.rotation.y = v.heading;
-        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed + b.x, { wobble: v.wobble });
+        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble });
       }
     },
   };

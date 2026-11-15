@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const HINT_TEXT = 'WASD move · Shift run · Space hop · E interact · M mute';
+const HINT_TEXT = 'WASD move · Shift run · Space hop · E interact · M mute · Esc menu';
 
 function drawIcon(ctx, icon) {
   ctx.save();

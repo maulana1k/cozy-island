@@ -107,6 +107,7 @@ export function createSky(scene, renderer) {
   const waterLight = new THREE.Color();
   const fogColor = new THREE.Color();
   const dir = new THREE.Vector3();
+  let lastElapsed = 0;
 
   return {
     sunLight,
@@ -114,6 +115,7 @@ export function createSky(scene, renderer) {
     fogColor,
     fogDensity: FOG_DENSITY,
     update(t, elapsed, focus) {
+      const cloudDt = Math.min(0.1, Math.max(0, elapsed - lastElapsed)); lastElapsed = elapsed;
       const c = skyColors(t);
       const night = nightFactor(t);
       dome.material.uniforms.uTop.value.setHex(c.top);
@@ -149,7 +151,7 @@ export function createSky(scene, renderer) {
 
       stars.material.opacity = night * 0.9;
       clouds.children.forEach((cloud) => {
-        cloud.position.x += cloud.userData.speed * 0.016;
+        cloud.position.x += cloud.userData.speed * cloudDt;
         if (cloud.position.x > 300) cloud.position.x = -300;
       });
       clouds.children[0].children[0].material.emissive.setHex(c.horizon).multiplyScalar(0.25);

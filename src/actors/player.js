@@ -23,6 +23,7 @@ export function createPlayer(scene, opts = {}) {
     sitting: false,
     speed: 0,
     moving: false,
+    pushing: false,
     onStep: null, // (inWater: boolean) => void
     sit(seat) {
       player.sitting = true;
@@ -91,6 +92,8 @@ export function createPlayer(scene, opts = {}) {
 
       player.speed = speed;
       player.moving = speed > 0.3;
+      // True while a movement key is held, even when something is in the way.
+      player.pushing = wantsMove && !player.sitting;
       figure.group.position.copy(position);
       figure.group.rotation.y = heading;
       figure.animate(airborne ? 0 : speed, elapsed, { sitting: player.sitting });

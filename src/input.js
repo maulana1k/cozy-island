@@ -23,7 +23,11 @@ export function createInput(keyTarget, pointerTarget) {
     if (e.code === 'KeyE') interact = true;
     if (e.code === 'KeyM') mute = true;
   });
-  keyTarget.addEventListener('keyup', (e) => { held.delete(e.code); });
+  keyTarget.addEventListener('keyup', (e) => {
+    held.delete(e.code);
+    // macOS sends no keyup for other keys while Cmd is down, so releasing Cmd drops everything.
+    if (e.code === 'MetaLeft' || e.code === 'MetaRight' || e.key === 'Meta') held.clear();
+  });
   // A key held while the window loses focus never sends keyup, so drop everything.
   keyTarget.addEventListener('blur', () => { held.clear(); dragging = false; });
 
@@ -37,6 +41,7 @@ export function createInput(keyTarget, pointerTarget) {
     lookX += e.movementX || 0;
     lookY += e.movementY || 0;
   });
+  pointerTarget.addEventListener('contextmenu', (e) => { e.preventDefault?.(); });
   pointerTarget.addEventListener('wheel', (e) => { zoom += e.deltaY || 0; e.preventDefault?.(); }, { passive: false });
 
   const take = (get, reset) => () => { const v = get(); reset(); return v; };

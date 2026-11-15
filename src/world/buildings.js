@@ -2,7 +2,7 @@
 // Open the flap and walk in; the top is sliced away so you can see inside.
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
-import { COTTAGES, toWorld, floorHeight } from '../logic/layout.js';
+import { COTTAGES, toWorld, floorHeight, BED_PLAN } from '../logic/layout.js';
 import { box, cyl, ball, stick, roofGeometry, shared, texture, mergeStatic } from './build.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
@@ -16,17 +16,19 @@ const STYLES = {
   aid: { wallH: 2.0, roofH: 1.1, canvas: 0xfbf8f0, roof: 0xf3efe4, trim: 0xd9453a, floor: 0xd9d2c0 },
   farm: { wallH: 2.1, roofH: 1.2, canvas: 0xd3bb86, roof: 0x7f9a66, trim: 0x7f9a66, floor: 0xb99a6a },
   guard: { wallH: 2.1, roofH: 0.9, canvas: 0xc2cba3, roof: 0x8fa678, trim: 0xf2b63b, floor: 0xb7a07a },
+  staff: { wallH: 2.2, roofH: 1.3, canvas: 0xefe6d2, roof: 0xb9a27c, trim: 0x6a3f9c, floor: 0xc4ab82 },
 };
-const PATROL_COLORS = [[0xb9c79a, 0xa3b584, 0xe8503a], [0xe3d3a6, 0xd2bf8c, 0x4f7fc9], [0xa9c2cf, 0x92afbf, 0xf2b63b]];
+const PATROL_COLORS = [[0xb9c79a, 0xa3b584, 0xe8503a], [0xe3d3a6, 0xd2bf8c, 0x4f7fc9], [0xa9c2cf, 0x92afbf, 0xf2b63b], [0xd9b9a0, 0xc9a288, 0x3f8f6a], [0xc7cfa0, 0xb3bd86, 0x7a5cc9], [0xe6dcc0, 0xd6c8a2, 0xe07a94]];
 
 export function createBuildings(scene, deps) {
-  const { audio } = deps;
+  const { audio, onSleep } = deps;
   const interactables = [];
   let patrolIndex = 0;
 
   const buildings = COTTAGES.map((c, index) => {
     const st = { ...STYLES[c.type] };
-    if (c.type === 'patrol') { const [canvas, roof, trim] = PATROL_COLORS[patrolIndex++ % 3]; Object.assign(st, { canvas, roof, trim }); }
+    if (c.type === 'patrol') { const [canvas, roof, trim] = PATROL_COLORS[patrolIndex++ % PATROL_COLORS.length]; Object.assign(st, { canvas, roof, trim }); }
+    const state = { inside: false };
     const W = c.width, D = c.depth, H = st.wallH, front = D / 2;
     const groundY = floorHeight(c);
     const SKIRT = 0.6; // walls and floor reach down past any dip in the ground
@@ -104,15 +106,26 @@ export function createBuildings(scene, deps) {
       g.add(box(2.4, 1.3, 0.06, 0xb98a5e, 0, 1.25, -front + 0.14), box(2.1, 1.05, 0.02, 0xf3ead2, 0, 1.25, -front + 0.18), box(0.7, 0.4, 0.02, 0x9fc98a, -0.4, 1.35, -front + 0.2), box(0.5, 0.3, 0.02, 0x8fd0e0, 0.5, 1.1, -front + 0.2));
       g.add(cyl(0.03, 0.03, 2.0, BAMBOO, 3.3, 1.0, -2.3), box(0.6, 0.4, 0.02, 0x6a3f9c, 3.0, 1.75, -2.3), cyl(0.2, 0.25, 0.12, 0x9a7350, 3.3, 0.1, -2.3));
       solid(crate(-3.3, -2.3, 0.6), 0.35, 0.35); g.add(crate(-3.3, -2.3, 0.45, 0.6, 0.4), crate(-3.2, -1.6, 0.45));
-    } else if (c.type === 'patrol') {
-      // Four sleeping mats with rolled blankets, backpacks by the door and a lantern on a crate.
-      const bags = [0xe8503a, 0x4f7fc9, 0xf2b63b, 0x5fa8a0];
-      [[-1.25, -1.2], [1.25, -1.2], [-1.25, 0.75], [1.25, 0.75]].forEach(([x, z], k) => {
-        const m = box(0.8, 0.07, 1.7, 0x8fa0a8, x, 0.12, z); m.castShadow = false;
-        g.add(m, box(0.74, 0.1, 1.15, bags[(k + index) % 4], x, 0.2, z + 0.25), box(0.5, 0.11, 0.3, 0xfaf3e2, x, 0.21, z - 0.62));
+    } else if (c.type === 'patrol' || c.type === 'staff') {
+      // A dormitory: camp beds down both sides with their pillows to the wall, kit by the door.
+      const blankets = [0xe8503a, 0x4f7fc9, 0xf2b63b, 0x5fa8a0, 0xe07a94, 0x7a5cc9, 0x8fb866, 0xf08a3c];
+      BED_PLAN[c.type].forEach((b, k) => {
+        const yours = c.type === 'patrol' && k === 0;
+        const frame = box(1.35, 0.14, 0.72, 0xc79a62, b.x, 0.13, b.z); frame.castShadow = false;
+        g.add(frame, box(1.3, 0.07, 0.68, 0xf2ede2, b.x, 0.23, b.z), box(0.86, 0.06, 0.7, yours ? 0xfaf3e2 : blankets[(k + index) % 8], b.x - b.side * 0.2, 0.29, b.z), box(0.3, 0.09, 0.5, yours ? 0xf5b301 : 0xffffff, b.x + b.side * 0.48, 0.3, b.z));
+        if (yours) {
+          // The bed with the gold pillow is yours.
+          const spot = toWorld(c, b.x, b.z);
+          interactables.push({
+            id: `bed-${index}`, kind: 'bed', position: toWorld(c, b.x - b.side * 0.75, b.z), markerY: groundY + 1.1,
+            get enabled() { return state.inside; },
+            prompt: () => 'E — sleep until morning',
+            interact() { onSleep({ x: spot.x, z: spot.z, rot: c.rot - (b.side * Math.PI) / 2 }); },
+          });
+        }
       });
-      g.add(crate(0, -1.9, 0.45), box(0.16, 0.24, 0.16, shared(0xffe2a0), 0, 0.65, -1.9), box(0.2, 0.04, 0.2, 0x5b4636, 0, 0.79, -1.9));
-      g.add(box(0.34, 0.42, 0.22, 0x6f9a5a, -1.75, 0.27, 1.9, 0.4), box(0.34, 0.42, 0.22, 0xd9634a, 1.7, 0.27, 1.95, -0.3));
+      g.add(crate(0, -front + 0.45, 0.45), box(0.16, 0.24, 0.16, shared(0xffe2a0), 0, 0.65, -front + 0.45), box(0.2, 0.04, 0.2, 0x5b4636, 0, 0.79, -front + 0.45));
+      g.add(box(0.34, 0.42, 0.22, 0x6f9a5a, -W / 2 + 0.5, 0.27, front - 0.5, 0.4), box(0.34, 0.42, 0.22, 0xd9634a, W / 2 - 0.5, 0.27, front - 0.55, -0.3), box(0.34, 0.42, 0.22, 0x4f7fc9, W / 2 - 0.95, 0.27, front - 0.4, 0.5));
       // The patrol's pennant on a pole beside the door.
       g.add(cyl(0.035, 0.04, 2.9, BAMBOO, W / 2 + 0.55, 1.45, front + 0.5));
       const pen = new THREE.Mesh(roofGeometry(0.5, 0.8, 0.02), shared(st.trim)); pen.rotation.z = -Math.PI / 2; pen.position.set(W / 2 + 0.6, 2.6, front + 0.5); pen.castShadow = true; g.add(pen);
@@ -160,7 +173,7 @@ export function createBuildings(scene, deps) {
     // Everything but the door flap stands still, so weld it: one mesh per material.
     g.remove(hinge); mergeStatic(g); g.add(hinge);
     scene.add(g);
-    return { c, g, plane, hinge, door, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
+    return { state, c, g, plane, hinge, door, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
   });
 
   const out = [];
@@ -181,6 +194,7 @@ export function createBuildings(scene, deps) {
         const wx = player.position.x - b.c.x, wz = player.position.z - b.c.z;
         const lx = wx * cos - wz * sin, lz = wx * sin + wz * cos;
         b.inside = Math.abs(lx) < b.W / 2 - 0.05 && Math.abs(lz) < b.D / 2 + 0.1;
+        b.state.inside = b.inside;
         if (b.inside) this.inside = b.c;
         // The slice glides down when you walk in and back up when you leave.
         const target = b.inside ? b.groundY + CUT : b.openTop;

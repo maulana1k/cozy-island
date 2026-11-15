@@ -67,6 +67,9 @@
     #hud .chip.night .ico { color: #5d6fd1; }
     #hud .chip .time { font-size: 13.5px; }
     #hud .chip.now b { font-weight: 700; }
+    #hud .chip.join { padding-left: 6px; }
+    #hud .chip.join kbd { font-size: 11px; padding: 2px 6px; }
+    #hud .chip.join.active { background: var(--ink); color: #fff; }
 
     /* Buttons and minimap */
     #hud .right { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
@@ -127,6 +130,12 @@
     #hud .item.done .mark { border: 0; background: #fff; color: var(--gold); padding: 3px; box-shadow: 0 1px 4px rgba(20, 40, 60, 0.15); }
     #hud .item.done .hint { color: var(--accent); font-weight: 700; }
     #hud .foot { padding: 10px 18px 14px; font-size: 11.5px; color: var(--soft); border-top: 1px solid var(--line); }
+
+    /* Asleep: the picture dims while the night goes by */
+    #hud .sleep { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(20, 26, 60, 0.55); color: #fff; opacity: 0; transition: opacity 0.8s ease; }
+    #hud.asleep .sleep { opacity: 1; }
+    #hud .sleep .zz { font-size: 46px; font-weight: 800; letter-spacing: 6px; animation: pulse 2.4s ease-in-out infinite; }
+    #hud .sleep .sub { color: rgba(255, 255, 255, 0.85); margin-top: 8px; }
 
     /* Start screen and pause menu */
     #hud .overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto; background: rgba(255, 255, 255, 0.16);

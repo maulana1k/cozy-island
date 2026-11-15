@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
+import { liftFor } from './schedule.js';
 import { createVillager, stepVillager, nudgeVillager, hearBell, waitAMoment } from '../logic/villagerBrain.js';
 import { createRng } from '../logic/rng.js';
 import { heightAt } from '../logic/terrain.js';
@@ -66,7 +67,7 @@ export function createVillagers(scene, deps) {
           b.x = m.x; b.z = m.z; b.state = 'idle'; b.timer = 1 + (m.index % 3); v.position.x = b.x; v.position.z = b.z;
           let diff = m.rot - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); v.heading += diff * (1 - Math.exp(-dt * 10));
           v.figure.group.visible = !m.hidden;
-          v.figure.group.position.set(b.x, groundAt(b.x, b.z) - (m.opts.sitGround ? v.figure.sitDrop : 0), b.z);
+          v.figure.group.position.set(b.x, groundAt(b.x, b.z) + liftFor(v.figure, m.opts), b.z);
           v.figure.group.rotation.y = v.heading;
           v.figure.animate(m.speed, elapsed, { ...m.opts, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
           continue;

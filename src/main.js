@@ -20,7 +20,7 @@ import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
-import { createCrowd, blockAt, blockProgress } from './actors/schedule.js';
+import { createCrowd, blockAt, blockProgress, JOIN } from './actors/schedule.js';
 import { setViewer } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
 import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
@@ -52,7 +52,7 @@ const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
 const village = createVillage(scene);
-const buildings = createBuildings(scene, { audio });
+const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(bed) });
 createCampProps(scene);
 const scatter = createScatter(scene);
 const pond = createPond(scene);
@@ -68,6 +68,11 @@ const animals = createAnimals(scene, { ui, audio, player });
 const wildlife = createWildlife(scene, { ui, audio });
 const zipline = createZipline(scene, { ui, audio, player });
 props.onBell((pos) => villagers.hearBell(pos));
+
+// ---- Sleeping: lie down in your bed and the night rushes by until morning exercise.
+let sleeping = false;
+function startSleep(bed) { player.asleep = bed; sleeping = true; hud.setSleeping(true); audio.play('sit'); discover('bed'); }
+function wakeUp() { if (!sleeping) return; sleeping = false; player.asleep = null; hud.setSleeping(false); }
 
 // ---- Feet on the ground: every surface sounds and reacts differently -------
 let stepCount = 0, dayNumber = 1;
@@ -212,14 +217,16 @@ function step() {
 
   if (!freezeTime) {
     const before = timeOfDay;
-    timeOfDay = advance(timeOfDay, dt);
+    timeOfDay = advance(timeOfDay, dt * (sleeping ? 45 : 1));
+    // Morning: time to get up. Pressing a movement key gets you up early.
+    if (sleeping && ((before < 0.105 && timeOfDay >= 0.105) || input.move.x !== 0 || input.move.z !== 0)) wakeUp();
     if (timeOfDay < before && dt > 0) dayNumber++;
   }
   const night = nightFactor(timeOfDay);
 
   if (paused) {
     // Keys pressed on the start screen or in the menu must not fire when play resumes.
-    input.consumeHop(); input.consumeInteract(); input.consumeMute(); input.consumeSit(); input.consumeLook(); input.consumeZoom();
+    input.consumeHop(); input.consumeInteract(); input.consumeMute(); input.consumeSit(); input.consumeJoin(); input.consumeLook(); input.consumeZoom();
     if (!hud.started) rig.yaw += clampDt(raw) * 0.08; // a slow turn behind the title
   } else if (input.consumeMute()) toggleSound();
   audio.setNight(night);
@@ -230,6 +237,7 @@ function step() {
     const first = lastBlock === null;
     lastBlock = block;
     hud.setActivity(block.label);
+    player.act = null; // a new activity: whatever you were joining in with is over
     zipline.setOpen(block.id === 'free' || block.id === 'work');
     if (block.id === 'ceremony') props.setFlag(true);
     if (block.id === 'campfire') props.setFlag(false);
@@ -238,6 +246,14 @@ function step() {
   crowd.tick(block, blockProgress(block, timeOfDay));
   setViewer(player.position.x, player.position.z);
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
+
+  // F joins in with whatever the camp is doing right now.
+  const join = JOIN[block.id] || null;
+  if (!paused && input.consumeJoin() && join && !player.riding && !player.asleep && !player.sitting) {
+    player.act = player.act ? null : { pose: join.pose, sit: !!join.sit };
+    if (player.act) { audio.play('ui'); discover('join'); }
+  }
+  hud.setJoin(join ? join.verb : null, !!player.act);
 
   // X sits you down: on a log or bench if one is right beside you, otherwise on the ground.
   if (!paused && input.consumeSit() && !player.riding) {
@@ -265,7 +281,7 @@ function step() {
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
-  const target = paused || player.sitting || player.riding ? null : pickInteractable(playerXZ, player.facing, interactables);
+  const target = paused || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
   if (target) {
     ui.setPrompt(target.prompt());
     ui.setMarker(target.position.x, target.markerY, target.position.z);

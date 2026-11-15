@@ -2,6 +2,7 @@
 // cooking, eating, and lashing a bamboo tripod. They stay put; you can say hello.
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
+import { liftFor } from './schedule.js';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, groundAt, VILLAGE_FIRE, SALUTE_LINE, FLAGPOLE, PICNIC_TABLES, PIONEER_SITE, CAMPFIRE, SUMMIT, VILLAGE_CENTER } from '../logic/layout.js';
 
@@ -74,7 +75,7 @@ export function createActivities(scene, deps) {
         if (crowd.drive(m, dt)) {
           // The timetable has them somewhere else: walking there, or joining in.
           g.visible = !m.hidden;
-          g.position.set(m.x, groundAt(m.x, m.z) - (m.opts.sitGround ? s.figure.sitDrop : 0), m.z);
+          g.position.set(m.x, groundAt(m.x, m.z) + liftFor(s.figure, m.opts), m.z);
           let diff = m.rot - g.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); g.rotation.y += diff * (1 - Math.exp(-dt * 10));
           s.figure.animate(m.speed, elapsed, { ...m.opts, gesture });
         } else {

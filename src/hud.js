@@ -81,7 +81,8 @@ export function createHUD(handlers) {
   const steps = el('div', 'glass chip'); const stepsNum = el('b', null, '0'); steps.append(icon('steps'), stepsNum, el('span', 'soft', 'steps'));
   const now = el('div', 'glass chip now'); const nowText = el('b'); now.append(el('span', 'soft', 'Now'), nowText);
   chips.append(clock, day, steps);
-  const chips2 = el('div', 'chips'); chips2.append(now);
+  const joinChip = el('div', 'glass chip join'); const joinText = el('span'); joinChip.append(el('kbd', null, 'F'), joinText);
+  const chips2 = el('div', 'chips'); chips2.append(now, joinChip);
   const left = el('div', 'left'); left.append(card, chips, chips2);
 
   // ---- Top-right: buttons and minimap
@@ -137,13 +138,14 @@ export function createHUD(handlers) {
   timeRow.append(el('span', 'label', 'Time of day'));
   for (const [name, t] of TIMES) { const b = el('button', 'pill', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['X', 'Sit down / stand up'], ['F', 'Join in with the camp'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
   panel.append(resume, openJournal, lookRow, soundRow, timeRow, el('h3', null, 'Controls'), controls);
   menu.append(panel);
 
-  root.append(left, right, ground, toasts, banner, drawer, start, menu);
+  const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
+  root.append(night, left, right, ground, toasts, banner, drawer, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -207,6 +209,10 @@ export function createHUD(handlers) {
       if (!hud.journalOpen) dot.classList.add('on');
     },
     setActivity(label) { nowText.textContent = label; },
+    // The hint for joining in: what F does right now, and whether you are doing it.
+    setJoin(text, active) { joinChip.style.display = text ? '' : 'none'; if (text) joinText.textContent = active ? `${text} (move to stop)` : text; joinChip.classList.toggle('active', !!active); },
+    // The screen dims while you sleep and the night rushes past.
+    setSleeping(on) { root.classList.toggle('asleep', on); },
     // A banner across the top: a new rank, or the camp moving on to its next activity.
     announce(small, big) { hud.rankUp(big, small); },
     rankUp(name, small = 'New rank') {

@@ -37,6 +37,8 @@ export function createPlayer(scene, opts = {}) {
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
     riding: null, // set while hanging from the flying fox; the ride moves the player
+    asleep: null, // set while lying in bed: { x, z, rot }
+    act: null,    // joining in with the camp: { pose, sit }. Any movement stops it.
     // Called when a ride lets go at the bottom.
     landNow() { player.riding = null; airborne = false; vy = 0; vel.x = vel.z = 0; land = 1; if (player.onLand) player.onLand(surfaceAt(position.x, position.z)); },
     // Sit down right here on the ground.
@@ -53,6 +55,14 @@ export function createPlayer(scene, opts = {}) {
       heading = seat.rot; vel.x = vel.z = 0; vy = 0; airborne = false;
     },
     update(dt, input, cameraYaw, colliders, elapsed) {
+      if (player.asleep) {
+        input.consumeHop(); vel.x = vel.z = 0; heading = player.asleep.rot; player.sitting = false;
+        position.set(player.asleep.x, groundAt(player.asleep.x, player.asleep.z) + 0.2, player.asleep.z);
+        player.speed = 0; player.moving = false; player.pushing = false;
+        figure.group.position.copy(position); figure.group.rotation.y = heading;
+        figure.animate(0, elapsed, { pose: 'sleep' });
+        return;
+      }
       if (player.riding) {
         input.consumeHop(); vel.x = vel.z = 0; heading = player.riding.heading;
         facing.x = Math.sin(heading); facing.z = Math.cos(heading);
@@ -70,6 +80,7 @@ export function createPlayer(scene, opts = {}) {
         player.stand(); // off a seat you step forward; off the ground you just get up
       }
 
+      if (player.act && (wantsMove || buffer > 0)) { player.act = null; buffer = 0; }
       const surface = surfaceAt(position.x, position.z);
       player.surface = surface;
 
@@ -147,10 +158,13 @@ export function createPlayer(scene, opts = {}) {
       facing.x = Math.sin(heading); facing.z = Math.cos(heading);
       player.speed = speed; player.moving = speed > 0.3; player.airborne = airborne;
       player.pushing = wantsMove && !player.sitting;
+      const act = player.act && !player.sitting && !airborne ? player.act : null;
       figure.group.position.copy(position);
+      if (act && act.sit) figure.group.position.y -= figure.sitDrop;
       figure.group.rotation.y = heading;
       figure.animate(airborne ? 0 : speed, elapsed, {
-        sitting: player.sitting && !onGround, sitGround: player.sitting && onGround, air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
+        pose: act ? act.pose : undefined,
+        sitting: player.sitting && !onGround, sitGround: (player.sitting && onGround) || !!(act && act.sit), air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
       });
     },

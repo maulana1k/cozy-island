@@ -9,7 +9,7 @@ const MOVE_KEYS = {
 
 export function createInput(keyTarget, pointerTarget) {
   const held = new Set();
-  let hop = false, interact = false, mute = false, sit = false;
+  let hop = false, interact = false, mute = false, sit = false, join = false;
   let dragging = false, lookX = 0, lookY = 0, zoom = 0;
   let anyKey = false, freeLook = false;
 
@@ -23,6 +23,7 @@ export function createInput(keyTarget, pointerTarget) {
     if (e.code === 'KeyE') interact = true;
     if (e.code === 'KeyM') mute = true;
     if (e.code === 'KeyX') sit = true;
+    if (e.code === 'KeyF') join = true;
   });
   keyTarget.addEventListener('keyup', (e) => {
     held.delete(e.code);
@@ -68,6 +69,7 @@ export function createInput(keyTarget, pointerTarget) {
     consumeInteract: take(() => interact, () => { interact = false; }),
     consumeMute: take(() => mute, () => { mute = false; }),
     consumeSit: take(() => sit, () => { sit = false; }),
+    consumeJoin: take(() => join, () => { join = false; }),
     consumeLook: take(() => ({ dx: lookX, dy: lookY }), () => { lookX = 0; lookY = 0; }),
     consumeZoom: take(() => zoom, () => { zoom = 0; }),
   };

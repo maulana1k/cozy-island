@@ -83,7 +83,7 @@ export function createFigure({
   coat = null, armband = false, carry = null, scale = 1,
 }) {
   const P = scale > 1.05 ? GROWN : KID;
-  const PELVIS_Y = P.pelvisY, LEG = P.thigh + P.shin;
+  const PELVIS_Y = P.pelvisY, LEG = P.thigh + P.shin, TALL = P.pelvisY + P.neckY + P.headY + P.headR;
   const group = new THREE.Group();
   const inner = new THREE.Group();   // leans and squashes
   const pelvis = new THREE.Group();  // bobs; carries legs and torso
@@ -267,6 +267,8 @@ export function createFigure({
         const SIG = [[0.4, 2.4], [1.55, 1.55], [2.4, 0.4], [0.4, 1.55], [1.55, 2.4], [2.4, 2.4], [0.4, 0.4]];
         const [l, r] = SIG[Math.floor(e / 0.95) % SIG.length];
         t.shLz = -l; t.shRz = r; t.shLx = t.shRx = 0; t.elL = t.elR = -0.03; snap = 8;
+      } else if (o.pose === 'sleep') {
+        t.thL = t.thR = 0; t.knL = t.knR = 0.05; t.shLx = t.shRx = 0; t.shLz = -0.12; t.shRz = 0.12; t.elL = t.elR = -0.1; t.py = 0; t.lean = 0;
       } else if (o.pose === 'carry') {
         t.shLx = t.shRx = -0.75; t.elL = t.elR = -1.25; t.shLz = 0.1; t.shRz = -0.1; t.lean += 0.02;
       } else if (o.pose === 'command') {
@@ -343,6 +345,9 @@ export function createFigure({
       neck.rotation.x = -inner.rotation.x * 0.6;
       neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1);
       neck.rotation.z = -inner.rotation.z * 0.5;
+      // Asleep: flat on the back, centred on the bed, chest rising and falling.
+      if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
+      else inner.position.set(0, 0, 0);
     },
   };
 }

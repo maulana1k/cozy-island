@@ -3,6 +3,7 @@
 // about and hauling on a tug-of-war rope.
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
+import { liftFor } from './schedule.js';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, groundAt, SALUTE_LINE, CAMPFIRE, PLAY } from '../logic/layout.js';
 import { stick, ball, shared } from '../world/build.js';
@@ -213,7 +214,7 @@ export function createCampLife(scene, deps) {
         if (p.ctl) { p.x = m.x; p.z = m.z; p.rot = m.rot; p.speed = m.speed; p.opts = m.opts; } else { m.x = p.x; m.z = p.z; m.rot = p.rot; }
         p.figure.group.visible = !m.hidden;
         if (p.react) { p.react.t += dt; if (p.react.t >= p.react.dur) p.react = null; }
-        const y = groundAt(p.x, p.z) + (p.ctl ? (p.opts.sitGround ? -p.figure.sitDrop : 0) : p.opts.sitting ? p.figure.seatLift(0.42) : 0);
+        const y = groundAt(p.x, p.z) + (p.ctl ? liftFor(p.figure, p.opts) : p.opts.sitting ? p.figure.seatLift(0.42) : 0);
         p.figure.group.position.set(p.x, y, p.z);
         // Turn smoothly rather than snapping round.
         let diff = p.rot - p.figure.group.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));

@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { createIsland } from './world/island.js';
 import { createSky } from './world/sky.js';
+import { createVillage } from './world/village.js';
+import { createScatter } from './world/scatter.js';
+import { getColliders, groundAt } from './logic/layout.js';
 import { createInput } from './input.js';
 import { createPlayer } from './actors/player.js';
 import { createFollowCamera } from './camera.js';
-import { advance } from './logic/dayCycle.js';
+import { advance, nightFactor } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
 import { START_TIME } from './config.js';
 
@@ -25,8 +28,10 @@ const freezeTime = params.has('freeze');
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
 const input = createInput(window, canvas);
-const colliders = [];
-const player = createPlayer(scene);
+const village = createVillage(scene);
+const scatter = createScatter(scene);
+const colliders = [...getColliders()];
+const player = createPlayer(scene, { groundAt });
 const rig = createFollowCamera(camera);
 
 function onResize() {
@@ -53,6 +58,9 @@ function frame(now = performance.now()) {
   rig.update(dt, player.position, input, colliders);
   sky.update(timeOfDay, elapsed, player.position);
   island.update(elapsed);
+  village.update(elapsed);
+  village.setNight(nightFactor(timeOfDay));
+  scatter.update(elapsed);
   island.setLight(sky.waterLight, sky.fogColor, sky.fogDensity);
 
   renderer.render(scene, camera);

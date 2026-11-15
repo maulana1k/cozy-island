@@ -1,7 +1,7 @@
 // A gentle checklist of things to try. Nothing is required and nothing is ever lost.
 export const DISCOVERIES = [
   { id: 'lantern', label: 'Light a lantern' },
-  { id: 'door', label: 'Open a door' },
+  { id: 'door', label: 'Open a tent flap' },
   { id: 'bell', label: 'Ring the camp bell' },
   { id: 'flag', label: 'Raise the camp flag' },
   { id: 'seat', label: 'Sit down for a while' },

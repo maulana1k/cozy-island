@@ -67,32 +67,6 @@ export function createProps(scene, deps) {
     return lantern;
   });
 
-  // ---- Doors ---------------------------------------------------------------
-  COTTAGES.forEach((c, i) => {
-    const holder = new THREE.Group();
-    holder.position.set(c.x, heightAt(c.x, c.z) - 0.05, c.z);
-    holder.rotation.y = c.rot;
-    const hinge = new THREE.Group();
-    hinge.position.set(-0.5, c.floor, c.depth / 2 + 0.07);
-    const leaf = mesh(new THREE.BoxGeometry(1.0, 1.8, 0.07), flat(0x9c6f48), 0.5, 0.9, 0);
-    hinge.add(leaf, mesh(new THREE.BoxGeometry(1.0, 0.08, 0.09), woodDark, 0.5, 1.35, 0), mesh(new THREE.BoxGeometry(1.0, 0.08, 0.09), woodDark, 0.5, 0.45, 0));
-    hinge.add(mesh(new THREE.SphereGeometry(0.05, 8, 8), flat(0xe8c36a), 0.86, 0.9, 0.06));
-    holder.add(hinge);
-    group.add(holder);
-    const door = { open: false, angle: 0 };
-    interactables.push({
-      id: `door-${i}`, kind: 'door', position: { x: c.door.x + Math.sin(c.rot) * 0.5, z: c.door.z + Math.cos(c.rot) * 0.5 },
-      markerY: holder.position.y + c.floor + 2.3,
-      prompt: () => (door.open ? 'E — close door' : 'E — open door'),
-      interact() { door.open = !door.open; audio.play('door'); },
-    });
-    updaters.push((dt) => {
-      const target = door.open ? -1.75 : 0;
-      door.angle += (target - door.angle) * Math.min(1, dt * 9); // settles in about 0.4 s
-      hinge.rotation.y = door.angle;
-    });
-  });
-
   // ---- Bell ----------------------------------------------------------------
   {
     const y = heightAt(BELL.x, BELL.z);
@@ -121,18 +95,40 @@ export function createProps(scene, deps) {
     });
   }
 
-  // ---- Camp flag ----------------------------------------------------------
+  // ---- Camp flag: the purple World Scout flag with a white fleur-de-lis ----
   {
     const y = heightAt(FLAGPOLE.x, FLAGPOLE.z);
     const g = new THREE.Group();
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.09, 6.4, 8), flat(0xfaf3e2), 0, 3.2, 0));
     g.add(mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe9c46a, roughness: 0.4, metalness: 0.5 }), 0, 6.45, 0));
     g.add(mesh(new THREE.CylinderGeometry(0.45, 0.55, 0.3, 8), stone, 0, 0.12, 0));
-    const flag = new THREE.Group();
-    const cloth = mesh(new THREE.BoxGeometry(1.5, 0.95, 0.03), flat(0x4f9a6a), 0.82, 0, 0);
-    const stripe = mesh(new THREE.BoxGeometry(1.5, 0.22, 0.04), flat(0xf2c94c), 0.82, 0, 0, false);
-    const badge = mesh(new THREE.OctahedronGeometry(0.2, 0), flat(0xfaf3e2), 0.6, 0, 0, false); badge.scale.z = 0.15;
-    flag.add(cloth, stripe, badge);
+
+    const cv = document.createElement('canvas'); cv.width = 384; cv.height = 256;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#5b2d8e'; cx.fillRect(0, 0, 384, 256);
+    cx.translate(192, 128);
+    cx.strokeStyle = '#ffffff'; cx.lineWidth = 7; cx.setLineDash([13, 5]);
+    cx.beginPath(); cx.arc(0, 0, 96, 0, Math.PI * 2); cx.stroke(); cx.setLineDash([]);
+    cx.fillStyle = '#ffffff';
+    // Centre petal
+    cx.beginPath(); cx.moveTo(0, -74); cx.bezierCurveTo(26, -40, 22, 0, 0, 30); cx.bezierCurveTo(-22, 0, -26, -40, 0, -74); cx.fill();
+    // Side petals, curling outward
+    for (const sgn of [-1, 1]) {
+      cx.beginPath(); cx.moveTo(sgn * 8, 28); cx.bezierCurveTo(sgn * 30, 8, sgn * 30, -34, sgn * 54, -34);
+      cx.bezierCurveTo(sgn * 78, -30, sgn * 74, 6, sgn * 50, 4); cx.bezierCurveTo(sgn * 56, -10, sgn * 44, -16, sgn * 36, -2);
+      cx.bezierCurveTo(sgn * 32, 14, sgn * 22, 30, sgn * 8, 40); cx.closePath(); cx.fill();
+    }
+    cx.fillRect(-34, 28, 68, 13);                       // the band tying the petals
+    cx.beginPath(); cx.moveTo(-16, 41); cx.lineTo(16, 41); cx.lineTo(0, 74); cx.closePath(); cx.fill(); // the stem
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+
+    const FW = 1.65, FH = 1.1, SEG = 14;
+    const clothGeo = new THREE.PlaneGeometry(FW, FH, SEG, 5);
+    clothGeo.translate(FW / 2 + 0.08, 0, 0);
+    const cloth = new THREE.Mesh(clothGeo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 1 }));
+    cloth.castShadow = true;
+    const rest = clothGeo.attributes.position.array.slice();
+    const flag = new THREE.Group(); flag.add(cloth);
     g.add(flag);
     g.position.set(FLAGPOLE.x, y, FLAGPOLE.z);
     group.add(g);
@@ -143,9 +139,17 @@ export function createProps(scene, deps) {
       interact() { state.up = !state.up; audio.play('lantern'); },
     });
     updaters.push((dt, elapsed) => {
-      state.h += ((state.up ? 5.75 : 1.3) - state.h) * Math.min(1, dt * 1.6);
+      state.h += ((state.up ? 5.7 : 1.3) - state.h) * (1 - Math.exp(-dt * 1.5));
       flag.position.y = state.h;
-      flag.rotation.y = Math.sin(elapsed * 1.7) * 0.22 + Math.sin(elapsed * 3.1) * 0.06;
+      // The cloth ripples from the pole outward, more the further it is from the pole.
+      const pos = clothGeo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = rest[i * 3], yy = rest[i * 3 + 1], far = x / FW;
+        pos.setZ(i, Math.sin(x * 4.2 - elapsed * 5.5 + yy * 1.3) * 0.13 * far + Math.sin(x * 1.7 - elapsed * 2.1) * 0.1 * far);
+        pos.setY(i, yy - far * far * 0.1 + Math.sin(x * 3 - elapsed * 4) * 0.02 * far);
+      }
+      pos.needsUpdate = true; clothGeo.computeVertexNormals();
+      flag.rotation.y = Math.sin(elapsed * 0.6) * 0.15;
     });
   }
 

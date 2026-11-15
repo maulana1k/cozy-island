@@ -2,8 +2,9 @@ Classification: INTERNAL
 
 # Cozy Island
 
-A small, calm 3D island to wander around, themed as a student scout camp: a meeting hall,
-cabins, a guard post, a farm, tents and a flagpole. Poke at things and nudge your fellow
+A small, calm 3D island to wander around, themed as a student scout camp: a headquarters
+marquee, patrol tents, a food tent, a first-aid tent, a guard post, a farm and a flagpole.
+Open a tent flap with E and walk in: the top is sliced away so you can see inside. Poke at things and nudge your fellow
 scouts. There is nothing to win or finish.
 
 ## Run it

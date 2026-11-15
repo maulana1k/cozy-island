@@ -107,6 +107,23 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
 - **Tests:** the owner asked to stop writing test files part-way; rules
   added after that (interaction picking, scout behaviour, sound) are untested.
 
+### Second round of owner feedback
+
+- **Movement:** speed builds up and bleeds off, the body swings round and
+  leans into turns, knees and elbows bend, jumps tuck and land with a squash,
+  feet kick up dust, and the camera trails softly.
+- **Temporary camp structures:** the wooden houses are replaced by canvas
+  tents and bamboo-and-tarp shelters: a headquarters marquee, three patrol
+  tents, a food tent, a first-aid tent, a farm shed and a guard post, plus a
+  pioneering gateway, a bamboo lookout tower and scattered camp gear.
+- **Walk-in structures:** open the flap with E and walk in; everything above
+  waist height is sliced away while you are inside. The small ridge tents
+  are not walk-in (designer's call: they have no door).
+- **Activity groups:** scouts singing round the fire, saluting the flag,
+  cooking, eating, lashing a tripod and exercising on the beach.
+- **Flag:** the purple World Scout flag with a white fleur-de-lis
+  (ASSUMPTION: the owner did not say which scout flag).
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

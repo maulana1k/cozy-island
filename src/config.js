@@ -51,8 +51,8 @@ export const START_TIME = 0.64;
 // Player and camera
 export const WALK_SPEED = 3.5;
 export const RUN_SPEED = 7;
-export const HOP_VELOCITY = 4.5;
-export const GRAVITY = 14;
+export const HOP_VELOCITY = 5;
+export const GRAVITY = 15;
 export const PLAYER_RADIUS = 0.35;
 export const PLAYER_START = { x: 10, z: 14 };
 export const MAX_DT = 0.05;

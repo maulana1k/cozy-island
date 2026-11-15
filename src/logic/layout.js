@@ -21,13 +21,21 @@ export const COTTAGE_SIZE = { width: 5, depth: 4, floor: 0.55 };
 // `rot` turns the front (+z) of the building; width/depth are its footprint; `floor` is the
 // height of the floor above the ground (cabins stand on short stilts).
 const BUILDINGS = [
-  { type: 'hall', x: 9, z: -7, rot: 0, width: 8, depth: 5.5, floor: 0.35 },
-  { type: 'cabin', x: -3, z: 6, rot: 1.3, width: 5, depth: 4, floor: 0.55 },
-  { type: 'cabin', x: -1, z: 16, rot: 0.9, width: 5, depth: 4, floor: 0.55 },
-  { type: 'cabin', x: 22, z: 2, rot: -1.9, width: 5, depth: 4, floor: 0.55 },
-  { type: 'barn', x: 33, z: 27, rot: -2.03, width: 6.5, depth: 5, floor: 0 },
-  { type: 'guard', x: 44, z: 11, rot: 0.15, width: 3, depth: 3, floor: 0 },
-];
+  { type: 'hall', x: 9, z: -7.5, rot: 0, width: 8, depth: 6 },        // big marquee: camp headquarters
+  { type: 'patrol', x: -3, z: 6, rot: 1.3, width: 4.2, depth: 4.6 },  // patrol sleeping tents
+  { type: 'patrol', x: -1, z: 16, rot: 0.9, width: 4.2, depth: 4.6 },
+  { type: 'patrol', x: 22, z: 2, rot: -1.9, width: 4.2, depth: 4.6 },
+  { type: 'farm', x: 33, z: 27, rot: -2.03, width: 5.5, depth: 4.5 }, // bamboo-and-tarp farm shed
+  { type: 'guard', x: 44, z: 11, rot: 0.15, width: 3, depth: 3 },     // guard post by the dock path
+  { type: 'mess', x: 12, z: 25, rot: -3.02, width: 6, depth: 5 },     // kitchen and food tent
+  { type: 'aid', x: 19.5, z: -9, rot: -0.51, width: 3.6, depth: 4 },  // first-aid tent
+].map((b) => ({ floor: 0, ...b }));
+
+// A point given in a building's own frame (x to its side, z out of its front) as a world point.
+export function toWorld(c, lx, lz) {
+  const cos = Math.cos(c.rot), sin = Math.sin(c.rot);
+  return { x: c.x + lx * cos + lz * sin, z: c.z - lx * sin + lz * cos };
+}
 
 export const COTTAGES = BUILDINGS.map((b, i) => ({
   id: `cottage-${i}`, ...b,
@@ -81,11 +89,23 @@ export const TENTS = [
   tentAt('tent-5', { x: -8, z: 12 }, VILLAGE_CENTER), tentAt('tent-6', { x: -9.5, z: 15.5 }, VILLAGE_CENTER),
 ];
 
+// A pioneering gateway over the dock path, a bamboo lookout tower by the guard post,
+// picnic tables by the mess tent, and the spots where groups of scouts are busy.
+export const GATE = { x: 30, z: 12.5, rot: Math.atan2(16, 4), half: 1.9 };
+export const TOWER = { x: 46.5, z: 8.2 };
+export const PICNIC_TABLES = [{ x: 17.8, z: 23.4, rot: 0.3 }, { x: 18.2, z: 27.2, rot: -0.25 }];
+export const PIONEER_SITE = { x: -5.3, z: 21 };
+export const SALUTE_LINE = [{ x: 15.2, z: 12.6 }, { x: 16.6, z: 12.9 }, { x: 18, z: 13.2 }];
+const gatePosts = [-1, 1].map((s) => ({ x: GATE.x + Math.cos(GATE.rot) * GATE.half * s, z: GATE.z - Math.sin(GATE.rot) * GATE.half * s }));
+export const GATE_POSTS = gatePosts;
+
 // Dirt paths: from the square to every door, the dock, the campfire and the lookout.
 export const PATHS = [
   ...COTTAGES.map((c) => {
     // The far-off barn and guard post branch off the dock path instead of crossing the camp.
-    if (c.type === 'barn') return [{ x: 24, z: 11 }, { x: 29.5, z: 19 }, doorFront(c, 0.4)];
+    if (c.type === 'farm') return [{ x: 24, z: 11 }, { x: 29.5, z: 19 }, doorFront(c, 0.4)];
+    if (c.type === 'mess') return [PLAYER_START, doorFront(c, 0.4)];
+    if (c.type === 'aid') return [{ x: 15.8, z: 3.9 }, doorFront(c, 0.4)];
     if (c.type === 'guard') return [{ x: 40, z: 15 }, doorFront(c, 0.4)];
     return [VILLAGE_CENTER, doorFront(c, 0.4)];
   }),
@@ -155,10 +175,23 @@ function inDock(x, z) {
   return along >= -0.6 && along <= DOCK.length && Math.abs(across) <= DOCK.width / 2;
 }
 
-// Terrain height, plus the dock's deck where there is one.
+// A camp structure's floor is level: it sits at the highest bit of ground under it.
+export function floorHeight(c) {
+  let top = heightAt(c.x, c.z);
+  for (const lx of [-1, 0, 1]) for (const lz of [-1, 0, 1]) { const p = toWorld(c, lx * c.width / 2, lz * c.depth / 2); top = Math.max(top, heightAt(p.x, p.z)); }
+  return top;
+}
+const FLOORS = COTTAGES.map((c) => ({ c, y: floorHeight(c) + 0.06, cos: Math.cos(c.rot), sin: Math.sin(c.rot) }));
+
+// Terrain height, plus the dock's deck and the level floors inside the camp structures.
 export function groundAt(x, z) {
   const h = heightAt(x, z);
-  return inDock(x, z) ? Math.max(h, DOCK.top) : h;
+  if (inDock(x, z)) return Math.max(h, DOCK.top);
+  for (const f of FLOORS) {
+    const wx = x - f.c.x, wz = z - f.c.z;
+    if (Math.abs(wx * f.cos - wz * f.sin) < f.c.width / 2 + 0.05 && Math.abs(wx * f.sin + wz * f.cos) < f.c.depth / 2 + 0.2) return Math.max(h, f.y);
+  }
+  return h;
 }
 
 // ---- Scatter ------------------------------------------------------------
@@ -172,7 +205,9 @@ export function getScatter() {
     ...SEATS.map((s) => ({ ...s, r: 2 })), ...LANTERNS.map((l) => ({ ...l, r: 1.5 })),
     ...VILLAGER_SPOTS.map((s) => ({ ...s, r: 2.6 })),
     { ...PLAYER_START, r: 3 }, { ...CAMPFIRE, r: 8.5 }, { ...BELL, r: 2 }, { ...FLAGPOLE, r: 2 }, { ...FIELD, r: 5.5 },
-    ...TENTS.map((t) => ({ ...t, r: 3 })), { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
+    ...TENTS.map((t) => ({ ...t, r: 3 })),
+    { ...GATE, r: 3.2 }, { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
+    ...SALUTE_LINE.map((p) => ({ ...p, r: 1.6 })), { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
     { ...LOOKOUT, r: 4.5 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
   ];
   const clearOf = (p, list, extra = 0) => list.every((o) => dist(p, o) > (o.r || 0) + extra);
@@ -238,7 +273,7 @@ export function getColliders() {
   if (colliderCache) return colliderCache;
   const s = getScatter();
   colliderCache = [
-    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: c.width / 2, hd: c.depth / 2, rot: c.rot, tall: true })),
+    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: c.width / 2, hd: c.depth / 2, rot: c.rot, tall: true, building: true })),
     ...FENCES.map(fenceBox),
     ...s.trees.map((t) => ({ x: t.x, z: t.z, r: 0.4 * t.scale })),
     ...s.rocks.map((r) => ({ x: r.x, z: r.z, r: 0.5 * r.scale })),
@@ -248,6 +283,9 @@ export function getColliders() {
       : { x: st.x, z: st.z, hw: 0.8, hd: 0.3, rot: st.rot })),
     { x: BELL.x, z: BELL.z, r: 0.45 },
     { x: FLAGPOLE.x, z: FLAGPOLE.z, r: 0.22 },
+    { x: TOWER.x, z: TOWER.z, r: 1.3 },
+    ...GATE_POSTS.map((p) => ({ x: p.x, z: p.z, r: 0.45 })),
+    ...PICNIC_TABLES.map((t) => ({ x: t.x, z: t.z, hw: 1.0, hd: 0.9, rot: t.rot })),
     ...CAMPFIRES.map((f) => ({ x: f.x, z: f.z, r: 0.8 })),
     ...TENTS.map((t) => ({ x: t.x, z: t.z, hw: 1.25, hd: 1.35, rot: t.rot })),
     { x: BOAT.x, z: BOAT.z, r: 1.2 },

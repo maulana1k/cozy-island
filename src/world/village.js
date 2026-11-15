@@ -21,130 +21,6 @@ function roofGeometry(width, height, depth) {
   return geo;
 }
 
-// One wooden building. The type decides its shape and trimmings:
-// cabin (sleeping hut on stilts), hall (big meeting hall with a porch),
-// barn (farm store with big doors) and guard (small post with a lookout deck).
-function buildCottage(c, mats) {
-  const g = new THREE.Group();
-  const { width: W, depth: D, floor: F, type } = c;
-  const wallH = { hall: 3.0, barn: 3.1, guard: 2.4 }[type] || 2.3;
-  const front = D / 2;
-  const wallMat = flat(type === 'barn' ? 0xb9553f : c.wallColor), roofMat = flat(c.roofColor);
-  g.userData.puffs = [];
-
-  // Stilts, floor and steps
-  if (F > 0.1) {
-    const nx = Math.max(2, Math.round(W / 2.4));
-    for (let ix = 0; ix <= nx; ix++) for (const sz of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, F + 0.9, 7), mats.woodDark);
-      post.position.set(-W / 2 + 0.25 + (ix / nx) * (W - 0.5), F / 2 - 0.45, sz * (D / 2 - 0.25)); post.castShadow = true;
-      g.add(post);
-    }
-    g.add(box(W + 0.36, 0.16, D + 0.36, mats.woodDark, 0, F - 0.08, 0));
-    g.add(box(1.6, 0.14, 0.42, mats.wood, 0, F - 0.2, front + 0.36));
-    if (F > 0.45) g.add(box(1.6, 0.14, 0.42, mats.wood, 0, F - 0.42, front + 0.72));
-  } else {
-    g.add(box(W + 0.3, 0.9, D + 0.3, mats.stone, 0, -0.33, 0));
-  }
-
-  // Plank walls with darker seams and corner posts
-  g.add(box(W, wallH, D, wallMat, 0, F + wallH / 2, 0));
-  const seams = Math.round(wallH / 0.48);
-  for (let i = 1; i < seams; i++) g.add(box(W + 0.03, 0.045, D + 0.03, type === 'barn' ? mats.barnSeam : mats.seam, 0, F + (wallH * i) / seams, 0));
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.24, wallH + 0.1, 0.24, type === 'barn' ? mats.cream : mats.woodDark, sx * W / 2, F + wallH / 2, sz * D / 2));
-  g.add(box(W + 0.3, 0.2, D + 0.3, mats.woodDark, 0, F + wallH + 0.02, 0));
-
-  const roofH = type === 'guard' ? 0 : (type === 'hall' ? 2.9 : type === 'barn' ? 2.7 : 2.35);
-  if (type === 'guard') {
-    // A flat lookout deck with a railing, a ladder and a pennant.
-    const top = F + wallH + 0.12;
-    g.add(box(W + 0.9, 0.16, D + 0.9, mats.wood, 0, top, 0));
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.add(box(0.14, 1.0, 0.14, mats.woodDark, sx * (W / 2 + 0.35), top + 0.5, sz * (D / 2 + 0.35)));
-    for (const sz of [-1, 1]) g.add(box(W + 0.8, 0.09, 0.09, mats.woodDark, 0, top + 0.95, sz * (D / 2 + 0.35)), box(W + 0.8, 0.07, 0.07, mats.woodDark, 0, top + 0.5, sz * (D / 2 + 0.35)));
-    for (const sx of [-1, 1]) g.add(box(0.09, 0.09, D + 0.8, mats.woodDark, sx * (W / 2 + 0.35), top + 0.95, 0), box(0.07, 0.07, D + 0.8, mats.woodDark, sx * (W / 2 + 0.35), top + 0.5, 0));
-    // little roof over the deck
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.add(box(0.1, 1.5, 0.1, mats.woodDark, sx * (W / 2 - 0.2), top + 1.6, sz * (D / 2 - 0.2)));
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(W * 0.95, 1.2, 4), roofMat); cap.rotation.y = Math.PI / 4; cap.position.y = top + 2.9; cap.castShadow = true;
-    g.add(cap);
-    // ladder on the left side
-    const lx = -W / 2 - 0.32;
-    g.add(box(0.07, top + 0.2, 0.07, mats.wood, lx, (top + 0.2) / 2, -0.28), box(0.07, top + 0.2, 0.07, mats.wood, lx, (top + 0.2) / 2, 0.28));
-    for (let k = 0; k < 6; k++) g.add(box(0.06, 0.06, 0.56, mats.wood, lx, 0.35 + k * 0.4, 0));
-    // pennant
-    g.add(box(0.07, 2.2, 0.07, mats.woodDark, W / 2 + 0.35, top + 2.0, D / 2 + 0.35));
-    const pennant = new THREE.Mesh(roofGeometry(0.7, 1.0, 0.03), flat(0xf2b63b, { side: THREE.DoubleSide }));
-    pennant.rotation.z = -Math.PI / 2; pennant.position.set(W / 2 + 0.4, top + 2.75, D / 2 + 0.35); g.add(pennant);
-  } else {
-    // Tiled roof in two layers
-    const under = new THREE.Mesh(roofGeometry(W + 1.7, roofH - 0.05, D + 1.1), flat(new THREE.Color(c.roofColor).multiplyScalar(0.78)));
-    under.position.y = F + wallH - 0.1; under.castShadow = true; under.receiveShadow = true;
-    const roof = new THREE.Mesh(roofGeometry(W + 1.3, roofH, D + 1.5), roofMat);
-    roof.position.y = F + wallH + 0.06; roof.castShadow = true; roof.receiveShadow = true;
-    g.add(under, roof, box(0.24, 0.18, D + 1.7, mats.woodDark, 0, F + wallH + roofH + 0.07, 0));
-  }
-
-  if (type === 'cabin' || type === 'hall') {
-    // Stone chimney with smoke
-    const chimX = W * 0.27, chimZ = -D * 0.22, chimTop = F + wallH + roofH * 0.8 + 0.5;
-    g.add(box(0.62, 1.9, 0.62, mats.stone, chimX, chimTop - 0.9, chimZ), box(0.76, 0.14, 0.76, mats.stoneDark, chimX, chimTop + 0.07, chimZ));
-    g.userData.puffs = [0, 1, 2].map((k) => {
-      const puff = new THREE.Mesh(mats.puffGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
-      puff.userData = { offset: k / 3 + Math.abs(c.x * 0.37) % 1, x: chimX, y: chimTop + 0.2, z: chimZ };
-      g.add(puff);
-      return puff;
-    });
-  }
-
-  if (type === 'hall') {
-    // A porch roof on posts, with bunting strung across the front.
-    g.add(box(W * 0.6, 0.14, 1.5, roofMat, 0, F + 2.45, front + 0.75));
-    for (const sx of [-1, 1]) g.add(box(0.16, 2.4, 0.16, mats.woodDark, sx * (W * 0.3 - 0.1), F + 1.2, front + 1.35));
-    const colors = [0xe8503a, 0xf2b63b, 0x5fa8a0, 0xfaf3e2];
-    for (let k = 0; k < 9; k++) {
-      const flag = new THREE.Mesh(roofGeometry(0.34, 0.4, 0.02), flat(colors[k % 4], { side: THREE.DoubleSide }));
-      flag.rotation.z = Math.PI; flag.position.set(-W * 0.27 + k * (W * 0.54 / 8), F + 2.36, front + 1.52); g.add(flag);
-    }
-  }
-  if (type === 'barn') {
-    // Big barn doors with white braces either side of the small door, a hay loft hatch and hay bales.
-    for (const sx of [-1, 1]) {
-      g.add(box(1.5, 2.2, 0.08, mats.cream, sx * 1.55, 1.1, front + 0.03), box(1.3, 2.0, 0.1, wallMat, sx * 1.55, 1.1, front + 0.035));
-      for (const t of [-1, 1]) { const brace = box(0.12, 2.3, 0.12, mats.cream, sx * 1.55, 1.1, front + 0.06); brace.rotation.z = t * 0.58; g.add(brace); }
-    }
-    g.add(box(1.0, 0.9, 0.1, mats.cream, 0, wallH + 0.75, front + 0.72), box(0.8, 0.7, 0.12, mats.dark, 0, wallH + 0.75, front + 0.73));
-    const hay = flat(0xe8c15a);
-    for (const [x, y, z, r] of [[W / 2 + 1.0, 0.3, 0.6, 0.2], [W / 2 + 1.1, 0.3, -0.5, -0.3], [W / 2 + 1.0, 0.9, 0.1, 0.5]]) { const b = box(1.0, 0.6, 0.7, hay, x, y, z); b.rotation.y = r; g.add(b); }
-  }
-
-  // Doorway: a dark inset with a wooden frame. The door leaf itself is an interactable prop.
-  g.add(box(1.0, 1.8, 0.06, mats.dark, 0, F + 0.9, front + 0.012));
-  g.add(box(1.3, 0.16, 0.18, mats.woodDark, 0, F + 1.88, front + 0.05));
-  g.add(box(0.14, 1.8, 0.18, mats.woodDark, -0.57, F + 0.9, front + 0.05));
-  g.add(box(0.14, 1.8, 0.18, mats.woodDark, 0.57, F + 0.9, front + 0.05));
-
-  // Windows with wooden shutters; the panes glow at night.
-  const addWindow = (x, y, z, rotY) => {
-    const w = new THREE.Group();
-    const frame = box(0.9, 0.9, 0.1, mats.woodDark);
-    const pane = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.12), mats.window);
-    const barV = box(0.06, 0.7, 0.14, mats.woodDark), barH = box(0.7, 0.06, 0.14, mats.woodDark);
-    const shutterL = box(0.36, 0.86, 0.06, mats.wood, -0.64, 0, 0.04), shutterR = box(0.36, 0.86, 0.06, mats.wood, 0.64, 0, 0.04);
-    const sill = box(1.0, 0.08, 0.2, mats.woodDark, 0, -0.5, 0.08);
-    w.add(frame, pane, barV, barH, shutterL, shutterR, sill);
-    w.position.set(x, y, z); w.rotation.y = rotY;
-    g.add(w);
-  };
-  const winY = F + 1.35;
-  if (type === 'cabin') { addWindow(-1.55, winY, front + 0.02, 0); addWindow(1.55, winY, front + 0.02, 0); }
-  if (type === 'hall') { addWindow(-2.75, winY + 0.2, front + 0.02, 0); addWindow(2.75, winY + 0.2, front + 0.02, 0); addWindow(-2, winY + 0.2, -front - 0.02, Math.PI); addWindow(2, winY + 0.2, -front - 0.02, Math.PI); }
-  addWindow(W / 2 + 0.02, winY, 0, Math.PI / 2);
-  addWindow(-W / 2 - 0.02, winY, 0, -Math.PI / 2);
-
-  g.position.set(c.x, heightAt(c.x, c.z) - 0.05, c.z);
-  g.rotation.y = c.rot;
-  return g;
-}
-
 // The farm's crop field: rows of soil with little green plants.
 function buildField(mats) {
   const g = new THREE.Group();
@@ -319,8 +195,6 @@ export function createVillage(scene) {
   };
 
   const group = new THREE.Group();
-  const puffs = [];
-  for (const c of COTTAGES) { const house = buildCottage(c, mats); puffs.push(...house.userData.puffs); group.add(house); }
   const windmill = buildWindmill(mats);
   group.add(buildField(mats));
   group.add(windmill.g);
@@ -339,13 +213,6 @@ export function createVillage(scene) {
     setNight(f) { mats.window.emissiveIntensity = f * 1.6; },
     update(elapsed) {
       windmill.hub.rotation.z = -elapsed * 0.45;
-      // Smoke puffs rise from each chimney, growing and fading as they go.
-      for (const p of puffs) {
-        const u = p.userData, t = (elapsed * 0.22 + u.offset) % 1;
-        p.position.set(u.x + Math.sin(t * 5 + u.offset * 9) * 0.3 * t + t * 0.5, u.y + t * 2.6, u.z);
-        p.scale.setScalar(0.16 + t * 0.42);
-        p.material.opacity = (1 - t) * 0.75;
-      }
       boat.position.y = 0.2 + Math.sin(elapsed * 0.9) * 0.06;
       boat.rotation.z = Math.sin(elapsed * 0.7) * 0.05;
       boat.rotation.x = Math.sin(elapsed * 0.5 + 1) * 0.03;

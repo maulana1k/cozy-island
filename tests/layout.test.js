@@ -9,8 +9,8 @@ import { PLAYER_START, MAX_WADE_DEPTH } from '../src/config.js';
 
 const doorFront = (c, d = 1.2) => ({ x: c.door.x + Math.sin(c.door.rot) * d, z: c.door.z + Math.cos(c.door.rot) * d });
 
-test('six cottages on dry grass', () => {
-  expect(COTTAGES).toHaveLength(6);
+test('eight camp buildings on dry grass', () => {
+  expect(COTTAGES).toHaveLength(8);
   for (const c of COTTAGES) expect(zoneAt(c.x, c.z)).toBe('grass');
 });
 test('cottages do not overlap each other', () => {

@@ -28,7 +28,7 @@ function drawStaticMap(ctx, scale) {
   // Houses
   for (const h of COTTAGES) {
     ctx.save(); ctx.translate(px(h.x), pz(h.z)); ctx.rotate(-h.rot);
-    ctx.fillStyle = '#d9634a'; ctx.strokeStyle = '#8c4a3a'; ctx.lineWidth = 0.8;
+    ctx.fillStyle = '#fbf3dc'; ctx.strokeStyle = '#a5855a'; ctx.lineWidth = 0.8;
     const w = h.width * k * 1.25, d = h.depth * k * 1.25;
     ctx.fillRect(-w / 2, -d / 2, w, d); ctx.strokeRect(-w / 2, -d / 2, w, d);
     ctx.restore();

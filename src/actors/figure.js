@@ -1,122 +1,212 @@
 import * as THREE from 'three';
 
 const DARK = 0x3f3330;
-
 const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 });
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-function part(geo, material, x = 0, y = 0, z = 0) {
+function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, material);
-  m.position.set(x, y, z); m.castShadow = true;
+  m.position.set(x, y, z); m.castShadow = shadow;
   return m;
 }
 
+// Accents are modelled in whole-figure coordinates (feet at y = 0).
 function buildAccent(kind, accentColor) {
   const m = mat(accentColor);
   const g = new THREE.Group();
   if (kind === 'hat') { // wide straw sun hat
     g.add(part(new THREE.CylinderGeometry(0.46, 0.48, 0.035, 18), m));
     g.add(part(new THREE.CylinderGeometry(0.22, 0.27, 0.17, 18), m, 0, 0.09, 0));
-    g.add(part(new THREE.CylinderGeometry(0.275, 0.28, 0.05, 18), mat(0xe0704f), 0, 0.04, 0));
+    g.add(part(new THREE.CylinderGeometry(0.275, 0.28, 0.05, 18), mat(0xe0704f), 0, 0.04, 0, false));
     g.position.y = 1.24; g.rotation.x = -0.08;
   } else if (kind === 'cap') {
     g.add(part(new THREE.SphereGeometry(0.318, 18, 9, 0, Math.PI * 2, 0, Math.PI / 2), m));
-    const peak = part(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 14, 1, false, -Math.PI / 2, Math.PI), m, 0, 0.02, 0.24);
-    g.add(peak); g.position.y = 1.07; g.rotation.x = -0.12;
+    g.add(part(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 14, 1, false, -Math.PI / 2, Math.PI), m, 0, 0.02, 0.24));
+    g.position.y = 1.07; g.rotation.x = -0.12;
   } else if (kind === 'scarf') {
-    const ring = part(new THREE.TorusGeometry(0.17, 0.065, 8, 16), m); ring.rotation.x = Math.PI / 2;
-    g.add(ring, part(new THREE.BoxGeometry(0.1, 0.22, 0.05), m, 0.1, -0.12, 0.16)); g.position.y = 0.76;
+    const ring = part(new THREE.TorusGeometry(0.17, 0.06, 8, 16), m, 0, 0, 0, false); ring.rotation.x = Math.PI / 2;
+    const knot = part(new THREE.ConeGeometry(0.09, 0.22, 4), m, 0, -0.13, 0.17, false); knot.rotation.x = Math.PI;
+    g.add(ring, knot); g.position.y = 0.77;
   } else if (kind === 'bow') {
     const l = part(new THREE.ConeGeometry(0.09, 0.16, 8), m, -0.08, 0, 0); l.rotation.z = -Math.PI / 2;
     const r = part(new THREE.ConeGeometry(0.09, 0.16, 8), m, 0.08, 0, 0); r.rotation.z = Math.PI / 2;
     g.add(l, r, part(new THREE.SphereGeometry(0.05, 8, 8), m)); g.position.set(0, 1.34, 0);
   } else if (kind === 'apron') {
-    g.add(part(new THREE.BoxGeometry(0.3, 0.3, 0.04), m, 0, 0.52, 0.2));
-  } else if (kind === 'flower') {
-    g.add(part(new THREE.SphereGeometry(0.05, 8, 8), mat(0xffe07a)));
-    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; g.add(part(new THREE.SphereGeometry(0.05, 8, 8), m, Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0)); }
-    g.position.set(0.2, 1.24, 0.14); g.rotation.set(-0.5, 0.4, 0);
+    g.add(part(new THREE.BoxGeometry(0.3, 0.34, 0.04), m, 0, 0.54, 0.2, false));
   }
   return g;
 }
 
-function limb(upperMat, lowerMat, length, radius, endGeo, endMat) {
-  // A pivot at the top so the limb swings from the shoulder or hip.
-  const pivot = new THREE.Group();
-  pivot.add(part(new THREE.CapsuleGeometry(radius, length, 3, 8), lowerMat, 0, -length / 2 - radius * 0.4, 0));
-  if (upperMat) pivot.add(part(new THREE.CapsuleGeometry(radius * 1.25, length * 0.3, 3, 8), upperMat, 0, -length * 0.2, 0));
-  if (endGeo) pivot.add(part(endGeo, endMat, 0, -length - radius * 1.1, 0.03));
-  return pivot;
-}
+const HEAD_ACCENTS = new Set(['hat', 'cap', 'bow']);
+const PELVIS_Y = 0.4, NECK_Y = 0.42; // neck is measured from the pelvis
 
-// A small kid-sized person with a big round head. Origin at the feet, facing +z.
+// A small kid-sized person with a big round head, bending knees and elbows.
+// Origin at the feet, facing +z.
 export function createFigure({
   bodyColor, accent, accentColor = 0xffffff, hairColor = 0x5b4336,
   skinColor = 0xf1c7a0, shortsColor = 0x5f7fa6, backpackColor = null, neckerchief = null,
 }) {
   const group = new THREE.Group();
-  const inner = new THREE.Group(); // bobs and wobbles without disturbing the group's own transform
-  group.add(inner);
+  const inner = new THREE.Group();   // leans and squashes
+  const pelvis = new THREE.Group();  // bobs; carries legs and torso
+  const torso = new THREE.Group();   // twists against the hips
+  const neck = new THREE.Group();
+  group.add(inner); inner.add(pelvis); pelvis.add(torso); torso.add(neck);
+  pelvis.position.y = PELVIS_Y; neck.position.y = NECK_Y;
+
   const shirt = mat(bodyColor), skin = mat(skinColor), dark = mat(DARK), shorts = mat(shortsColor), shoe = mat(0xfaf3e6);
 
-  const torso = part(new THREE.CapsuleGeometry(0.2, 0.2, 4, 12), shirt, 0, 0.6, 0);
-  const hips = part(new THREE.CapsuleGeometry(0.19, 0.06, 4, 12), shorts, 0, 0.42, 0);
-  const head = part(new THREE.SphereGeometry(0.3, 22, 18), skin, 0, 1.02, 0); head.scale.y = 0.94;
-  const hair = part(new THREE.SphereGeometry(0.314, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), mat(hairColor), 0, 1.02, 0);
+  pelvis.add(part(new THREE.CapsuleGeometry(0.19, 0.06, 4, 12), shorts, 0, 0.02, 0));
+  torso.add(part(new THREE.CapsuleGeometry(0.2, 0.2, 4, 12), shirt, 0, 0.2, 0));
+
+  // Head
+  const head = part(new THREE.SphereGeometry(0.3, 22, 18), skin, 0, 0.2, 0); head.scale.y = 0.94;
+  const hair = part(new THREE.SphereGeometry(0.314, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), mat(hairColor), 0, 0.2, 0);
   hair.rotation.x = -0.45;
   const eyeGeo = new THREE.SphereGeometry(0.036, 8, 8);
-  const eyeL = part(eyeGeo, dark, -0.11, 1.04, 0.272), eyeR = part(eyeGeo, dark, 0.11, 1.04, 0.272);
-  const smile = part(new THREE.TorusGeometry(0.055, 0.012, 6, 10, Math.PI), dark, 0, 0.955, 0.283); smile.rotation.z = Math.PI;
+  const eyeL = part(eyeGeo, dark, -0.11, 0.22, 0.272, false), eyeR = part(eyeGeo, dark, 0.11, 0.22, 0.272, false);
+  const smile = part(new THREE.TorusGeometry(0.055, 0.012, 6, 10, Math.PI), dark, 0, 0.135, 0.283, false); smile.rotation.z = Math.PI;
   const cheekMat = new THREE.MeshStandardMaterial({ color: 0xf28d85, roughness: 1, transparent: true, opacity: 0.7 });
   const cheekGeo = new THREE.SphereGeometry(0.045, 8, 8);
-  const cheekL = part(cheekGeo, cheekMat, -0.19, 0.97, 0.225), cheekR = part(cheekGeo, cheekMat, 0.19, 0.97, 0.225);
-  cheekL.scale.z = cheekR.scale.z = 0.35; cheekL.castShadow = cheekR.castShadow = false;
-  eyeL.castShadow = eyeR.castShadow = smile.castShadow = false;
+  const cheekL = part(cheekGeo, cheekMat, -0.19, 0.15, 0.225, false), cheekR = part(cheekGeo, cheekMat, 0.19, 0.15, 0.225, false);
+  cheekL.scale.z = cheekR.scale.z = 0.35;
+  neck.add(head, hair, eyeL, eyeR, smile, cheekL, cheekR);
 
-  const armL = limb(shirt, skin, 0.2, 0.055), armR = limb(shirt, skin, 0.2, 0.055);
-  armL.position.set(-0.25, 0.72, 0); armR.position.set(0.25, 0.72, 0);
+  // Arms: shoulder -> elbow -> hand
+  function arm(side) {
+    const shoulder = new THREE.Group(); shoulder.position.set(side * 0.25, 0.32, 0);
+    shoulder.add(part(new THREE.CapsuleGeometry(0.062, 0.08, 3, 8), shirt, 0, -0.07, 0));
+    const elbow = new THREE.Group(); elbow.position.y = -0.14;
+    elbow.add(part(new THREE.CapsuleGeometry(0.05, 0.08, 3, 8), skin, 0, -0.065, 0), part(new THREE.SphereGeometry(0.058, 8, 8), skin, 0, -0.15, 0, false));
+    shoulder.add(elbow); torso.add(shoulder);
+    return { shoulder, elbow };
+  }
+  // Legs: hip -> knee -> foot
   const shoeGeo = new THREE.SphereGeometry(0.085, 10, 8); shoeGeo.scale(1, 0.7, 1.35);
-  const legL = limb(null, skin, 0.16, 0.065, shoeGeo, shoe), legR = limb(null, skin, 0.16, 0.065, shoeGeo, shoe);
-  legL.position.set(-0.1, 0.36, 0); legR.position.set(0.1, 0.36, 0);
+  function leg(side) {
+    const hip = new THREE.Group(); hip.position.set(side * 0.1, -0.02, 0);
+    hip.add(part(new THREE.CapsuleGeometry(0.075, 0.1, 3, 8), shorts, 0, -0.08, 0));
+    const knee = new THREE.Group(); knee.position.y = -0.17;
+    knee.add(part(new THREE.CapsuleGeometry(0.06, 0.1, 3, 8), skin, 0, -0.085, 0), part(shoeGeo, shoe, 0, -0.18, 0.035));
+    hip.add(knee); pelvis.add(hip);
+    return { hip, knee };
+  }
+  const armL = arm(-1), armR = arm(1), legL = leg(-1), legR = leg(1);
 
-  inner.add(torso, hips, head, hair, eyeL, eyeR, smile, cheekL, cheekR, armL, armR, legL, legR);
-  if (accent) inner.add(buildAccent(accent, accentColor));
-  // Every scout wears a neckerchief.
-  if (neckerchief !== null) inner.add(buildAccent('scarf', neckerchief));
+  const attach = (kind, color) => {
+    const a = buildAccent(kind, color);
+    const holder = new THREE.Group(); holder.add(a);
+    if (HEAD_ACCENTS.has(kind)) { holder.position.y = -(PELVIS_Y + NECK_Y); neck.add(holder); }
+    else { holder.position.y = -PELVIS_Y; torso.add(holder); }
+  };
+  if (accent) attach(accent, accentColor);
+  if (neckerchief !== null) attach('scarf', neckerchief); // every scout wears one
   if (backpackColor !== null) {
-    const pack = part(new THREE.BoxGeometry(0.3, 0.32, 0.16), mat(backpackColor), 0, 0.62, -0.24);
-    const flap = part(new THREE.BoxGeometry(0.31, 0.1, 0.17), mat(0xf4e3b5), 0, 0.74, -0.245);
-    inner.add(pack, flap);
+    torso.add(part(new THREE.BoxGeometry(0.3, 0.32, 0.16), mat(backpackColor), 0, 0.22, -0.24), part(new THREE.BoxGeometry(0.31, 0.1, 0.17), mat(0xf4e3b5), 0, 0.34, -0.245, false));
   }
 
-  let phase = 0, lastElapsed = null, swing = 0, run = 0;
+  let phase = 0, lastElapsed = null, gait = 0, run = 0;
+  const seed = Math.random() * 10;
+  // Current joint angles, eased toward their targets every frame so no pose ever snaps.
+  const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0 };
 
   return {
     group,
-    // speed in m/s drives the stride; opts.sitting folds the legs; opts.wobble (0..1) shakes the body.
-    animate(speed, elapsed, opts = {}) {
-      const dt = lastElapsed === null ? 0 : Math.min(0.1, Math.max(0, elapsed - lastElapsed));
+    // speed (m/s) drives the stride. opts: sitting, sitGround, wobble 0..1, air (-1 falling .. 1 rising,
+    // only while airborne), land 0..1 (just landed), roll, pitch, reach 0..1, wave 0..1,
+    // pose: 'clap' | 'jacks' | 'salute' | 'stir' | 'eat' | 'hammer'.
+    animate(speed, elapsed, o = {}) {
+      const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, 0.1);
       lastElapsed = elapsed;
-      swing += (Math.min(1, speed / 3.5) - swing) * Math.min(1, dt * 10);
-      run += (Math.min(1, Math.max(0, (speed - 3.8) / 3)) - run) * Math.min(1, dt * 8);
-      phase += dt * (4 + speed * 2.1);
-      const s = Math.sin(phase) * swing;
-      if (opts.sitting) {
-        legL.rotation.x = legR.rotation.x = -1.45;
-        armL.rotation.x = armR.rotation.x = -0.3;
-        armL.rotation.z = -0.15; armR.rotation.z = 0.15;
-        inner.position.y = 0;
-      } else {
-        legL.rotation.x = s * 1.0; legR.rotation.x = -s * 1.0;
-        // Walking swings the arms; running holds them out a little, like a kid dashing about.
-        armL.rotation.x = -s * (0.8 - run * 0.4); armR.rotation.x = s * (0.8 - run * 0.4);
-        armL.rotation.z = -0.15 - run * 0.75; armR.rotation.z = 0.15 + run * 0.75;
-        // A little bounce on each step, and a slow breath when standing still.
-        inner.position.y = Math.abs(Math.cos(phase)) * (0.05 + run * 0.05) * swing + Math.sin(elapsed * 2) * 0.008 * (1 - swing);
+      const ease = (k) => 1 - Math.exp(-dt * k);
+      gait += (clamp(speed / 3.0, 0, 1) - gait) * ease(9);
+      run += (clamp((speed - 4) / 2.6, 0, 1) - run) * ease(7);
+      if (speed > 0.05) phase += dt * (3.4 + speed * 1.75);
+      const s = Math.sin(phase), c2 = Math.cos(phase + 0.6);
+      const t = { ...pose };
+
+      // ---- Walking and running
+      const A = (0.5 + run * 0.5) * gait;
+      t.thL = -s * A - run * 0.12 * gait; t.thR = s * A - run * 0.12 * gait;
+      t.knL = (0.12 + (0.7 + run * 0.75) * Math.max(0, c2)) * gait;
+      t.knR = (0.12 + (0.7 + run * 0.75) * Math.max(0, -c2)) * gait;
+      const B = (0.45 + run * 0.45) * gait;
+      t.shLx = s * B; t.shRx = -s * B;
+      t.shLz = -0.14 - run * 0.2; t.shRz = 0.14 + run * 0.2;
+      t.elL = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, -s) * 0.25 * gait;
+      t.elR = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, s) * 0.25 * gait;
+      t.spreadL = 0; t.spreadR = 0;
+      t.py = -Math.cos(phase * 2) * (0.016 + run * 0.03) * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
+      t.lean = 0.05 * gait + run * 0.2;
+      let snap = 14; // how quickly joints chase their targets
+
+      // ---- In the air: tuck on the way up, reach for the ground on the way down
+      if (o.air !== undefined) {
+        const up = clamp((o.air + 1) / 2, 0, 1);
+        t.thL = lerp(-0.1, -0.95, up); t.thR = lerp(-0.3, -0.6, up);
+        t.knL = lerp(0.25, 1.5, up); t.knR = lerp(0.45, 1.1, up);
+        t.shLz = -lerp(0.9, 1.5, up); t.shRz = lerp(0.9, 1.5, up);
+        t.shLx = t.shRx = -0.25; t.elL = t.elR = -0.35;
+        t.py = 0; t.lean = 0.12 * up; snap = 16;
       }
-      inner.rotation.x = swing * 0.1 + run * 0.16;
-      const w = opts.wobble || 0;
-      inner.rotation.z = Math.sin(elapsed * 26) * 0.28 * w + Math.sin(phase) * 0.04 * swing;
-      inner.scale.y = 1 + Math.sin(elapsed * 2) * 0.012 - w * 0.06;
+      // ---- Landing: knees soak it up
+      const land = o.land || 0;
+      if (land > 0) {
+        t.thL -= 0.55 * land; t.thR -= 0.55 * land; t.knL += 0.95 * land; t.knR += 0.95 * land;
+        t.py -= 0.1 * land; t.shLz -= 0.4 * land; t.shRz += 0.4 * land; t.lean += 0.15 * land;
+      }
+      if (o.sitting || o.sitGround) {
+        t.thL = t.thR = -1.5; t.knL = t.knR = o.sitGround ? 1.9 : 1.35;
+        t.spreadL = o.sitGround ? -0.55 : 0; t.spreadR = o.sitGround ? 0.55 : 0;
+        t.shLx = t.shRx = -0.35; t.elL = t.elR = -0.5; t.py = 0; t.lean = 0;
+      }
+
+      // ---- Activities
+      const e = elapsed + seed;
+      if (o.pose === 'clap') {
+        const beat = Math.max(0, Math.sin(e * 5.5));
+        t.shLx = t.shRx = -1.0; t.shLz = 0.25 + beat * 0.3; t.shRz = -0.25 - beat * 0.3; t.elL = t.elR = -1.0;
+      } else if (o.pose === 'jacks') {
+        const k = Math.sin(e * 4.6) * 0.5 + 0.5;
+        t.shLz = -(0.25 + 2.3 * k); t.shRz = 0.25 + 2.3 * k; t.shLx = t.shRx = 0; t.elL = t.elR = -0.1;
+        t.spreadL = -0.38 * k; t.spreadR = 0.38 * k; t.py = Math.abs(Math.sin(e * 4.6)) * 0.07; snap = 22;
+      } else if (o.pose === 'salute') {
+        t.shRx = -0.5; t.shRz = 1.35; t.elR = -2.25; t.shLx = 0; t.shLz = -0.08; t.elL = -0.05; t.lean = -0.03;
+      } else if (o.pose === 'stir') {
+        t.shRx = -1.0 + Math.sin(e * 3.2) * 0.14; t.shRz = Math.cos(e * 3.2) * 0.22; t.elR = -0.75; t.shLx = -0.35; t.elL = -0.9; t.lean = 0.12;
+      } else if (o.pose === 'eat') {
+        const bite = Math.max(0, Math.sin(e * 1.7));
+        t.shRx = -0.55 - bite * 0.3; t.elR = -1.1 - bite * 1.0; t.shLx = -0.6; t.elL = -0.9;
+      } else if (o.pose === 'hammer') {
+        const hit = Math.sin(e * 4.2);
+        t.thL = t.thR = -1.0; t.knL = t.knR = 1.75; t.py = -0.15; t.lean = 0.38;
+        t.shRx = -1.0 + hit * 0.5; t.elR = -0.9 - hit * 0.3; t.shLx = -0.8; t.elL = -0.7;
+      }
+      // ---- Gestures layered on top
+      if (o.reach) { t.shRx = lerp(t.shRx, -1.35, o.reach); t.elR = lerp(t.elR, -0.25, o.reach); t.shRz = lerp(t.shRz, 0.1, o.reach); t.lean += 0.1 * o.reach; }
+      if (o.wave) { t.shRz = lerp(t.shRz, 2.45, o.wave); t.shRx = lerp(t.shRx, 0, o.wave); t.elR = lerp(t.elR, -0.5 + Math.sin(e * 11) * 0.45, o.wave); }
+
+      const k = ease(snap);
+      for (const key in pose) pose[key] += (t[key] - pose[key]) * k;
+
+      legL.hip.rotation.set(pose.thL, 0, pose.spreadL); legR.hip.rotation.set(pose.thR, 0, pose.spreadR);
+      legL.knee.rotation.x = pose.knL; legR.knee.rotation.x = pose.knR;
+      armL.shoulder.rotation.set(pose.shLx, 0, pose.shLz); armR.shoulder.rotation.set(pose.shRx, 0, pose.shRz);
+      armL.elbow.rotation.x = pose.elL; armR.elbow.rotation.x = pose.elR;
+      pelvis.position.y = PELVIS_Y + pose.py;
+      // Shoulders counter the hips, the way a real stride twists the body.
+      pelvis.rotation.y = -s * 0.07 * gait; torso.rotation.y = s * 0.17 * gait;
+
+      const w = o.wobble || 0;
+      inner.rotation.x = pose.lean + (o.pitch || 0);
+      inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w;
+      const stretch = o.air !== undefined ? Math.abs(o.air) * 0.05 : 0;
+      inner.scale.set(1 + land * 0.07 - stretch * 0.5, 1 - land * 0.1 + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.008, 1 + land * 0.07 - stretch * 0.5);
+      // The head stays level and looks about a little when standing.
+      neck.rotation.x = -inner.rotation.x * 0.6;
+      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1);
+      neck.rotation.z = -inner.rotation.z * 0.5;
     },
   };
 }

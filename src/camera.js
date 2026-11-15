@@ -3,7 +3,7 @@ import { heightAt } from './logic/terrain.js';
 import { CAMERA } from './config.js';
 
 const DEG = Math.PI / 180;
-const LOOK_HEIGHT = 1.05;
+const LOOK_HEIGHT = 0.85;
 const CAMERA_CLEARANCE = 0.5;
 const INSIDE_PITCH = 46 * DEG, INSIDE_DISTANCE = 6.8;
 

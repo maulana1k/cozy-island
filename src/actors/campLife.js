@@ -11,10 +11,10 @@ const KHAKI = 0xd8c08a;
 const SKIN = [0xf1c7a0, 0xc98d62, 0xe6b48a, 0x9a6a4a, 0xf3d2b4, 0xd9a273];
 const HAIR = [0x5b4336, 0x3d3230, 0x8a5a3c, 0x4a3b36, 0xc98f5a, 0x2f2826];
 const SCARF = [0xe8503a, 0xf2b63b, 0x4f7fc9, 0x3f8f6a];
-const ADULT = 1.3;
+const ADULT = 1.2;
 
 export function createCampLife(scene, deps) {
-  const { ui, audio, player } = deps;
+  const { ui, audio, player, crowd } = deps;
   const people = [];
   let n = 0;
   // A scout, or with opts.adult a grown-up member of staff.
@@ -26,14 +26,15 @@ export function createCampLife(scene, deps) {
       coat: opts.coat !== undefined ? opts.coat : null, armband: !!opts.armband, carry: opts.carry !== undefined ? opts.carry : null, scale: opts.adult ? ADULT : 1,
     });
     scene.add(figure.group);
-    const p = { figure, x, z, rot, y: null, speed: 0, opts: {}, react: null, name: opts.name || null, solid: opts.solid !== false, lift: opts.lift || 0 };
+    const p = { figure, x, z, rot, y: null, speed: 0, opts: {}, react: null, name: opts.name || null, solid: opts.solid !== false, lift: opts.lift || 0, ctl: false };
+    p.member = crowd.join({ home: { x, z, rot }, role: 'scout', adult: !!opts.adult });
     people.push(p);
     return p;
   }
   const face = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
   const near = (x, z, d) => Math.hypot(player.position.x - x, player.position.z - z) < d;
   const react = (p, name, dur = 1.1) => { p.react = { name, t: 0, dur }; };
-  const emote = (p, icon) => ui.emote(new THREE.Vector3(p.x, groundAt(p.x, p.z) + (p.figure.group.scale.y > 1 ? 2.3 : 1.85), p.z), icon);
+  const emote = (p, icon) => ui.emote(new THREE.Vector3(p.x, groundAt(p.x, p.z) + (p.figure.group.scale.y > 1 ? 2.0 : 1.5), p.z), icon);
 
   // ---- The chief scout drills a squad on the parade ground --------------------
   const mid = SALUTE_LINE[1];
@@ -57,7 +58,7 @@ export function createCampLife(scene, deps) {
   // ---- First aid: a medical teacher explains while a student bandages a patient ---
   const aid = COTTAGES.find((c) => c.type === 'aid');
   const bench = toWorld(aid, -1.4, 3.0), kneel = toWorld(aid, -1.4, 3.85), docSpot = toWorld(aid, -0.2, 4.1), helperSpot = toWorld(aid, 0.9, 3.5);
-  const patient = person(bench.x, bench.z, aid.rot, { lift: 0.12, accent: null });
+  const patient = person(bench.x, bench.z, aid.rot, { lift: -0.16, accent: null });
   const medic = person(kneel.x, kneel.z, aid.rot + Math.PI, { armband: true, accent: 'cap', accentColor: 0xffffff });
   const doctor = person(docSpot.x, docSpot.z, face(docSpot, bench), { adult: true, coat: 0xfbfbf7, armband: true, accent: null, scarf: null, shorts: 0x4f5f7a, hair: 0x3d3230, name: 'the medical teacher' });
   const helper = person(helperSpot.x, helperSpot.z, face(helperSpot, bench), { armband: true, accent: null, carry: 0xfafafa });
@@ -82,23 +83,31 @@ export function createCampLife(scene, deps) {
   rope.rotation.y = G.rot; scene.add(rope);
   const line = stick([-1.2, 0.03, 0], [1.2, 0.03, 0], 0.03, 0xfaf7f0); line.position.set(G.x, heightAt(G.x, G.z) + 0.03, G.z); line.rotation.y = G.rot; line.rotation.z = Math.PI / 2; scene.add(line);
 
+  // Everyone's place in the timetable.
+  const role = (list, name) => { for (const p of list) p.member.role = name; };
+  role([chief], 'chief'); role(squad, 'drill'); role([trainer], 'trainer'); role(beachSquad, 'beach'); role([clerk], 'clerk'); role([carrier], 'carrier');
+  role([patient, medic, doctor, helper], 'medical'); role(runners, 'tag'); role(catchers, 'catch'); role(pullers, 'tug');
+  const busy = (list) => list.some((p) => p.ctl);
+
   const staff = [chief, trainer, clerk, carrier, doctor];
   const interactables = staff.map((p, k) => ({
-    id: `staff-${k}`, kind: 'villager', position: p, get markerY() { return groundAt(p.x, p.z) + 2.25; },
+    id: `staff-${k}`, kind: 'villager', position: p, get markerY() { return groundAt(p.x, p.z) + 1.95; },
+    get enabled() { return !p.member.hidden; },
     prompt: () => `E — greet ${p.name}`,
     interact() { react(p, k === 0 ? 'salute' : 'wave', 1.2); emote(p, 'heart'); audio.play('squeak'); },
   }));
   const solids = people.filter((p) => p.solid);
-  const colliders = solids.map((p) => ({ x: p.x, z: p.z, r: 0.32 }));
+  const colliders = [];
 
   return {
     interactables,
-    colliders: () => colliders,
+    colliders() { colliders.length = 0; for (const p of solids) if (!p.member.hidden) colliders.push({ x: p.x, z: p.z, r: 0.32 }); return colliders; },
     update(dt, elapsed) {
-      for (const p of people) { p.speed = 0; p.opts = {}; }
+      // First ask the timetable who it needs elsewhere; the rest carry on with their own thing.
+      for (const p of people) { p.speed = 0; p.opts = {}; p.ctl = crowd.drive(p.member, dt); }
 
       // Chief: a new order every few seconds, a blast on the whistle, and the squad follows.
-      drill.timer -= dt;
+      drill.timer -= chief.ctl ? 0 : dt;
       if (drill.timer <= 0) {
         drill.order = (drill.order + 1) % ORDERS.length; drill.timer = 4.5 + Math.random() * 2;
         react(chief, 'reachUp', 0.7); if (near(chief.x, chief.z, 22)) audio.play('whistle');
@@ -116,7 +125,7 @@ export function createCampLife(scene, deps) {
 
       // Logistics
       clerk.opts = { pose: 'write' };
-      if (haul.wait > 0) { haul.wait -= dt; carrier.opts = haul.loaded ? { pose: 'carry' } : {}; }
+      if (carrier.ctl) { /* off duty */ } else if (haul.wait > 0) { haul.wait -= dt; carrier.opts = haul.loaded ? { pose: 'carry' } : {}; }
       else {
         const tp = haul.route[haul.leg], dx = tp.x - carrier.x, dz = tp.z - carrier.z, d = Math.hypot(dx, dz);
         if (d < 0.2) {
@@ -130,7 +139,7 @@ export function createCampLife(scene, deps) {
 
       // Tag
       tag.freeze -= dt; tag.grace -= dt;
-      if (tag.freeze <= 0) {
+      if (tag.freeze <= 0 && !busy(runners)) {
         const it = runners[tag.it];
         let target = -1, best = Infinity;
         runners.forEach((r, k) => { if (k === tag.it || (k === tag.last && tag.grace > 0)) return; const d = Math.hypot(r.x - it.x, r.z - it.z); if (d < best) { best = d; target = k; } });
@@ -164,7 +173,7 @@ export function createCampLife(scene, deps) {
 
       // Catch
       const hand = (p, out) => out.set(p.x + Math.sin(p.rot) * 0.3, groundAt(p.x, p.z) + 1.25, p.z + Math.cos(p.rot) * 0.3);
-      if (game.state === 'held') {
+      if (busy(catchers)) { /* the game waits */ } else if (game.state === 'held') {
         const h = catchers[game.holder], o = catchers[1 - game.holder];
         // walk back to your own spot if a wild throw took you away from it
         const home = homes[game.holder], hd = Math.hypot(home.x - h.x, home.z - h.z);
@@ -200,8 +209,11 @@ export function createCampLife(scene, deps) {
       rope.position.set(G.x + gx * sway, heightAt(G.x, G.z), G.z + gz * sway);
 
       for (const p of people) {
+        const m = p.member;
+        if (p.ctl) { p.x = m.x; p.z = m.z; p.rot = m.rot; p.speed = m.speed; p.opts = m.opts; } else { m.x = p.x; m.z = p.z; m.rot = p.rot; }
+        p.figure.group.visible = !m.hidden;
         if (p.react) { p.react.t += dt; if (p.react.t >= p.react.dur) p.react = null; }
-        const y = groundAt(p.x, p.z) + p.lift;
+        const y = groundAt(p.x, p.z) + (p.ctl ? (p.opts.sitGround ? -p.figure.sitDrop : 0) : p.opts.sitting ? p.figure.seatLift(0.42) : 0);
         p.figure.group.position.set(p.x, y, p.z);
         // Turn smoothly rather than snapping round.
         let diff = p.rot - p.figure.group.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));

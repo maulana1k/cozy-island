@@ -13,32 +13,32 @@ const SHORTS = [0x5f7fa6, 0x8a6a4a, 0x6f8f6a, 0x4f5f7a];
 const CAPS = [null, 'cap', 'bow', null, 'cap'];
 
 export function createActivities(scene, deps) {
-  const { ui, audio } = deps;
+  const { ui, audio, crowd } = deps;
   const facingTo = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
   const spots = [];
 
   // Singing and clapping round the village fire (the two logs are left free for you).
-  [205, 262, 318, 92].forEach((deg) => {
-    const a = (deg * Math.PI) / 180, p = { x: VILLAGE_FIRE.x + Math.cos(a) * 2.35, z: VILLAGE_FIRE.z + Math.sin(a) * 2.35 };
-    spots.push({ ...p, rot: facingTo(p, VILLAGE_FIRE), pose: 'clap', sitGround: true });
+  [205, 262, 318, 92].forEach((deg, k) => {
+    const a = (deg * Math.PI) / 180, p = { x: VILLAGE_FIRE.x + Math.cos(a) * 3.15, z: VILLAGE_FIRE.z + Math.sin(a) * 3.15 };
+    spots.push({ ...p, rot: facingTo(p, VILLAGE_FIRE), pose: 'clap', sitGround: true, role: k < 2 ? 'watch' : 'firecircle' }); // two of them keep the night watch
   });
   // The cook in the food tent, and two scouts eating at a picnic table.
   const mess = COTTAGES.find((c) => c.type === 'mess');
   const cook = toWorld(mess, -1.55, -0.45);
-  spots.push({ ...cook, rot: mess.rot - Math.PI / 2, pose: 'stir', accent: 'apron', accentColor: 0xfaf3e2 });
+  spots.push({ ...cook, rot: mess.rot - Math.PI / 2, pose: 'stir', accent: 'apron', accentColor: 0xfaf3e2, role: 'cook' });
   const table = PICNIC_TABLES[0];
   for (const [lx, lz, turn] of [[-0.4, -0.72, 0], [0.35, 0.72, Math.PI]]) {
     const p = toWorld({ x: table.x, z: table.z, rot: table.rot }, lx, lz);
-    spots.push({ ...p, rot: table.rot + turn, pose: 'eat', sitting: true, lift: 0.12 });
+    spots.push({ ...p, rot: table.rot + turn, pose: 'eat', sitting: true, lift: -0.16, role: 'eater' });
   }
   // Lashing a tripod at the pioneering site.
-  for (const [dx, dz] of [[-1.25, 0.5], [1.1, 0.9]]) { const p = { x: PIONEER_SITE.x + dx, z: PIONEER_SITE.z + dz }; spots.push({ ...p, rot: facingTo(p, PIONEER_SITE), pose: 'hammer' }); }
+  for (const [dx, dz] of [[-1.25, 0.5], [1.1, 0.9]]) { const p = { x: PIONEER_SITE.x + dx, z: PIONEER_SITE.z + dz }; spots.push({ ...p, rot: facingTo(p, PIONEER_SITE), pose: 'hammer', role: 'pioneer' }); }
 
   // On the summit: two signallers sending semaphore down to the camp, a lookout with binoculars,
   // and a scout drawing the map by the fire.
-  for (const p of SUMMIT.signallers) spots.push({ ...p, rot: facingTo(p, VILLAGE_CENTER), pose: 'semaphore', holdFlags: true });
-  spots.push({ ...SUMMIT.watcher, rot: facingTo({ x: 0, z: 0 }, SUMMIT.watcher), pose: 'binoculars' });
-  spots.push({ ...SUMMIT.mapper, rot: facingTo(SUMMIT.mapper, SUMMIT.fire), pose: 'write', sitGround: true });
+  for (const p of SUMMIT.signallers) spots.push({ ...p, rot: facingTo(p, VILLAGE_CENTER), pose: 'semaphore', holdFlags: true, role: 'summit' });
+  spots.push({ ...SUMMIT.watcher, rot: facingTo({ x: 0, z: 0 }, SUMMIT.watcher), pose: 'binoculars', role: 'summit' });
+  spots.push({ ...SUMMIT.mapper, rot: facingTo(SUMMIT.mapper, SUMMIT.fire), pose: 'write', sitGround: true, role: 'summit' });
 
   const HELLO = ['wave', 'cheer', 'salute', 'clap'];
   const scouts = spots.map((s, i) => {
@@ -46,26 +46,41 @@ export function createActivities(scene, deps) {
       bodyColor: SHIRT, neckerchief: SCARF[i % 4], skinColor: SKIN[i % 6], hairColor: HAIR[(i * 5) % 6], shortsColor: SHORTS[i % 4],
       accent: s.accent !== undefined ? s.accent : CAPS[i % 5], accentColor: s.accentColor || 0x6f8f5a, holdFlags: !!s.holdFlags,
     });
-    const y = groundAt(s.x, s.z) + (s.sitGround ? -0.2 : s.lift || 0);
+    const y = groundAt(s.x, s.z) + (s.sitGround ? -figure.sitDrop : s.sitting ? figure.seatLift(0.42) : 0);
     figure.group.position.set(s.x, y, s.z); figure.group.rotation.y = s.rot;
     scene.add(figure.group);
-    return { ...s, figure, y, react: null, hellos: i, i };
+    // Each scout has a place in the camp timetable; `member` is where they are right now.
+    const member = crowd.join({ home: { x: s.x, z: s.z, rot: s.rot }, role: s.role });
+    return { ...s, figure, y, member, react: null, hellos: i, i };
   });
 
   const interactables = scouts.map((s) => ({
-    id: `scout-${s.i}`, kind: 'villager', position: { x: s.x, z: s.z }, markerY: s.y + 1.75,
+    id: `scout-${s.i}`, kind: 'villager', position: s.member, get markerY() { return groundAt(s.member.x, s.member.z) + 1.4; },
+    get enabled() { return !s.member.hidden; },
     prompt: () => 'E — say hello',
-    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.x, s.y + 1.85, s.z), s.i % 2 ? 'note' : 'heart'); },
+    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.member.x, groundAt(s.member.x, s.member.z) + 1.5, s.member.z), s.i % 2 ? 'note' : 'heart'); },
   }));
-  const colliders = scouts.map((s) => ({ x: s.x, z: s.z, r: 0.3 }));
+  const colliders = [];
 
   return {
     interactables,
-    colliders: () => colliders,
+    // Whoever is up and about is solid, wherever they happen to be standing.
+    colliders() { colliders.length = 0; for (const s of scouts) if (!s.member.hidden) colliders.push({ x: s.member.x, z: s.member.z, r: 0.3 }); return colliders; },
     update(dt, elapsed) {
       for (const s of scouts) {
         if (s.react) { s.react.t += dt; if (s.react.t >= s.react.dur) s.react = null; }
-        s.figure.animate(0, elapsed, { pose: s.pose, sitGround: s.sitGround, sitting: s.sitting, gesture: s.react ? { name: s.react.name, u: s.react.t / s.react.dur } : null });
+        const gesture = s.react ? { name: s.react.name, u: s.react.t / s.react.dur } : null;
+        const m = s.member, g = s.figure.group;
+        if (crowd.drive(m, dt)) {
+          // The timetable has them somewhere else: walking there, or joining in.
+          g.visible = !m.hidden;
+          g.position.set(m.x, groundAt(m.x, m.z) - (m.opts.sitGround ? s.figure.sitDrop : 0), m.z);
+          let diff = m.rot - g.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); g.rotation.y += diff * (1 - Math.exp(-dt * 10));
+          s.figure.animate(m.speed, elapsed, { ...m.opts, gesture });
+        } else {
+          g.visible = true; g.position.set(s.x, s.y, s.z); g.rotation.y = s.rot;
+          s.figure.animate(0, elapsed, { pose: s.pose, sitGround: s.sitGround, sitting: s.sitting, gesture });
+        }
       }
     },
   };

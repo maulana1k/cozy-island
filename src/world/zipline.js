@@ -6,7 +6,7 @@ import { createFigure } from '../actors/figure.js';
 import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
 
 const BAMBOO = 0xd8bb72, DARK = 0x5b5b63, ROPE = 0xe9dcc0;
-const HANG = 1.5;          // how far a rider's feet hang below the cable
+const HANG = 0.86;         // how far a rider's feet hang below the cable
 const PLATFORM = 2.7;      // height of the launch deck above the summit
 
 export function createZipline(scene, deps) {
@@ -79,7 +79,7 @@ export function createZipline(scene, deps) {
     else { r.leg = Math.min(route.length - 1, 1 + Math.floor(((i - 1) * (route.length - 1)) / 5)); r.x = route[r.leg - 1].x; r.z = route[r.leg - 1].z; }
     return r;
   });
-  let launchTimer = 2, cableBusy = false;
+  let launchTimer = 2, cableBusy = false, open = true;
   const tmp = new THREE.Vector3();
 
   // ---- The player's own ride
@@ -94,6 +94,8 @@ export function createZipline(scene, deps) {
 
   return {
     interactables,
+    // The flying fox only runs during lessons and free time.
+    setOpen(on) { open = on; },
     update(dt, elapsed, player) {
       if (myRide) {
         const done = advance(myRide, dt);
@@ -113,7 +115,7 @@ export function createZipline(scene, deps) {
           r.y = heightAt(r.x, r.z);
         } else if (r.state === 'wait') {
           r.y = heightAt(r.x, r.z); r.rot = heading;
-          if (launchTimer <= 0 && !cableBusy) { r.state = 'climb'; r.t = 0; cableBusy = true; launchTimer = 9; }
+          if (open && launchTimer <= 0 && !cableBusy) { r.state = 'climb'; r.t = 0; cableBusy = true; launchTimer = 9; }
         } else if (r.state === 'climb') {
           // Up the ladder at the back of the tower and onto the deck.
           r.t += dt / 1.6;

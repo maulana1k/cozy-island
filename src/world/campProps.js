@@ -5,7 +5,7 @@ import { heightAt } from '../logic/terrain.js';
 import {
   COTTAGES, toWorld, GATE, GATE_POSTS, TOWER, PICNIC_TABLES, PIONEER_SITE, FLAGPOLE, DOCK, CAMPFIRE, VILLAGE_CENTER, FIELD, SUMMIT, LOOKOUT,
 } from '../logic/layout.js';
-import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
+import { box, cyl, ball, stick, roofGeometry, shared, mergeStatic } from './build.js';
 
 const BAMBOO = 0xd8bb72, WOOD = 0xb98a5e, DARK = 0x8c6444, ROPE = 0xe9dcc0, TIN = 0x8fa0a8;
 
@@ -185,6 +185,6 @@ export function createCampProps(scene) {
   bucket(at(VILLAGE_CENTER.x + 2.9, VILLAGE_CENTER.z + 3.3), 0, 0, 0x4f7fc9);
   { const g = at(FIELD.x - 4.2, FIELD.z - 1.5, 0.3); bucket(g, 0, 0, 0x5fa8a0); g.add(stick([0.5, 0.05, 0], [0.7, 1.5, 0.1], 0.022, BAMBOO), box(0.3, 0.05, 0.05, TIN, 0.7, 1.5, 0.1)); crates(g, 1); }
 
-  root.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+  mergeStatic(root); // none of this moves, so weld it together
   return { update() {} };
 }

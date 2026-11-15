@@ -79,8 +79,10 @@ export function createHUD(handlers) {
   clock.append(clockIco, time, phase);
   const day = el('div', 'glass chip', 'Day 1');
   const steps = el('div', 'glass chip'); const stepsNum = el('b', null, '0'); steps.append(icon('steps'), stepsNum, el('span', 'soft', 'steps'));
+  const now = el('div', 'glass chip now'); const nowText = el('b'); now.append(el('span', 'soft', 'Now'), nowText);
   chips.append(clock, day, steps);
-  const left = el('div', 'left'); left.append(card, chips);
+  const chips2 = el('div', 'chips'); chips2.append(now);
+  const left = el('div', 'left'); left.append(card, chips, chips2);
 
   // ---- Top-right: buttons and minimap
   const right = el('div', 'right');
@@ -135,7 +137,7 @@ export function createHUD(handlers) {
   timeRow.append(el('span', 'label', 'Time of day'));
   for (const [name, t] of TIMES) { const b = el('button', 'pill', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
   panel.append(resume, openJournal, lookRow, soundRow, timeRow, el('h3', null, 'Controls'), controls);
@@ -204,8 +206,11 @@ export function createHUD(handlers) {
       setTimeout(() => t.remove(), 3800);
       if (!hud.journalOpen) dot.classList.add('on');
     },
-    rankUp(name) {
-      bannerBig.textContent = name; banner.classList.add('show');
+    setActivity(label) { nowText.textContent = label; },
+    // A banner across the top: a new rank, or the camp moving on to its next activity.
+    announce(small, big) { hud.rankUp(big, small); },
+    rankUp(name, small = 'New rank') {
+      bannerSmall.textContent = small; bannerBig.textContent = name; banner.classList.add('show');
       clearTimeout(bannerTimer); bannerTimer = setTimeout(() => banner.classList.remove('show'), 3600);
     },
     // Redraws the moving dots on the minimap. Cheap, but every other frame is plenty.

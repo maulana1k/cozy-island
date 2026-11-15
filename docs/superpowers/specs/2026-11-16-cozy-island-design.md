@@ -150,6 +150,25 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
   and the journal in a side bar (J). Ranks and the journal are still
   optional: nothing is required.
 
+### Fourth round of owner feedback
+
+- **Camp timetable:** the day runs in blocks: morning exercise, flag
+  ceremony (the whole camp in formation, flag raised), skills and lessons,
+  lunch, games and free time, campfire night, lights out with a two-scout
+  night watch. People walk between them; the flying fox riders are the
+  exception and stay on their loop.
+- **Staff and lively scouts:** chief scout, trainer, logistics and medical
+  staff; tag, catch and tug-of-war.
+- **Bodies:** scouts are short and chubby with tapered limbs; staff are
+  taller. Shadows are plain and clean-edged.
+- **Main campfire:** a bonfire with smoke and a crackle that grows as you
+  come near.
+- **Trails:** plain pale bands with a clean edge, no border and no gradient.
+- **Controls:** X sits down or stands up; C switches free look.
+- **Performance:** body parts and static scenery are welded into far fewer
+  meshes, lantern lights are pooled, and resolution steps down
+  automatically when frames run slow.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

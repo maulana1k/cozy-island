@@ -56,8 +56,8 @@ export const DAY_LENGTH = 480;
 export const START_TIME = 0.64;
 
 // Player and camera
-export const WALK_SPEED = 2.6;
-export const RUN_SPEED = 6.2;
+export const WALK_SPEED = 2.2;
+export const RUN_SPEED = 6;
 export const HOP_VELOCITY = 5;
 export const GRAVITY = 15;
 export const PLAYER_RADIUS = 0.35;

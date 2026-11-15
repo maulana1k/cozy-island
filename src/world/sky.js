@@ -97,7 +97,7 @@ export function createSky(scene, renderer) {
   cam.near = 1; cam.far = 260;
   sunLight.shadow.bias = -0.0006;
   sunLight.shadow.normalBias = 0.06;
-  sunLight.shadow.radius = 3;
+  sunLight.shadow.radius = 1; // a plain, clean-edged shadow
 
   const ambient = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
   scene.fog = new THREE.FogExp2(0xffffff, FOG_DENSITY);

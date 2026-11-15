@@ -4,7 +4,7 @@ import { heightAt, wadeSpeedFactor, constrainToShore } from '../logic/terrain.js
 import { resolveCollisions } from '../logic/collision.js';
 import { WALK_SPEED, RUN_SPEED, HOP_VELOCITY, GRAVITY, PLAYER_RADIUS, PLAYER_START, PALETTE } from '../config.js';
 
-const SEAT_HEIGHT = 0.3;
+
 const ACCEL = 18, BRAKE = 22, AIR_ACCEL = 7;   // m/s²: how quickly speed builds up and bleeds off
 const TURN_RATE = 9;                            // how quickly the body swings round to its direction of travel
 const JUMP_BUFFER = 0.14, COYOTE = 0.1;         // forgiving jump timing
@@ -23,7 +23,7 @@ export function createPlayer(scene, opts = {}) {
   const vel = { x: 0, z: 0 };
   let vy = 0, airborne = false, heading = Math.PI;
   let buffer = 0, coyote = 0, land = 0, roll = 0, pitch = 0, sinceStep = 0, lastSpeed = 0;
-  let gesture = null, look = null;
+  let gesture = null, look = null, onGround = false;
 
   const player = {
     position, facing, radius: PLAYER_RADIUS,
@@ -39,9 +39,17 @@ export function createPlayer(scene, opts = {}) {
     riding: null, // set while hanging from the flying fox; the ride moves the player
     // Called when a ride lets go at the bottom.
     landNow() { player.riding = null; airborne = false; vy = 0; vel.x = vel.z = 0; land = 1; if (player.onLand) player.onLand(surfaceAt(position.x, position.z)); },
+    // Sit down right here on the ground.
+    sitDown() {
+      if (airborne || player.riding) return;
+      player.sitting = true; onGround = true; vel.x = vel.z = 0; vy = 0;
+      position.y = groundAt(position.x, position.z) - figure.sitDrop;
+    },
+    stand() { if (player.sitting) { player.sitting = false; position.y = groundAt(position.x, position.z); if (!onGround) { position.x += Math.sin(heading) * 0.7; position.z += Math.cos(heading) * 0.7; } onGround = false; } },
     sit(seat) {
+      onGround = false;
       player.sitting = true;
-      position.set(seat.x, groundAt(seat.x, seat.z) + SEAT_HEIGHT, seat.z);
+      position.set(seat.x, groundAt(seat.x, seat.z) + figure.seatLift(0.5), seat.z);
       heading = seat.rot; vel.x = vel.z = 0; vy = 0; airborne = false;
     },
     update(dt, input, cameraYaw, colliders, elapsed) {
@@ -58,9 +66,8 @@ export function createPlayer(scene, opts = {}) {
       buffer = input.consumeHop() ? JUMP_BUFFER : buffer - dt;
 
       if (player.sitting && (wantsMove || buffer > 0)) {
-        player.sitting = false; buffer = 0;
-        // Stand up in front of the seat rather than inside it.
-        position.x += Math.sin(heading) * 0.7; position.z += Math.cos(heading) * 0.7;
+        buffer = 0;
+        player.stand(); // off a seat you step forward; off the ground you just get up
       }
 
       const surface = surfaceAt(position.x, position.z);
@@ -92,7 +99,7 @@ export function createPlayer(scene, opts = {}) {
         }
         const speed = Math.hypot(vel.x, vel.z);
         // One footfall per step, in time with the legs (same step length as the animation).
-        const stride = 0.3 + 0.1 * speed;
+        const stride = 0.26 + 0.12 * speed;
         if (sinceStep >= stride && !airborne) { sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 4); }
 
         const ground = groundAt(position.x, position.z);
@@ -143,7 +150,7 @@ export function createPlayer(scene, opts = {}) {
       figure.group.position.copy(position);
       figure.group.rotation.y = heading;
       figure.animate(airborne ? 0 : speed, elapsed, {
-        sitting: player.sitting, air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
+        sitting: player.sitting && !onGround, sitGround: player.sitting && onGround, air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
       });
     },

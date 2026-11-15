@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, floorHeight } from '../logic/layout.js';
-import { box, cyl, ball, stick, roofGeometry, shared, texture } from './build.js';
+import { box, cyl, ball, stick, roofGeometry, shared, texture, mergeStatic } from './build.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
 const DOOR_W = 1.1, DOOR_H = 1.85;
@@ -157,6 +157,8 @@ export function createBuildings(scene, deps) {
       const pen = new THREE.Mesh(roofGeometry(0.5, 0.85, 0.02), shared(st.trim)); pen.rotation.z = -Math.PI / 2; pen.position.set(-W / 2 - 0.35, 3.1, front + 0.3); g.add(pen);
     }
 
+    // Everything but the door flap stands still, so weld it: one mesh per material.
+    g.remove(hinge); mergeStatic(g); g.add(hinge);
     scene.add(g);
     return { c, g, plane, hinge, door, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
   });

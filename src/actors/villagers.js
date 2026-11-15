@@ -18,7 +18,7 @@ const EMOTES = ['heart', 'note', 'surprise'];
 const REACTIONS = ['wave', 'cheer', 'salute', 'clap', 'wave'];
 
 export function createVillagers(scene, deps) {
-  const { ui, audio } = deps;
+  const { ui, audio, crowd } = deps;
   const rng = createRng(SEED + 5);
   const world = { spots: VILLAGER_SPOTS, colliders: getColliders(), rng };
 
@@ -28,7 +28,7 @@ export function createVillagers(scene, deps) {
     brain.timer = 0.5 + rng() * 4;
     const figure = createFigure({ bodyColor: SHIRTS[i], neckerchief: NECKERCHIEFS[i], accent: ACCENTS[i], accentColor: ACCENT_COLORS[i], hairColor: HAIR[i], skinColor: SKIN[i], shortsColor: SHORTS[i] });
     scene.add(figure.group);
-    villagers.push({ brain, figure, heading: rng() * 6.28, wobble: 0, hop: 0, position: { x: brain.x, z: brain.z } });
+    villagers.push({ member: crowd.join({ home: null, role: 'villager', adult: i === 0 }), brain, figure, heading: rng() * 6.28, wobble: 0, hop: 0, position: { x: brain.x, z: brain.z } });
   }
 
   function nudge(v, from) {
@@ -38,12 +38,12 @@ export function createVillagers(scene, deps) {
     v.react = { name: REACTIONS[Math.floor(Math.random() * REACTIONS.length)], t: -0.45, dur: 1.1 };
     audio.play('squeak');
     const y = heightAt(v.brain.x, v.brain.z);
-    ui.emote(new THREE.Vector3(v.brain.x, y + 1.85, v.brain.z), EMOTES[Math.floor(Math.random() * EMOTES.length)]);
+    ui.emote(new THREE.Vector3(v.brain.x, y + 1.5, v.brain.z), EMOTES[Math.floor(Math.random() * EMOTES.length)]);
   }
 
   const interactables = villagers.map((v) => ({
     id: v.brain.id, kind: 'villager', position: v.position,
-    get markerY() { return heightAt(v.brain.x, v.brain.z) + 1.75; },
+    get markerY() { return heightAt(v.brain.x, v.brain.z) + 1.4; },
     prompt: () => 'E — nudge',
     interact() { nudge(v, { x: deps.player.position.x, z: deps.player.position.z }); },
   }));
@@ -54,11 +54,24 @@ export function createVillagers(scene, deps) {
     interactables,
     villagers,
     // Villagers are solid for the player.
-    colliders() { villagers.forEach((v, i) => { circles[i].x = v.brain.x; circles[i].z = v.brain.z; }); return circles; },
+    colliders() { villagers.forEach((v, i) => { circles[i].x = v.brain.x; circles[i].z = v.brain.z; circles[i].r = v.member.hidden ? 0 : 0.3; }); return circles; },
     hearBell(pos) { villagers.forEach((v) => hearBell(v.brain, pos)); },
     update(dt, elapsed, player) {
       for (const v of villagers) {
-        const b = v.brain;
+        const b = v.brain, m = v.member;
+        if (v.react) { v.react.t += dt; if (v.react.t >= v.react.dur) v.react = null; }
+        if (!m.controlled) { m.x = b.x; m.z = b.z; m.rot = v.heading; }
+        if (crowd.drive(m, dt)) {
+          // Called away by the timetable: walk there and join in, then wander again afterwards.
+          b.x = m.x; b.z = m.z; b.state = 'idle'; b.timer = 1 + (m.index % 3); v.position.x = b.x; v.position.z = b.z;
+          let diff = m.rot - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); v.heading += diff * (1 - Math.exp(-dt * 10));
+          v.figure.group.visible = !m.hidden;
+          v.figure.group.position.set(b.x, groundAt(b.x, b.z) - (m.opts.sitGround ? v.figure.sitDrop : 0), b.z);
+          v.figure.group.rotation.y = v.heading;
+          v.figure.animate(m.speed, elapsed, { ...m.opts, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
+          continue;
+        }
+        v.figure.group.visible = true;
         const dx = player.position.x - b.x, dz = player.position.z - b.z, d = Math.hypot(dx, dz);
         // Walking into a villager nudges them; a villager walking into the player just waits.
         if (d < VILLAGER_RADIUS + player.radius + 0.12) {
@@ -78,7 +91,6 @@ export function createVillagers(scene, deps) {
 
         v.figure.group.position.set(b.x, groundAt(b.x, b.z) + hopY, b.z);
         v.figure.group.rotation.y = v.heading;
-        if (v.react) { v.react.t += dt; if (v.react.t >= v.react.dur) v.react = null; }
         v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
       }
     },

@@ -95,8 +95,8 @@ const lookoutSeat = around(LOOKOUT, 278, 4.7);
 
 // Two logs by the village fire, two by the camp fire, one bench at the lookout facing the sea.
 export const SEATS = [
-  seat('log-2', 'log', around(VILLAGE_FIRE, 150, 2.3), VILLAGE_FIRE),
-  seat('log-3', 'log', around(VILLAGE_FIRE, 30, 2.3), VILLAGE_FIRE),
+  seat('log-2', 'log', around(VILLAGE_FIRE, 150, 3.1), VILLAGE_FIRE),
+  seat('log-3', 'log', around(VILLAGE_FIRE, 30, 3.1), VILLAGE_FIRE),
   seat('log-0', 'log', around(CAMPFIRE, 200, 2.0), CAMPFIRE),
   seat('log-1', 'log', around(CAMPFIRE, 320, 2.0), CAMPFIRE),
   seat('bench-2', 'bench', lookoutSeat, { x: lookoutSeat.x * 3, z: lookoutSeat.z * 3 }),
@@ -339,7 +339,7 @@ export function getColliders() {
     { x: TOWER.x, z: TOWER.z, r: 1.3 },
     ...GATE_POSTS.map((p) => ({ x: p.x, z: p.z, r: 0.45 })),
     ...PICNIC_TABLES.map((t) => ({ x: t.x, z: t.z, hw: 1.0, hd: 0.9, rot: t.rot })),
-    ...CAMPFIRES.map((f) => ({ x: f.x, z: f.z, r: 0.8 })),
+    ...CAMPFIRES.map((f) => ({ x: f.x, z: f.z, r: f.id === 'fire-village' ? 1.5 : 0.8 })),
     ...TENTS.map((t) => ({ x: t.x, z: t.z, hw: 1.25, hd: 1.35, rot: t.rot })),
     { x: BOAT.x, z: BOAT.z, r: 1.2 },
     { x: WINDMILL.x, z: WINDMILL.z, r: 2.4 },

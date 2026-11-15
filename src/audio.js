@@ -5,7 +5,7 @@ const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.0;
 
 export function createAudio(makeContext = () => new AudioContext()) {
   let ctx = null, master = null, noise = null, cricketTimer = null;
-  let tried = false, night = 0;
+  let tried = false, night = 0, fireLevel = 0, fireGain = null;
   const api = {
     muted: false,
     started: false,
@@ -35,6 +35,11 @@ export function createAudio(makeContext = () => new AudioContext()) {
       return api.muted;
     },
     setNight(f) { night = f; },
+    // How close you are to a burning fire, 0 to 1: a low roar and random cracks and pops.
+    setFire(level) {
+      fireLevel = level;
+      try { if (fireGain) fireGain.gain.setTargetAtTime(level * 0.09, ctx.currentTime, 0.25); } catch { /* audio is optional */ }
+    },
     play(name) {
       if (!api.started || !ctx) return;
       const sound = SOUNDS[name];
@@ -69,6 +74,20 @@ export function createAudio(makeContext = () => new AudioContext()) {
     windLfo.connect(windLfoGain).connect(windGain.gain);
     wind.connect(bp).connect(windGain).connect(master);
     wind.start(0, 0.7); windLfo.start();
+
+    // Fire: a soft roar that swells as you come near, and sharp cracks from the burning wood.
+    const roar = noiseSource(true);
+    const roarBand = ctx.createBiquadFilter(); roarBand.type = 'bandpass'; roarBand.frequency.value = 420; roarBand.Q.value = 0.5;
+    fireGain = ctx.createGain(); fireGain.gain.value = 0;
+    roar.connect(roarBand).connect(fireGain).connect(master); roar.start(0, 1.1);
+    setInterval(() => {
+      if (!ctx || fireLevel < 0.04 || Math.random() > 0.25 + fireLevel * 0.45) return;
+      try {
+        const loud = fireLevel * (0.35 + Math.random() * 0.65);
+        hiss({ type: 'highpass', freq: 1800 + Math.random() * 2600, dur: 0.02 + Math.random() * 0.03, gain: 0.12 * loud });
+        if (Math.random() < 0.3) hiss({ type: 'bandpass', freq: 900 + Math.random() * 600, q: 2, dur: 0.05, gain: 0.1 * loud, delay: 0.03 });
+      } catch { /* audio is optional */ }
+    }, 70);
 
     // Crickets come out at night.
     cricketTimer = setInterval(() => {

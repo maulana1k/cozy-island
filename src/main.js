@@ -20,8 +20,10 @@ import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
+import { createCrowd, blockAt, blockProgress } from './actors/schedule.js';
+import { setViewer } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
-import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL } from './logic/layout.js';
+import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
 import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
 import { pickInteractable } from './logic/interact.js';
 import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
@@ -58,9 +60,10 @@ const input = createInput(window, canvas);
 const player = createPlayer(scene, { groundAt, surfaceAt, surfaces: SURFACES });
 const rig = createFollowCamera(camera);
 const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed });
-const villagers = createVillagers(scene, { ui, audio, player });
-const activities = createActivities(scene, { ui, audio });
-const campLife = createCampLife(scene, { ui, audio, player });
+const crowd = createCrowd(); // the camp timetable everyone follows
+const villagers = createVillagers(scene, { ui, audio, player, crowd });
+const activities = createActivities(scene, { ui, audio, crowd });
+const campLife = createCampLife(scene, { ui, audio, player, crowd });
 const animals = createAnimals(scene, { ui, audio, player });
 const wildlife = createWildlife(scene, { ui, audio });
 const zipline = createZipline(scene, { ui, audio, player });
@@ -168,7 +171,7 @@ if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0,
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });
 
 function onResize() {
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(ratio, window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -179,6 +182,21 @@ let lastRatio = window.devicePixelRatio;
 setInterval(() => { if (window.devicePixelRatio !== lastRatio) { lastRatio = window.devicePixelRatio; onResize(); } }, 1000);
 
 const stats = { frames: 0, total: 0, worst: 0 };
+let lastBlock = null;
+
+// ---- Keeping it smooth: if frames start taking too long, draw at a slightly lower resolution;
+// when there is headroom again, sharpen back up.
+const maxRatio = Math.min(window.devicePixelRatio, 2);
+let ratio = maxRatio, slow = 0, quick = 0;
+function tuneResolution(raw) {
+  if (raw > 0.25) return; // a hitch from switching tabs, not a slow machine
+  slow = raw > 1 / 48 ? slow + raw : Math.max(0, slow - raw * 2);
+  quick = raw < 1 / 58 ? quick + raw : 0;
+  let next = ratio;
+  if (slow > 1.2 && ratio > 1) next = Math.max(1, ratio - 0.25);
+  else if (quick > 8 && ratio < maxRatio) next = Math.min(maxRatio, ratio + 0.25);
+  if (next !== ratio) { ratio = next; slow = 0; quick = 0; renderer.setPixelRatio(ratio); }
+}
 let last = performance.now();
 
 function step() {
@@ -186,6 +204,7 @@ function step() {
   const raw = (now - last) / 1000;
   last = now;
   stats.frames++; stats.total += raw; stats.worst = Math.max(stats.worst, raw);
+  if (hud.started) tuneResolution(raw);
   const paused = !hud.started || hud.menuOpen;
   // While paused the world stands still; only the picture keeps refreshing.
   const dt = paused ? 0 : clampDt(raw);
@@ -200,10 +219,35 @@ function step() {
 
   if (paused) {
     // Keys pressed on the start screen or in the menu must not fire when play resumes.
-    input.consumeHop(); input.consumeInteract(); input.consumeMute(); input.consumeLook(); input.consumeZoom();
+    input.consumeHop(); input.consumeInteract(); input.consumeMute(); input.consumeSit(); input.consumeLook(); input.consumeZoom();
     if (!hud.started) rig.yaw += clampDt(raw) * 0.08; // a slow turn behind the title
   } else if (input.consumeMute()) toggleSound();
   audio.setNight(night);
+
+  // The camp timetable: when the day moves on to its next activity, say so and get everyone going.
+  const block = blockAt(timeOfDay);
+  if (block !== lastBlock) {
+    const first = lastBlock === null;
+    lastBlock = block;
+    hud.setActivity(block.label);
+    zipline.setOpen(block.id === 'free' || block.id === 'work');
+    if (block.id === 'ceremony') props.setFlag(true);
+    if (block.id === 'campfire') props.setFlag(false);
+    if (!first && hud.started) { hud.announce(block.note, block.label); audio.play(block.id === 'ceremony' || block.id === 'exercise' ? 'whistle' : 'bell'); }
+  }
+  crowd.tick(block, blockProgress(block, timeOfDay));
+  setViewer(player.position.x, player.position.z);
+  audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
+
+  // X sits you down: on a log or bench if one is right beside you, otherwise on the ground.
+  if (!paused && input.consumeSit() && !player.riding) {
+    if (player.sitting) player.stand();
+    else {
+      const seat = SEATS.reduce((best, st) => { const d = Math.hypot(st.x - player.position.x, st.z - player.position.z); return d < 1.7 && (!best || d < best.d) ? { st, d } : best; }, null);
+      if (seat) player.sit(seat.st); else player.sitDown();
+      audio.play('sit'); discover('seat');
+    }
+  }
 
   if (!paused) {
     const colliders = openStatic.concat(buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
@@ -262,7 +306,7 @@ function step() {
 }
 function frame() { step(); requestAnimationFrame(frame); }
 // Debug aid for screenshots: ?settle runs a few seconds of game time before the first picture.
-if (params.has('settle')) for (let i = 0; i < 70; i++) { last = performance.now() - 50; step(); }
+if (params.has('settle')) for (let i = 0, n = (Number(params.get('settle')) || 3.5) / 0.05; i < n; i++) { last = performance.now() - 50; step(); }
 frame();
 
 // Handles for automated checks in the browser.
@@ -270,3 +314,4 @@ window.__game = {
   player, rig, input, stats, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
 };
+if (params.has('dbg')) setInterval(() => { const i = renderer.info; document.title = JSON.stringify({ calls: i.render.calls, tris: i.render.triangles, ratio }); }, 300);

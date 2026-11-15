@@ -1,5 +1,6 @@
 // Small helpers shared by the things built from simple shapes.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 
@@ -105,4 +106,29 @@ export function roofGeometry(width, height, depth) {
   const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
   geo.translate(0, 0, -depth / 2);
   return geo;
+}
+
+// Welds everything under `root` that never moves into one mesh per material. A camp's worth of
+// crates and poles then costs a few dozen draw calls instead of several hundred.
+export function mergeStatic(root) {
+  root.updateMatrixWorld(true);
+  const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert(), m4 = new THREE.Matrix4();
+  const byMaterial = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    g.applyMatrix4(m4.multiplyMatrices(inverse, o.matrixWorld));
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!byMaterial.has(o.material)) byMaterial.set(o.material, { geos: [], cast: false });
+    const entry = byMaterial.get(o.material); entry.geos.push(g); entry.cast = entry.cast || o.castShadow;
+  });
+  root.clear();
+  for (const [material, { geos, cast }] of byMaterial) {
+    const mesh = new THREE.Mesh(mergeGeometries(geos), material);
+    mesh.castShadow = cast; mesh.receiveShadow = true;
+    root.add(mesh);
+  }
+  return root;
 }

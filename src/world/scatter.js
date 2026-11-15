@@ -115,7 +115,7 @@ const TREE_KINDS = [
 
 const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
-const tuftGeometry = () => ribbonClump({ blades: 11, height: 0.42, width: 0.022, spread: 0.2, droop: 0.9, rows: 3 });
+const tuftGeometry = () => ribbonClump({ blades: 8, height: 0.42, width: 0.022, spread: 0.2, droop: 0.9, rows: 3 });
 
 // A rounded leafy bush made of a few lumps.
 function bushGeometry() {
@@ -247,6 +247,7 @@ export function createScatter(scene) {
   for (const m of [bushes, rocks, heads, grass]) if (m.instanceColor) m.instanceColor.needsUpdate = true;
   scene.add(...kinds.flatMap((k) => [k.trunk, k.canopy]), bushes, rocks, stems, heads, grass);
 
+  let swayFrame = 0;
   return {
     trees,
     // Position of a tree's canopy, for leaf particles.
@@ -254,6 +255,9 @@ export function createScatter(scene) {
     shakeTree(id, elapsed) { const t = treeById.get(id); if (t) t.shakeStart = elapsed; },
     update(elapsed) {
       grassTime.value = elapsed;
+      // The slow sway of the trees is refreshed every other frame; a shaken tree every frame.
+      const shaking = trees.some((t) => elapsed - t.shakeStart < SHAKE_TIME);
+      if (!shaking && (swayFrame++ & 1)) return;
       for (const t of trees) {
         // A slow breeze, plus a quick fading wobble when shaken.
         let tiltX = Math.sin(elapsed * 0.8 + t.phase) * 0.012, tiltZ = Math.cos(elapsed * 0.6 + t.phase) * 0.012;

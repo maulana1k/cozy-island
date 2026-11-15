@@ -40,10 +40,6 @@ function buildTerrain() {
       if (h < 0 && pd < POND.rw + 1) c.lerp(bed, smooth(-h / 0.3));
       // Bare rock near the top of the hill.
       c.lerp(rock, smooth((h - ROCK_HEIGHT) / 1.2) * (0.6 + speck(x, z) * 0.4));
-      // Trodden trails and the parade ground, paler in the middle and darker at the worn edges.
-      const d = Math.min(distanceToPath(x, z) - 0.25, Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) - 4.9);
-      const wob = (speck(x * 1.3, z * 1.3) - 0.5) * 0.5;
-      c.lerp(trailEdge, smooth(1 - (d + wob - 0.55) / 0.7) * 0.9).lerp(trail, smooth(1 - (d + wob - 0.1) / 0.6));
       c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
     } else {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));

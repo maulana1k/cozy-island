@@ -25,6 +25,8 @@ Then open the address it prints (normally http://localhost:5173).
 | Space | Hop |
 | E | Use the thing in front of you |
 | M | Mute or unmute |
+| X | Sit down or stand up |
+| C | Free look on or off |
 | J | Open or close the journal side bar |
 | Esc | Pause menu |
 | Drag the mouse | Turn the camera |

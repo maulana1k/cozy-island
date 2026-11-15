@@ -4,7 +4,7 @@ import {
   COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
-import { texture } from './build.js';
+import { texture, mergeStatic } from './build.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -96,8 +96,8 @@ function buildPath(points, width, material) {
   return mesh;
 }
 
-function buildSquare(material) {
-  const geo = new THREE.CircleGeometry(5.2, 40, 0, Math.PI * 2);
+function buildSquare(material, radius = 5.2) {
+  const geo = new THREE.CircleGeometry(radius, 40, 0, Math.PI * 2);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -192,18 +192,24 @@ export function createVillage(scene) {
     cream: flat(0xfaf3e2), barnSeam: flat(0x9c4636),
     leaf: flat(PALETTE.leafA), dark: flat(0x4a3a3a), seam: flat(0x9a7350), thatchDark: flat(PALETTE.thatchDark),
     window: new THREE.MeshStandardMaterial({ color: 0xcfe6ee, roughness: 0.4, emissive: PALETTE.windowGlow, emissiveIntensity: 0 }),
-    path: new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    path: new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
   };
 
   const group = new THREE.Group();
-  const windmill = buildWindmill(mats);
   group.add(buildField(mats));
-  group.add(windmill.g);
+  // Trails: a plain pale band laid just above the ground, with a clean edge and no border.
+  PATHS.forEach((p, i) => group.add(buildPath(p, i < COTTAGES.length ? 1.4 : 1.8, mats.path)));
+  group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
   TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
   group.add(buildDock(mats));
+  // None of the scenery so far moves: weld it into a handful of meshes.
+  mergeStatic(group);
+  const windmill = buildWindmill(mats);
+  windmill.g.remove(windmill.hub); mergeStatic(windmill.g); windmill.g.add(windmill.hub);
+  mergeStatic(windmill.hub);
   const boat = buildBoat(mats);
-  group.add(boat);
+  group.add(windmill.g, boat);
   scene.add(group);
 
   return {

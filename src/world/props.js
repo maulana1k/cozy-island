@@ -20,6 +20,7 @@ export function createProps(scene, deps) {
   const interactables = [];
   const updaters = [];
   const bellListeners = [];
+  let flagState = null;
 
   // ---- Small particles: falling leaves, fruit, sparks ----------------------
   const particles = [];
@@ -29,11 +30,14 @@ export function createProps(scene, deps) {
     m.material.transparent = true;
     m.position.copy(pos);
     scene.add(m);
-    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity });
+    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1 });
   }
   const leafMat = new THREE.MeshStandardMaterial({ color: PALETTE.leafB, side: THREE.DoubleSide, roughness: 1 });
   const fruitMat = flat(0xff8a5c);
   const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, fog: false });
+  const smokeGeo = new THREE.IcosahedronGeometry(0.32, 1);
+  const smokeMat = new THREE.MeshLambertMaterial({ color: 0xd9d6d0, depthWrite: false });
+  const fires = [];
 
   // ---- Lanterns ------------------------------------------------------------
   const lanterns = LANTERNS.map((l) => {
@@ -47,11 +51,8 @@ export function createProps(scene, deps) {
     g.add(mesh(new THREE.BoxGeometry(0.28, 0.04, 0.28), woodDark, 0.4, 1.46, 0));
     g.position.set(l.x, y, l.z);
     g.rotation.y = (l.x * 1.7 + l.z) % 6.28;
-    const light = new THREE.PointLight(PALETTE.lantern, 0, 11, 1.5);
-    light.position.set(0.4, 1.6, 0);
-    g.add(light);
     group.add(g);
-    const lantern = { on: false, glow: 0 };
+    const lantern = { on: false, glow: 0, flicker: 1, pos: new THREE.Vector3(0.4, 1.6, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y).add(g.position) };
     lantern.set = (on) => { lantern.on = on; };
     interactables.push({
       id: l.id, kind: 'lantern', position: { x: l.x, z: l.z }, markerY: y + 2.25,
@@ -62,7 +63,7 @@ export function createProps(scene, deps) {
       lantern.glow += ((lantern.on ? 1 : 0) - lantern.glow) * Math.min(1, dt * 8);
       const flicker = 1 + Math.sin(elapsed * 11 + l.x) * 0.04;
       glassMat.emissiveIntensity = lantern.glow * 2.4 * flicker;
-      light.intensity = lantern.glow * 9 * flicker;
+      lantern.flicker = flicker;
     });
     return lantern;
   });
@@ -133,6 +134,7 @@ export function createProps(scene, deps) {
     g.position.set(FLAGPOLE.x, y, FLAGPOLE.z);
     group.add(g);
     const state = { up: false, h: 1.3 };
+    flagState = state;
     interactables.push({
       id: 'flag', kind: 'flag', position: { x: FLAGPOLE.x, z: FLAGPOLE.z }, markerY: y + 2.4,
       prompt: () => (state.up ? 'E — lower flag' : 'E — raise flag'),
@@ -215,6 +217,7 @@ export function createProps(scene, deps) {
   const flameInner = new THREE.MeshBasicMaterial({ color: 0xffe08a, fog: false });
   for (const f of CAMPFIRES) {
     const y = heightAt(f.x, f.z);
+    const big = f.id === 'fire-village'; // the main campfire is a proper bonfire
     const g = new THREE.Group();
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
@@ -239,35 +242,60 @@ export function createProps(scene, deps) {
     const light = new THREE.PointLight(PALETTE.fire, 0, 16, 1.4);
     light.position.y = 1.0;
     g.add(light);
+    if (big) {
+      // A tall stack of split logs leaning together, with more laid round the base.
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2, log = mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.25, 6), flat(i % 2 ? 0x7a563c : 0x8f6a4a), Math.cos(a) * 0.3, 0.52, Math.sin(a) * 0.3);
+        log.rotation.set(Math.sin(a) * -0.5, 0, Math.cos(a) * 0.5); g.add(log);
+      }
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.4, log = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 6), flat(0x6b4a34), Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5); log.rotation.set(Math.PI / 2, 0, a); g.add(log); }
+      flames.scale.setScalar(1.25); flames.position.y = 0.25;
+      g.scale.setScalar(1.9);
+      light.distance = 34; light.position.y = 1.3;
+    }
     g.position.set(f.x, y - 0.02, f.z);
     group.add(g);
 
     const fire = { lit: f.lit, level: f.lit ? 1 : 0, sparkTimer: 0 };
     interactables.push({
-      id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + 1.7,
+      id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + (big ? 3.1 : 1.7),
       prompt: () => (fire.lit ? 'E — put out fire' : 'E — light fire'),
       interact() { fire.lit = !fire.lit; audio.play('fire'); },
     });
+    fires.push({ x: f.x, z: f.z, fire, reach: big ? 16 : 7, loud: big ? 1 : 0.45 });
     updaters.push((dt, elapsed) => {
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       flames.visible = fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
-      flames.scale.set(fire.level * (1 + flick * 0.5), fire.level * (1 + flick), fire.level * (1 - flick * 0.5));
+      const fs = big ? 1.25 : 1;
+      flames.scale.set(fs * fire.level * (1 + flick * 0.5), fs * fire.level * (1 + flick), fs * fire.level * (1 - flick * 0.5));
       cones.forEach((c, i) => { c.rotation.y = elapsed * (1 + i * 0.4); c.position.y = [0.62, 0.5, 0.42, 0.4][i] + Math.sin(elapsed * (9 + i * 3) + i) * 0.04; });
-      light.intensity = fire.level * (11 + flick * 12);
+      light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1);
       fire.sparkTimer -= dt;
       if (fire.lit && fire.sparkTimer <= 0) {
-        fire.sparkTimer = 0.12 + Math.random() * 0.3;
-        spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.4, y + 0.8, f.z + (Math.random() - 0.5) * 0.4),
+        fire.sparkTimer = (0.12 + Math.random() * 0.3) * (big ? 0.45 : 1);
+        if (big) {
+          // Smoke billows up and drifts off on the breeze, thinning as it goes.
+          spawn(smokeGeo, smokeMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, y + 2.3, f.z + (Math.random() - 0.5) * 0.6),
+            new THREE.Vector3(0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3), 4.5, { gravity: -0.12, spin: 0.6, grow: 3.2, alpha: 0.42 });
+        }
+        spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * (big ? 0.9 : 0.4), y + (big ? 1.6 : 0.8), f.z + (Math.random() - 0.5) * (big ? 0.9 : 0.4)),
           new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.2 + Math.random() * 0.9, (Math.random() - 0.5) * 0.5), 1.3, { gravity: -0.3, flutter: 0.7 });
       }
     });
   }
 
+  // Real lights are costly, so only the three lit lanterns nearest the player get one.
+  const lampLights = [0, 1, 2].map(() => { const l = new THREE.PointLight(PALETTE.lantern, 0, 11, 1.5); scene.add(l); return l; });
+  const byDistance = [];
+
   let wasNight = null;
   return {
     interactables,
     onBell(cb) { bellListeners.push(cb); },
+    setFlag(up) { if (flagState) flagState.up = up; },
+    // How loudly the nearest burning fire can be heard from here, 0 to 1.
+    fireLoudness(x, z) { let best = 0; for (const f of fires) best = Math.max(best, f.fire.level * f.loud * Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / f.reach)); return best; },
     update(dt, elapsed, nightF) {
       // Lanterns light themselves at dusk and go out at dawn; the player can still toggle them.
       const isNight = nightF > 0.5;
@@ -276,6 +304,12 @@ export function createProps(scene, deps) {
       wasNight = isNight;
 
       for (const u of updaters) u(dt, elapsed);
+
+      const pp = player.position;
+      byDistance.length = 0;
+      for (const l of lanterns) if (l.glow > 0.03) byDistance.push(l);
+      byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
+      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l) { light.position.copy(l.pos); light.intensity = l.glow * 9 * l.flicker; } else light.intensity = 0; });
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -286,7 +320,8 @@ export function createProps(scene, deps) {
         if (p.m.position.y < p.floor) { p.m.position.y = p.floor; p.vel.set(0, 0, 0); p.gravity = 0; p.spin = 0; p.flutter = 0; }
         p.m.rotation.x += p.spin * dt; p.m.rotation.z += p.spin * 0.7 * dt;
         const t = p.age / p.life;
-        p.m.material.opacity = t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3);
+        p.m.material.opacity = p.alpha * (t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)) * (p.grow ? Math.min(1, t * 6) : 1);
+        if (p.grow) p.m.scale.setScalar(1 + p.grow * t);
         if (t >= 1) { scene.remove(p.m); p.m.material.dispose(); particles.splice(i, 1); }
       }
     },

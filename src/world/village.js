@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import {
-  COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD, HILL_PATH, RAILINGS,
+  COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD, HILL_PATH, RAILINGS, STAIRS, TREAD, STAIR_HALF,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 import { texture, mergeStatic, stick, shared } from './build.js';
@@ -183,29 +183,27 @@ function buildWindmill(mats) {
   return { g, hub };
 }
 
-// The hill trail: timber steps set into the slope between log edging, and a lashed wooden
-// railing with diagonal braces wherever the ground falls away.
+// The hill trail: flights of level earth steps, each faced with a timber plank, between slanting
+// log stringers; and a lashed wooden railing with diagonal braces wherever the ground falls away.
 function buildHillTrail() {
   const g = new THREE.Group();
-  const LOG = 0xb98a5e, STEP = 0x9a7350, POLE = 0xd8bb72, ROPE = 0xe9dcc0;
-  const W = 1.05; // half the width of the steps
+  const LOG = 0xb98a5e, PLANK = 0x9a7350, POLE = 0xd8bb72, ROPE = 0xe9dcc0;
+  const earth = new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1 });
+  // Stringers down both sides, in short lengths so they follow the trail up the hill.
   for (let i = 1; i < HILL_PATH.length - 1; i++) {
     const a = HILL_PATH[i], b = HILL_PATH[i + 1], len = Math.hypot(b.x - a.x, b.z - a.z), dx = (b.x - a.x) / len, dz = (b.z - a.z) / len;
-    const at = (d, side) => { const x = a.x + dx * d + dz * side, z = a.z + dz * d - dx * side; return [x, heightAt(x, z), z]; };
-    // log edging down both sides, in short lengths so it follows the slope
-    const pieces = Math.max(1, Math.round(len / 2.2));
-    for (let k = 0; k < pieces; k++) for (const side of [-W, W]) {
-      const p0 = at((k / pieces) * len, side), p1 = at(((k + 1) / pieces) * len, side);
-      g.add(stick([p0[0], p0[1] + 0.07, p0[2]], [p1[0], p1[1] + 0.07, p1[2]], 0.08, LOG, 7));
-    }
-    // a timber riser wherever the trail is climbing
-    for (let d = 0.4; d < len - 0.2; d += 0.8) {
-      const here = at(d, 0), ahead = at(d + 0.6, 0);
-      if (Math.abs(ahead[1] - here[1]) < 0.1) continue;
-      const riser = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 0.2, 0.17, 0.2), shared(STEP));
-      riser.position.set(here[0], here[1] + 0.07, here[2]); riser.rotation.y = Math.atan2(dx, dz); riser.castShadow = true; riser.receiveShadow = true;
-      g.add(riser);
-    }
+    const at = (d, side) => { const x = a.x + dx * d + dz * side, z = a.z + dz * d - dx * side; return [x, heightAt(a.x + dx * d, a.z + dz * d) + 0.16, z]; };
+    const pieces = Math.max(1, Math.round(len / 1.4));
+    for (let k = 0; k < pieces; k++) for (const side of [-STAIR_HALF - 0.08, STAIR_HALF + 0.08]) g.add(stick(at((k / pieces) * len, side), at(((k + 1) / pieces) * len, side), 0.085, LOG, 7));
+  }
+  // The steps themselves: a block of packed earth with a plank across its front edge.
+  for (const t of STAIRS) {
+    const tread = new THREE.Mesh(new THREE.BoxGeometry(STAIR_HALF * 2, 0.9, TREAD + 0.03), earth);
+    tread.position.set(t.x, t.top - 0.45, t.z); tread.rotation.y = t.rot; tread.receiveShadow = true;
+    const front = (t.rising ? -1 : 1) * (TREAD / 2);
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(STAIR_HALF * 2 + 0.16, 0.2, 0.11), shared(PLANK));
+    plank.position.set(t.x + Math.sin(t.rot) * front, t.top - 0.07, t.z + Math.cos(t.rot) * front); plank.rotation.y = t.rot; plank.castShadow = true; plank.receiveShadow = true;
+    g.add(tread, plank);
   }
   for (const [a, b] of RAILINGS) {
     const len = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(len / 1.5));

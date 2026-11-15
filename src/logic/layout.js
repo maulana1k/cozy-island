@@ -1,7 +1,7 @@
 // Fixed positions of everything on the island. The same every run.
 import { createRng } from './rng.js';
-import { heightAt, zoneAt } from './terrain.js';
-import { SEED, PALETTE, HILL, PLAYER_START, POND } from '../config.js';
+import { heightAt, zoneAt, nearestOnTrail } from './terrain.js';
+import { SEED, PALETTE, HILL, PLAYER_START, POND, HILL_TRAIL } from '../config.js';
 
 const DEG = Math.PI / 180;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -162,12 +162,37 @@ export const PATHS = [
   [VILLAGE_CENTER, { x: 24, z: 11 }, { x: 40, z: 15 }, { x: DOCK.x, z: DOCK.z }],
   [VILLAGE_CENTER, PLAYER_START, { x: 3, z: 24 }, { x: -14, z: 35 }, { x: CAMPFIRE.x + 2.6, z: CAMPFIRE.z - 3.2 }],
   // The hill trail winds up the gentler side to the summit.
-  [VILLAGE_CENTER, { x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 }, { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }],
+  [VILLAGE_CENTER, ...HILL_TRAIL],
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
 ];
 const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1];
 export const HILL_PATH = PATHS[COTTAGES.length + 2];
+
+// Steps: wherever the hill trail climbs steeply it is built as a flight of level treads.
+// Each tread is one flat step { i: stretch of trail, s0, s1: where it starts and ends along it, top: its height }.
+export const TREAD = 0.55, STAIR_HALF = 1.1;
+export const STAIRS = (() => {
+  const out = [];
+  for (let i = 0; i < HILL_TRAIL.length - 1; i++) {
+    const a = HILL_TRAIL[i], b = HILL_TRAIL[i + 1], len = dist(a, b), dx = (b.x - a.x) / len, dz = (b.z - a.z) / len;
+    const hAt = (s) => heightAt(a.x + dx * s, a.z + dz * s);
+    for (let k = 0; (k + 1) * TREAD <= len; k++) {
+      const h0 = hAt(k * TREAD), h1 = hAt((k + 1) * TREAD);
+      if (Math.abs(h1 - h0) / TREAD < 0.2) continue; // gentle enough to leave as a ramp
+      out.push({ i, k, s0: k * TREAD, s1: (k + 1) * TREAD, top: Math.max(h0, h1) + 0.02, rising: h1 > h0, x: a.x + dx * (k + 0.5) * TREAD, z: a.z + dz * (k + 0.5) * TREAD, rot: Math.atan2(dx, dz) });
+    }
+  }
+  return out;
+})();
+const stairIndex = new Map(STAIRS.map((t) => [`${t.i}:${t.k}`, t]));
+// The step under a point, if it is on one.
+function stairAt(x, z) {
+  if (Math.abs(x + 13) > 18 || Math.abs(z + 12) > 13) return null;
+  const n = nearestOnTrail(x, z);
+  if (n.d > STAIR_HALF) return null;
+  return stairIndex.get(`${n.i}:${Math.floor(n.s / TREAD)}`) || null;
+}
 
 // Railings: a lashed wooden rail down the drop side of the hill trail, and round the lookout.
 // Each entry is one straight run [from, to].
@@ -255,6 +280,8 @@ const FLOORS = COTTAGES.map((c) => ({ c, y: floorHeight(c) + 0.06, cos: Math.cos
 export function groundAt(x, z) {
   const h = heightAt(x, z);
   if (inDock(x, z)) return Math.max(h, DOCK.top);
+  const step = stairAt(x, z);
+  if (step) return step.top;
   for (const f of FLOORS) {
     const wx = x - f.c.x, wz = z - f.c.z;
     if (Math.abs(wx * f.cos - wz * f.sin) < f.c.width / 2 + 0.05 && Math.abs(wx * f.sin + wz * f.cos) < f.c.depth / 2 + 0.2) return Math.max(h, f.y);

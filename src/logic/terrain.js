@@ -1,6 +1,6 @@
 import {
   ISLAND_RADIUS, GRASS_RADIUS, SEA_FLOOR_RADIUS, GRASS_HEIGHT, HILL,
-  MAX_WADE_DEPTH, MIN_WADE_SPEED, SEED, POND, KNOLL, CAMP_FLAT, SHOULDER,
+  MAX_WADE_DEPTH, MIN_WADE_SPEED, SEED, POND, KNOLL, CAMP_FLAT, SHOULDER, HILL_TRAIL,
 } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -47,7 +47,8 @@ function hillHeight(x, z, r) {
   return total * smooth((57 - r) / 8);
 }
 
-export function heightAt(x, z) {
+// The lie of the land before anything is dug into it.
+function rawHeight(x, z) {
   const r = Math.hypot(x, z);
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
@@ -99,4 +100,30 @@ export function constrainToShore(prev, next, groundAt = heightAt) {
   if (shallowEnough(next.x, prev.z)) return { x: next.x, z: prev.z };
   if (shallowEnough(prev.x, next.z)) return { x: prev.x, z: next.z };
   return { x: prev.x, z: prev.z };
+}
+
+// The nearest point on the hill trail: how far away it is, where it is, which stretch it is on
+// and how far along that stretch.
+export function nearestOnTrail(x, z) {
+  let best = { d: Infinity, x: 0, z: 0, i: 0, s: 0 };
+  for (let i = 0; i < HILL_TRAIL.length - 1; i++) {
+    const a = HILL_TRAIL[i], b = HILL_TRAIL[i + 1], dx = b.x - a.x, dz = b.z - a.z, len2 = dx * dx + dz * dz;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / len2));
+    const px = a.x + dx * t, pz = a.z + dz * t, d = Math.hypot(x - px, z - pz);
+    if (d < best.d) best = { d, x: px, z: pz, i, s: t * Math.sqrt(len2) };
+  }
+  return best;
+}
+
+const TRAIL_BED = 1.6, TRAIL_BANK = 2.0; // half-width of the level bed, and how far the cut banks reach beyond it
+
+// Ground height. Along the hill trail a level bed is cut into the slope, so the trail is flat
+// from side to side, with a bank above it and a fill below.
+export function heightAt(x, z) {
+  const h = rawHeight(x, z);
+  if (Math.abs(x + 13) > 20 || Math.abs(z + 12) > 15) return h; // nowhere near the trail
+  const n = nearestOnTrail(x, z);
+  if (n.d >= TRAIL_BED + TRAIL_BANK) return h;
+  const bed = rawHeight(n.x, n.z);
+  return bed + (h - bed) * smooth((n.d - TRAIL_BED) / TRAIL_BANK);
 }

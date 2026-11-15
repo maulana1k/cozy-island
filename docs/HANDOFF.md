@@ -117,8 +117,9 @@ against the debug URL options above. The Playwright browser tools were removed p
   (16 seconds after it starts), the first flag raising, the summit, the journey's end. Space skips;
   the pause menu can switch films off.
 - **Wild jungle.** The land now continues behind the hill (`WILD` in `config.js`, `landR` and
-  `wildDepth` in `terrain.js`, scenery in `src/world/wilds.js`). A rope with signs marks the border;
-  past it the screen edges turn red with a warning, and 6.5 m in you are turned back.
+  `wildDepth` in `terrain.js`, scenery in `src/world/wilds.js`). The two parts are melted into one
+  coastline (`melt` in `terrain.js`) with no rope or fence: the camp's trees give way to giants from
+  55 m out. From 70 m the screen edges turn red with a warning, and at 82 m you are turned back.
 - **Hill trail.** Now a 71 m spiral round the back of the hill at one steady 18% slope, with broad
   low steps. The headquarters tent moved 2.6 m east to clear it.
 - **Movement.** Feet are planted: the body rests on the lowest point of either shoe every frame

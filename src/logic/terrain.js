@@ -24,11 +24,19 @@ function noise(x, z) {
 // `wildEq` measures the wild round on the island's own scale, so "distance from the middle"
 // works for both: the smaller of the two is how far inland a spot is.
 const wildEq = (x, z) => ISLAND_RADIUS + Math.hypot(x - WILD.x, z - WILD.z) - WILD.radius;
-export const landR = (x, z) => Math.min(Math.hypot(x, z), wildEq(x, z));
+// The two rounds are melted together (a smooth minimum), so the coast is one flowing outline
+// with no pinch or strip of beach between camp and jungle.
+function melt(a, b) { const h = Math.min(1, Math.max(0, 0.5 + (0.5 * (b - a)) / WILD.blend)); return b + (a - b) * h - WILD.blend * h * (1 - h); }
+export const landR = (x, z) => melt(Math.hypot(x, z), wildEq(x, z));
+// 0 in camp country, rising to 1 where the big jungle has fully taken over.
+export function wildness(x, z) {
+  const r0 = Math.hypot(x, z);
+  return smooth((r0 - wildEq(x, z) + 6) / 14) * smooth((r0 - WILD.trees + 4) / 16);
+}
 // How many metres past the rope into the wild jungle a spot is; negative on the camp side.
 export function wildDepth(x, z) {
   const r0 = Math.hypot(x, z);
-  return wildEq(x, z) < r0 ? r0 - WILD.border : -1;
+  return wildEq(x, z) < r0 ? r0 - WILD.border : -999;
 }
 
 const NOISE_AMPLITUDE = 0.3;
@@ -60,7 +68,7 @@ function hillHeight(x, z, r) {
 
 // The lie of the land before anything is dug into it.
 function rawHeight(x, z) {
-  const r0 = Math.hypot(x, z), eq = wildEq(x, z), r = Math.min(r0, eq);
+  const r0 = Math.hypot(x, z), eq = wildEq(x, z), r = melt(r0, eq);
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
   else if (r <= ISLAND_RADIUS) {

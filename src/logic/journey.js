@@ -20,7 +20,7 @@ export const STEPS = [
   { on: 'join', title: 'Join in', text: 'Press F to do whatever the camp is doing right now.' },
   { on: 'place-lookout', title: 'Climb the hill', text: 'Take the stepped trail to the summit camp.', where: LOOKOUT },
   { on: 'zipline', title: 'Ride the flying fox', text: 'Climb the launch tower on the summit and press E.', where: ZIPLINE.top },
-  { on: 'place-wild', title: 'See the wild jungle', text: 'Walk down behind the hill to the rope. Look, but do not cross it.', where: { x: Math.cos(axis) * (WILD.border - 3), z: Math.sin(axis) * (WILD.border - 3) } },
+  { on: 'place-wild', title: 'See the wild jungle', text: 'Walk on behind the hill into the big trees, until you are warned to turn back.', where: { x: Math.cos(axis) * (WILD.border + 1), z: Math.sin(axis) * (WILD.border + 1) } },
   { on: 'bed', title: 'Sleep in your own bed', text: 'Lie down in the bed with the gold pillow, in any patrol tent.', where: tent.door },
 ];
 

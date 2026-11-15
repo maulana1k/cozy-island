@@ -78,53 +78,20 @@ export function createWilds(scene) {
   group.add(buildGround());
   const colliders = [];
 
-  // ---- The rope: posts along the border wherever there is dry land, with red-and-white rope and signs.
   const axis = Math.atan2(WILD.z, WILD.x);
-  const posts = [];
-  for (let a = -0.62; a <= 0.62; a += 0.052) {
-    const x = Math.cos(axis + a) * WILD.border, z = Math.sin(axis + a) * WILD.border, y = heightAt(x, z);
-    if (y > 0.3 && wildDepth(x, z) > -1) posts.push({ x, z, y, a: axis + a });
-  }
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
-  const fence = [];
-  const signMat = new THREE.MeshStandardMaterial({ map: signTexture(), roughness: 0.9 });
-  posts.forEach((p, i) => {
-    fence.push(part(new THREE.CylinderGeometry(0.07, 0.09, 1.5, 6), 0x8a6444, p.x, p.y + 0.7, p.z), part(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 6), 0xd9453a, p.x, p.y + 1.42, p.z));
-    colliders.push({ x: p.x, z: p.z, r: 0.2 });
-    const q = posts[i + 1];
-    if (q && Math.hypot(q.x - p.x, q.z - p.z) < 4.5) {
-      // The rope hangs in a shallow curve, in red and white lengths.
-      for (let k = 0; k < 6; k++) {
-        const t0 = k / 6, t1 = (k + 1) / 6, sag = (t) => 1.2 - Math.sin(t * Math.PI) * 0.22;
-        const ax = p.x + (q.x - p.x) * t0, az = p.z + (q.z - p.z) * t0, ay = p.y + (q.y - p.y) * t0 + sag(t0);
-        const bx = p.x + (q.x - p.x) * t1, bz = p.z + (q.z - p.z) * t1, by = p.y + (q.y - p.y) * t1 + sag(t1);
-        const len = Math.hypot(bx - ax, by - ay, bz - az), g = new THREE.CylinderGeometry(0.025, 0.025, len, 4);
-        g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(bx - ax, by - ay, bz - az).normalize()));
-        fence.push(part(g, k % 2 ? 0xffffff : 0xd9453a, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2));
-      }
-    }
-    if (i % 4 === 1) {
-      const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.86), signMat);
-      // Signs face the camp, so you read them as you walk up.
-      sign.position.set(p.x - Math.cos(p.a) * 0.12, p.y + 1.75, p.z - Math.sin(p.a) * 0.12);
-      sign.lookAt(sign.position.x - Math.cos(p.a), sign.position.y, sign.position.z - Math.sin(p.a));
-      sign.castShadow = true; group.add(sign);
-      fence.push(part(new THREE.BoxGeometry(0.08, 1.1, 0.08), 0x8a6444, p.x, p.y + 1.7, p.z));
-    }
-  });
-  if (fence.length) { const m = new THREE.Mesh(join(...fence), mat); m.castShadow = true; group.add(m); }
-
   // ---- Trees: sparse just past the rope, a solid wall of green a little further in.
   const spots = [];
   for (let tries = 0; spots.length < 1250 && tries < 60000; tries++) {
     const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * (WILD.radius - 9);
     const x = WILD.x + Math.cos(a) * d, z = WILD.z + Math.sin(a) * d, depth = wildDepth(x, z);
-    if (depth < 1.2 || landR(x, z) > GRASS_RADIUS - 3) continue;
-    if (depth < 9 && rng() > 0.35) continue; // room to stand between the first trees
+    const edge = Math.hypot(x, z) - WILD.trees;
+    if (depth < -900 || edge < 0 || landR(x, z) > GRASS_RADIUS - 3) continue;
+    // The first giants stand well apart among the camp's own trees; further in they close up.
+    if (rng() > 0.12 + Math.min(1, edge / 22) * 0.88) continue;
     if (spots.some((s) => Math.abs(s.x - x) < 2.4 && Math.abs(s.z - z) < 2.4)) continue;
     spots.push({ x, z, depth, scale: 0.85 + rng() * 0.75 + Math.min(0.5, depth / 90), rot: rng() * 6.28, shade: rng() });
   }
-  const near = spots.filter((s) => s.depth < 30), far = spots.filter((s) => s.depth >= 30);
+  const near = spots.filter((s) => s.depth < 34), far = spots.filter((s) => s.depth >= 34);
   const geo = giantGeometry(), treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
   const dummy = new THREE.Object3D(), color = new THREE.Color();
   for (const [list, shadows] of [[near, true], [far, false]]) {
@@ -141,8 +108,8 @@ export function createWilds(scene) {
   // Ferns crowd the ground between the first trees.
   const ferns = [];
   for (let tries = 0; ferns.length < 260 && tries < 20000; tries++) {
-    const a = axis + (rng() - 0.5) * 1.5, r = WILD.border + 0.8 + rng() * 26, x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (wildDepth(x, z) < 0.6 || heightAt(x, z) < 0.6) continue;
+    const a = axis + (rng() - 0.5) * 1.5, r = WILD.trees + 2 + rng() * 40, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (wildDepth(x, z) < -900 || heightAt(x, z) < 0.6 || rng() > 0.2 + (r - WILD.trees) / 30) continue;
     ferns.push({ x, z, s: 0.7 + rng() * 0.9, rot: rng() * 6.28 });
   }
   const fernMesh = new THREE.InstancedMesh(fernGeometry(), treeMat, ferns.length);
@@ -166,7 +133,7 @@ export function createWilds(scene) {
     colliders,
     // The eyes only show when you are close to the rope, brighter after dark, and they blink.
     update(elapsed, night, p) {
-      const close = smooth((wildDepth(p.x, p.z) + 16) / 14);
+      const close = smooth((wildDepth(p.x, p.z) + 10) / 12);
       for (const e of eyes) {
         const blink = Math.sin(elapsed * 0.7 + e.seed) > 0.93 ? 0 : 1, show = Math.sin(elapsed * 0.23 + e.seed * 3) > -0.2 ? 1 : 0;
         e.m.opacity += (close * (0.35 + night * 0.65) * blink * show - e.m.opacity) * 0.2;

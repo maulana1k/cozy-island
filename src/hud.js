@@ -52,6 +52,9 @@ function drawPaperMap(c) {
   c.fillStyle = 'rgba(255,255,255,0.75)'; blobPath(ISLAND_RADIUS + 2.2, 0.9); c.fill();
   c.fillStyle = '#f6e3b6'; blobPath(ISLAND_RADIUS, 0.8); c.fill();
   c.fillStyle = '#c7cf8a'; blobPath(GRASS_RADIUS, 0.7); c.fill();
+  { const ax = Math.atan2(WILD.z, WILD.x); c.fillStyle = '#f6e3b6'; c.beginPath(); c.arc(mx(Math.cos(ax) * 57), mz(Math.sin(ax) * 57), 29 * MK, 0, Math.PI * 2); c.fill();
+    const g = c.createLinearGradient(mx(Math.cos(ax) * 40), mz(Math.sin(ax) * 40), mx(Math.cos(ax) * 72), mz(Math.sin(ax) * 72)); g.addColorStop(0, '#c7cf8a'); g.addColorStop(1, '#7da36a');
+    c.fillStyle = g; c.beginPath(); c.arc(mx(Math.cos(ax) * 57), mz(Math.sin(ax) * 57), 22 * MK, 0, Math.PI * 2); c.fill(); }
   c.fillStyle = '#7da36a'; wildBlob(WILD.radius - 12, 0.7); c.fill();
   c.fillStyle = '#6a9460'; for (let i = 0; i < 260; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 260) * (WILD.radius - 15), x = mx(WILD.x + Math.cos(a) * d), y = mz(WILD.z + Math.sin(a) * d); if (Math.hypot(x - MCX, y - MCY) > WILD.border * MK + 5) { c.beginPath(); c.arc(x, y, 5.5, 0, Math.PI * 2); c.fill(); } }
   c.fillStyle = '#ecd58f'; c.beginPath(); c.arc(mx(10), mz(8), 26 * MK, 0, Math.PI * 2); c.fill(); // the camp clearing
@@ -84,7 +87,7 @@ function drawPaperMap(c) {
   c.beginPath(); c.moveTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) + 10); c.moveTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) + 10); c.stroke();
   c.fillStyle = '#6a3f9c'; c.fillRect(mx(FLAGPOLE.x), mz(FLAGPOLE.z) - 12, 11, 7); c.fillStyle = '#7a5a3c'; c.fillRect(mx(FLAGPOLE.x) - 1, mz(FLAGPOLE.z) - 12, 2, 13);
   // the rope across the neck of land, and a warning
-  { const ax = Math.atan2(WILD.z, WILD.x); c.strokeStyle = '#d9453a'; c.lineWidth = 3.5; c.setLineDash([9, 6]); c.beginPath(); c.arc(MCX, MCY, WILD.border * MK, ax - 0.5, ax + 0.5); c.stroke(); c.setLineDash([]);
+  {
     c.save(); c.translate(118, 62); c.rotate(-0.05); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 22px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('WILD JUNGLE', 0, 0); c.fillStyle = '#c62f24'; c.font = '800 14px ui-rounded, system-ui, sans-serif'; c.fillText('DANGER · KEEP OUT', 0, 22); c.restore(); }
   // labels on paper tags, each with a line to its place
   c.font = '700 15px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -154,7 +157,7 @@ export function createHUD(handlers) {
   // ---- Pop-ups
   const toasts = el('div', 'toasts');
   const banner = el('div', 'banner'); const bannerBig = el('div', 'big'); const bannerSmall = el('div', 'small'); banner.append(bannerBig, el('i'), bannerSmall);
-  const danger = el('div', 'danger'); const alertBox = el('div', 'alert'); alertBox.append(el('div', 'big', '⚠ DANGER ⚠'), el('div', 'small', 'Wild jungle. It is not safe here. Go back to camp!'));
+  const danger = el('div', 'danger'); const alertBox = el('div', 'alert'); alertBox.append(el('div', 'big', '⚠ DANGER ⚠'), el('div', 'small', 'You are too deep in the wild jungle. Go back to camp!'));
   const bubble = el('div', 'bubble'); const bubbleName = el('div', 'who'); const bubbleText = el('div', 'said'); bubble.append(bubbleName, bubbleText);
 
   // ---- Journal: a spiral notebook

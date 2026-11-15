@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt, zoneAt, landR, wildDepth } from '../logic/terrain.js';
+import { heightAt, zoneAt, landR, wildness } from '../logic/terrain.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
@@ -27,7 +27,7 @@ function buildTerrain() {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = heightAt(x, z);
     pos.setY(i, h);
-    const r = landR(x, z), pd = Math.hypot(x - POND.x, z - POND.z), wd = wildDepth(x, z);
+    const r = landR(x, z), pd = Math.hypot(x - POND.x, z - POND.z), wd = wildness(x, z);
     if (r < GRASS_RADIUS + 1) {
       // Dry golden grass with darker and barer patches, lighter up the hill.
       c.copy(grass).lerp(grassDark, blotch(x, z) * 0.55).lerp(soil, smooth((speck(x * 0.35, z * 0.35) - 0.72) / 0.2) * 0.45);
@@ -43,7 +43,7 @@ function buildTerrain() {
       // Bare rock near the top of the hill.
       c.lerp(rock, smooth((h - ROCK_HEIGHT) / 1.2) * (0.6 + speck(x, z) * 0.4));
       // Past the rope the ground turns dark and damp under the big trees.
-      if (wd > -6) c.lerp(wildFloor, smooth((wd + 6) / 9) * (0.75 + blotch(x * 1.7, z * 1.7) * 0.25));
+      if (wd > 0) c.lerp(wildFloor, wd * (0.75 + blotch(x * 1.7, z * 1.7) * 0.25));
       c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
     } else {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
@@ -85,10 +85,13 @@ const waterFragment = /* glsl */ `
   uniform float uFogDensity;
   uniform float uShore;
   uniform vec3 uWild;
+  uniform float uBlend;
   varying vec3 vWorld;
   varying float vWave;
   void main() {
-    float r = min(length(vWorld.xz), uShore + length(vWorld.xz - uWild.xy) - uWild.z);
+    float ra = length(vWorld.xz), rb = uShore + length(vWorld.xz - uWild.xy) - uWild.z;
+    float mh = clamp(0.5 + 0.5 * (rb - ra) / uBlend, 0.0, 1.0);
+    float r = mix(rb, ra, mh) - uBlend * mh * (1.0 - mh);
     float ang = atan(vWorld.z, vWorld.x);
     float depthT = smoothstep(uShore - 2.0, uShore + 22.0, r);
     vec3 col = mix(uShallow, uDeep, depthT);
@@ -138,6 +141,7 @@ function buildWater() {
       uFogDensity: { value: 0.004 },
       uShore: { value: ISLAND_RADIUS },
       uWild: { value: new THREE.Vector3(WILD.x, WILD.z, WILD.radius) },
+      uBlend: { value: WILD.blend },
     },
   });
   const mesh = new THREE.Mesh(geo, mat);

@@ -30,10 +30,11 @@ export const HILL_TRAIL = (() => {
   }
   return out;
 })();
-// Behind the hill the land runs on into a wide wild jungle, far bigger than the camp's corner of
-// the island. A rope marks the `border` (metres from the middle of camp); nobody gets more than
-// `limit` metres past it.
-export const WILD = { x: -76, z: -93, radius: 84, border: 61.5, limit: 6.5 };
+// Behind the hill the island runs on into a wide wild jungle, far bigger than the camp's corner
+// of it. There is no fence: the trees simply close in. Past `border` (metres from the middle of
+// camp) a warning shows; nobody gets more than `limit` metres beyond that. `trees` is where the
+// big jungle trees begin, and `blend` rounds the two parts of the coast into one outline.
+export const WILD = { x: -70, z: -86, radius: 84, border: 70, limit: 12, trees: 55, blend: 30 };
 export const MAX_WADE_DEPTH = 0.45;
 // A shallow pond you can wade right across, and a knoll the windmill stands on.
 export const POND = { x: -26, z: 12, rw: 6, bank: 4, depth: 0.4 };

@@ -33,7 +33,7 @@ const mx = (x) => MCX + x * MK, mz = (z) => MCY + z * MK;
 const LABELS = [
   ['Summit camp', LOOKOUT, 92, 196], ['Pond', POND, 66, 404], ['Beach camp', CAMPFIRE, 96, 612], ['Food tent', { x: 12, z: 25 }, 318, 668],
   ['Flying fox landing', ZIPLINE.bottom, 556, 652], ['Farm', { x: 33, z: 27 }, 652, 566], ['Dock', { x: DOCK.x + 6, z: DOCK.z + 2 }, 662, 474],
-  ['Guard post', TOWER, 650, 388], ['First aid', { x: 19.5, z: -9 }, 646, 300], ['Windmill', WINDMILL, 604, 186], ['Headquarters', { x: 9, z: -7.5 }, 404, 96], ['Flagpole', FLAGPOLE, 226, 104],
+  ['Guard post', TOWER, 650, 388], ['First aid', { x: 19.5, z: -9 }, 646, 300], ['Windmill', WINDMILL, 604, 186], ['Headquarters', { x: 11.6, z: -7.3 }, 404, 96], ['Flagpole', FLAGPOLE, 226, 104],
 ];
 
 function drawPaperMap(c) {
@@ -180,21 +180,42 @@ export function createHUD(handlers) {
 
   // ---- Start screen: just the name of the place
   const start = el('div', 'overlay start');
-  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), el('p', 'press', 'Press any key to begin'));
+  const startJourney = el('button', 'word go', 'Start the journey'), startFree = el('button', 'word', 'Explore freely');
+  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), startJourney, el('p', 'what', 'A gentle guided first day at camp. Follow it or wander off, as you like.'), startFree, el('p', 'what', 'No guide. Just you and the island.'), el('p', 'press', 'Enter to start'));
+  startJourney.addEventListener('click', () => handlers.onStart('journey'));
+  startFree.addEventListener('click', () => handlers.onStart('free'));
+
+  // ---- The journey, top-right: where you are on the path and what to try next
+  const quest = el('div', 'quest off');
+  const questHead = el('div', 'qh'), questTitle = el('div', 'qt'), questText = el('div', 'qx'), questKey = el('div', 'qk');
+  questKey.append(el('kbd', null, 'G'), el('span', null, 'hide guide'));
+  quest.append(questHead, questTitle, questText, questKey);
+  const way = el('div', 'way'); const wayDist = el('b'); way.append(el('i'), wayDist);
+  // ---- A tip: one line of help the first time something comes up
+  const tip = el('div', 'tip1'); const tipText = el('span'); tip.append(el('b', null, 'TIP'), tipText);
+  let tipTimer = null; const tipQueue = [];
+  function nextTip() { const t = tipQueue.shift(); if (!t) { tip.classList.remove('show'); tipTimer = null; return; } tipText.textContent = t; tip.classList.add('show'); tipTimer = setTimeout(() => { tip.classList.remove('show'); tipTimer = setTimeout(nextTip, 500); }, 6500); }
+  // ---- Film bars and captions for the little cutscenes
+  const cine = el('div', 'cine'); const cineTitle = el('div', 'ct'), cineSub = el('div', 'cs'), cineSkip = el('div', 'ck');
+  cineSkip.append(el('kbd', null, 'Space'), el('span', null, 'skip'));
+  const barTop = el('div', 'bar-t'), barBottom = el('div', 'bar-b'); barBottom.append(cineTitle, cineSub); barTop.append(cineSkip);
+  cine.append(barTop, barBottom);
 
   // ---- Pause menu: white words on the dimmed picture
   const menu = el('div', 'overlay menu off');
-  const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map'), lookRow = el('button', 'word'), soundRow = el('button', 'word');
+  const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map'), lookRow = el('button', 'word'), soundRow = el('button', 'word'), guideRow = el('button', 'word'), filmRow = el('button', 'word');
   const timeRow = el('div', 'times'); timeRow.append(el('span', 'label', 'Time of day'));
   for (const [name, t] of TIMES) { const b = el('button', 'word small', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Journey guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, lookRow, soundRow, timeRow, controls);
+  menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, guideRow, filmRow, lookRow, soundRow, timeRow, controls);
+  guideRow.addEventListener('click', () => handlers.onToggleGuide());
+  filmRow.addEventListener('click', () => handlers.onToggleFilms());
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(danger, alertBox, night, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, night, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -267,6 +288,25 @@ export function createHUD(handlers) {
     setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look' : 'Camera: hold and drag'; },
     // 0 = safe; toward 1 the edges of the picture turn red and the warning shows.
     setDanger(level) { danger.style.opacity = level; root.classList.toggle('danger-on', level > 0); },
+    // The journey card. step: { title, text } or null when the journey is finished.
+    setQuest(step, count, total, shown) {
+      quest.classList.toggle('off', !shown);
+      guideRow.textContent = shown ? 'Journey guide: on' : 'Journey guide: off';
+      questHead.textContent = step ? `Journey · ${count + 1} of ${total}` : 'Journey complete';
+      questTitle.textContent = step ? step.title : 'A true scout';
+      questText.textContent = step ? step.text : 'The island is yours. Explore as you please.';
+    },
+    setFilms(on) { filmRow.textContent = on ? 'Cutscenes: on' : 'Cutscenes: off'; },
+    // A marker on the picture pointing at the next place on the journey. x, y in pixels; null hides it.
+    setWaypoint(x, y, metres, edge) {
+      if (x === null) { way.style.opacity = 0; return; }
+      way.style.opacity = 1; way.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -50%)`;
+      way.classList.toggle('edge', !!edge); wayDist.textContent = `${Math.round(metres)} m`;
+    },
+    tip(text) { tipQueue.push(text); if (!tipTimer) nextTip(); },
+    // Film bars slide in and everything else steps back.
+    setCine(on) { root.classList.toggle('filming', on); },
+    setCaption(title, sub) { cineTitle.textContent = title || ''; cineSub.textContent = sub || ''; barBottom.classList.remove('in'); void barBottom.offsetWidth; barBottom.classList.add('in'); },
     setSleeping(on) { root.classList.toggle('asleep', on); },
     setActivity(label) { nowLine.textContent = label; },
     setJoin() {}, // the join hint now lives in the key list

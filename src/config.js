@@ -17,14 +17,15 @@ export const HILL_TRAIL = (() => {
   const s = (t) => t * t * (3 - 2 * t), span = HILL.radius - HILL.plateau;
   const pAt = (d) => s(Math.min(1, Math.max(0, 1 - (d - HILL.plateau) / span)));
   const start = { x: 1, z: -2 }, d0 = Math.hypot(start.x - HILL.x, start.z - HILL.z), a0 = Math.atan2(start.z - HILL.z, start.x - HILL.x);
-  const dEnd = HILL.plateau + 1, turn = -4.15, N = 18;
+  const dEnd = HILL.plateau + 1, turn = -4.3, N = 18;
   const f0 = pAt(d0) ** 1.2, f1 = pAt(dEnd) ** 1.2;
   const out = [];
   for (let i = 0; i <= N; i++) {
     const u = i / N, p = (f0 + (f1 - f0) * u) ** (1 / 1.2);
     let lo = dEnd, hi = d0; // find the distance from the top where the hill is this high
     for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; if (pAt(mid) > p) lo = mid; else hi = mid; }
-    const d = i === 0 ? d0 : (lo + hi) / 2, a = a0 + turn * u;
+    // It heads straight for the hill at first, clear of the headquarters tent, and only then starts to wind.
+    const d = i === 0 ? d0 : (lo + hi) / 2, a = a0 + turn * u ** 1.5;
     out.push({ x: +(HILL.x + Math.cos(a) * d).toFixed(2), z: +(HILL.z + Math.sin(a) * d).toFixed(2) });
   }
   return out;

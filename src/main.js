@@ -30,6 +30,9 @@ import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
 import { START_TIME, POND } from './config.js';
 import { createPickups } from './world/pickups.js';
+import { createDirector } from './cutscene.js';
+import { createJourney } from './logic/journey.js';
+import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
 import { createWilds } from './world/wilds.js';
 import { wildDepth } from './logic/terrain.js';
 import { WILD } from './config.js';
@@ -97,6 +100,9 @@ function give(id, n = 1, at = null) {
   audio.play('pickup'); say(`${ITEMS[id].name}${got > 1 ? ` ×${got}` : ''}`, ITEMS[id].icon);
   if (at) effects.puff(at.x, at.y, at.z, 5, 0xffffff, 0.3, 0.8);
   refreshBag(); discover('collect'); if (bag.kinds() >= 8) discover('hoard');
+  collected += got; if (collected >= 3) progress('collect3');
+  if (id === 'stick') tip('wood', 'Firewood! Stand by a campfire and use it to feed the flames.');
+  if (ITEMS[id].cook) tip('cook', 'This can be cooked: stand by a lit campfire and use it.');
   return got;
 }
 const pickups = createPickups(scene, {
@@ -178,7 +184,7 @@ function dropItem(id) {
   pickups.drop(id, n, player.position.x + player.facing.x * 0.8, player.position.z + player.facing.z * 0.8);
   audio.play('sit'); refreshBag();
 }
-function toggleBag() { if (hud.started) { hud.toggleBag(); audio.play('ui'); syncLook(); } }
+function toggleBag() { if (hud.started && !director.active) { hud.toggleBag(); audio.play('ui'); syncLook(); if (hud.bagOpen) progress('bag'); } }
 // Feeling hungry, thirsty or out of puff: a gentle nudge, never a punishment.
 let inWild = false, wildNag = 0, growlAt = 0;
 let wasWinded = false, nagFood = 0, nagWater = 0;
@@ -186,6 +192,9 @@ function feel(dt) {
   const near = player.sitting && props.fireNear(player.position.x, player.position.z);
   vitals.tick(dt, { running: player.speed > 3.1, moving: player.moving, sitting: player.sitting, cosy: !!near || !!player.act });
   player.canRun = vitals.canRun; player.speedFactor = vitals.speedFactor;
+  if (vitals.winded && !wasWinded) tip('winded', 'Running uses energy. Sit down with X to get your breath back faster.');
+  if (vitals.hungry) tip('hungry', 'Food is low. Eat from your backpack (B), or take stew and bread from the serving table by the food tent.');
+  if (vitals.thirsty) tip('thirsty', 'Water is low. Sip from your flask, or find a water barrel: food tent, summit, beach camp.');
   if (vitals.winded && !wasWinded) { player.gesture('pant', 1.6); say('Out of puff! Walk or sit down for a bit.', '😮‍💨'); }
   wasWinded = vitals.winded;
   nagFood -= dt; nagWater -= dt;
@@ -249,12 +258,60 @@ const CHATTER = {
 };
 const STAFF_CHATTER = { 'Chief Scout': ['Well done, scout. Keep exploring!', 'A scout is always prepared.'], Trainer: ['Fancy a few star jumps?'], 'Stores Teacher': ['Forty-two tins of beans. All present.'], 'Logistics Teacher': ['Mind your toes, heavy crate coming through!'], 'Medical Teacher': ['No scraped knees today, I hope?'] };
 let chatter = 0, speech = null;
-const speechPos = new THREE.Vector3();
+const speechPos = new THREE.Vector3(), wayPos = new THREE.Vector3();
+
+// ---- The journey, tips and little films -----------------------------------------
+const journey = createJourney();
+const director = createDirector(camera);
+let guideOn = false, filmsOn = true, collected = 0, filmDue = null;
+const tipsSeen = new Set(), filmsSeen = new Set();
+// One line of help, the first time something comes up.
+function tip(id, text) { if (tipsSeen.has(id) || !hud.started) return; tipsSeen.add(id); hud.tip(text); }
+function refreshQuest() { hud.setQuest(journey.current, journey.count, journey.total, guideOn); }
+function toggleGuide() { guideOn = !guideOn; refreshQuest(); audio.play('ui'); say(guideOn ? 'Journey guide on.' : 'Journey guide off. Explore as you like.', '🧭'); }
+// Something happened that the journey cares about. Steps tick off in any order.
+function progress(event) {
+  const step = journey.mark(event);
+  if (!step) return;
+  if (guideOn) say(`${step.title}: done`, '🧭');
+  vitals.add({ cheer: 5 }); refreshQuest();
+  if (journey.complete) later(2, () => { film('finale'); hud.rankUp('Journey complete', 'A true scout'); audio.play('rank'); });
+}
+const on = (p) => ({ x: p.x, y: groundAt(p.x, p.z), z: p.z });
+const wildAngle = Math.atan2(WILD.z, WILD.x);
+const FILMS = {
+  intro: () => { const back = Math.atan2(-player.position.z, -player.position.x); return [
+    { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 104, h: 74, h1: 54, a0: 0.5, a1: 1.25, lookH: 0, dur: 6.5, title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
+    { at: on(FLAGPOLE), r: 19, r1: 15, h: 7, h1: 5, a0: 2.3, a1: 1.5, lookH: 1.5, dur: 5.5, title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
+    { at: () => player.position, r: 7.5, r1: 5.5, h: 2.8, h1: 2, a0: back - 0.7, a1: back - 0.15, lookH: 1, dur: 5, title: 'Your boat has just come in', sub: 'Welcome to camp, scout' },
+  ]; },
+  exercise: () => [{ at: on({ x: 8.5, z: 17.3 }), r: 15, r1: 12, h: 5, h1: 3.5, a0: 2.6, a1: 1.7, lookH: 1, dur: 7, title: 'Morning exercise', sub: 'One, two, three, four!' }],
+  ceremony: () => [{ at: on(FLAGPOLE), r: 13, r1: 10, h: 2.2, h1: 3.2, a0: 2.4, a1: 1.6, lookH: 3.6, dur: 7, title: 'Flag ceremony', sub: 'The whole camp stands for the flag' }],
+  lunch: () => [{ at: on({ x: 15, z: 23 }), r: 14, r1: 11, h: 6, h1: 4, a0: -0.4, a1: 0.5, lookH: 0.8, dur: 6, title: 'Lunch', sub: 'Camp stew for everyone' }],
+  campfire: () => [{ at: on(VILLAGE_FIRE), r: 11, r1: 8.5, h: 3.4, h1: 2.6, a0: 0.3, a1: 1.6, lookH: 1.2, dur: 8, title: 'Campfire night', sub: 'Songs and stories round the big fire' }],
+  sleep: () => [{ at: on({ x: 10, z: 8 }), r: 38, r1: 32, h: 17, h1: 14, a0: 0.9, a1: 1.5, lookH: 0, dur: 6, title: 'Lights out', sub: 'Two scouts keep the night watch' }],
+  summit: () => [{ at: on(LOOKOUT), r: 10, r1: 8, h: 4.5, h1: 5.5, a0: wildAngle + Math.PI - 0.6, a1: wildAngle + Math.PI + 0.5, lookH: 1, dur: 7, title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
+  flag: () => [{ at: on(FLAGPOLE), r: 7.5, r1: 6, h: 1.3, h1: 1.8, a0: 2.4, a1: 2.0, lookH: 4.4, dur: 4.5, title: 'The flag goes up', sub: '' }],
+  finale: () => [{ at: () => player.position, r: 5, r1: 10, h: 2, h1: 6, a0: 0, a1: 3.1, lookH: 1, dur: 7, title: 'A true scout', sub: 'Your first day is done. The island is yours.' }],
+};
+// Plays a little film: the camera leaves you for a few seconds, then comes back.
+function film(id, opts = {}) {
+  if ((!filmsOn && id !== 'intro') || director.active || player.riding || sleeping || hud.menuOpen) return false;
+  if (hud.bagOpen) hud.toggleBag(); if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap();
+  hud.setCine(true); filmsSeen.add(id);
+  director.play(FILMS[id](), { onShot: (s) => hud.setCaption(s.title, s.sub), onEnd: () => { hud.setCine(false); if (opts.onEnd) opts.onEnd(); } });
+  if (id === 'campfire') audio.play('song');
+  if (id === 'ceremony' || id === 'flag') audio.play('bugle');
+  if (id === 'exercise') audio.play('whistle');
+  return true;
+}
+const idleInput = { move: { x: 0, z: 0 }, run: false, consumeHop: () => false };
 
 // ---- Interface: journal, ranks, clock, minimap, menu -----------------------
 const journal = createJournal();
 function refreshProgress() { hud.setProgress(journal.list(), journal.rank(), journal.count, journal.total); }
 function discover(id) {
+  progress(id);
   const before = journal.rank().index;
   const d = journal.mark(id);
   if (!d) return;
@@ -300,12 +357,15 @@ const hud = createHUD({
   onToggleJournal: toggleJournal,
   onToggleMap: toggleMap,
   onToggleBag: toggleBag,
+  onStart: (mode) => begin(mode),
+  onToggleGuide: toggleGuide,
+  onToggleFilms: () => { filmsOn = !filmsOn; hud.setFilms(filmsOn); audio.play('ui'); },
   onUseItem: (id, plain) => useItem(id, plain),
   onDropItem: (id) => dropItem(id),
   describeItem: (id) => describeItem(id),
   onSetTime: (t) => { timeOfDay = t; },
 });
-refreshProgress();
+refreshProgress(); refreshQuest(); hud.setFilms(true);
 // What every scout sets out with.
 bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
 refreshBag();
@@ -313,16 +373,31 @@ const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.
 const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 5.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5]];
 
 // The first key press or click leaves the start screen. Browsers only allow sound after that.
-const wake = () => {
+// 'journey' starts you on the dock with a short film and a guide; 'free' drops you in camp.
+function begin(mode, opts = {}) {
   if (hud.started) return;
   audio.start(); hud.begin(); ui.showHint(); ui.hideHintSoon(10);
   // Whatever key started the game should not also hop, mute or use something.
   input.consumeHop(); input.consumeInteract(); input.consumeMute();
-};
+  if (mode === 'journey') {
+    guideOn = true;
+    const d = DOCK.length - 2.6;
+    player.position.x = DOCK.x + Math.sin(DOCK.rot) * d; player.position.z = DOCK.z + Math.cos(DOCK.rot) * d; player.position.y = groundAt(player.position.x, player.position.z);
+    rig.yaw = DOCK.rot;
+    if (!params.has('t')) timeOfDay = 0.52;
+    const hello = () => { tip('move', 'W A S D to walk, hold Shift to run. Drag the mouse to look around.'); tip('guide', 'The journey, top right, suggests what to try next. Follow it or ignore it: press G to hide it.'); };
+    if (opts.skipIntro) hello(); else film('intro', { onEnd: hello });
+  } else tip('free', 'No guide this time. Press G if you would like the journey after all.');
+  refreshQuest();
+}
+const wake = () => begin('free');
 window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (!hud.started) { wake(); return; }
+  if (!hud.started) { if (e.code === 'Enter' || e.code === 'Space') begin('journey'); return; }
   if (e.repeat) return;
+  // During a film any of these keys skips it; nothing else works until it is over.
+  if (director.active) { if (['Space', 'Enter', 'Escape', 'KeyE'].includes(e.code)) { director.skip(); input.consumeHop(); input.consumeInteract(); } return; }
+  if (e.code === 'KeyG' && !hud.menuOpen) toggleGuide();
   if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
   if (e.code === 'KeyM' && !hud.menuOpen) toggleMap();
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
@@ -331,9 +406,10 @@ window.addEventListener('keydown', (e) => {
   // Esc closes the journal first, then opens the pause menu.
   if (e.code === 'Escape') { if (hud.bagOpen && !hud.menuOpen) toggleBag(); else if (hud.journalOpen && !hud.menuOpen) toggleJournal(); else if (hud.mapOpen && !hud.menuOpen) toggleMap(); else toggleMenu(); }
 });
-window.addEventListener('pointerdown', wake);
 // Debug aids for automated screenshots: ?play skips the start screen, ?x=&z=&yaw= place the player and camera.
 if (params.has('play')) wake();
+if (params.has('journey')) begin('journey', { skipIntro: true });
+if (params.has('intro')) begin('journey');
 if (params.has('x')) { player.position.x = Number(params.get('x')); player.position.z = Number(params.get('z') || 0); player.position.y = groundAt(player.position.x, player.position.z); }
 if (params.has('yaw')) rig.yaw = Number(params.get('yaw'));
 if (params.has('journal')) hud.toggleJournal();
@@ -412,9 +488,15 @@ function step() {
     zipline.setOpen(block.id === 'free' || block.id === 'work');
     if (block.id === 'ceremony') props.setFlag(true);
     if (block.id === 'campfire') props.setFlag(false);
+    if (!first && hud.started) { tip('timetable', 'The camp follows a timetable. Press F to join in with whatever is going on.'); if (FILMS[block.id] && !filmsSeen.has(block.id)) filmDue = { id: block.id, at: elapsed + 16 }; }
     if (!first && hud.started) { hud.announce(block.note, block.label); audio.play(block.id === 'ceremony' || block.id === 'exercise' ? 'whistle' : 'bell'); }
   }
   crowd.tick(block, blockProgress(block, timeOfDay));
+  // A little film of the camp's activity, once everyone has had time to gather.
+  if (filmDue && elapsed >= filmDue.at && !paused) { if (filmDue.id === block.id && !buildings.inside) film(filmDue.id); filmDue = null; }
+  const filming = director.active;
+  if (filming) { input.consumeInteract(); input.consumeJoin(); input.consumeSit(); input.consumeLook(); input.consumeZoom(); }
+  if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${bag.slots.findIndex((s) => s.id === 'torch') + 1} to switch on your torch.`);
   setViewer(player.position.x, player.position.z);
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
@@ -450,7 +532,7 @@ function step() {
   if (!paused) {
     const colliders = openStatic.concat(pickups.colliders, wilds.colliders, buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
     zipline.update(dt, elapsed, player);
-    player.update(dt, input, rig.yaw, colliders, elapsed);
+    player.update(dt, filming ? idleInput : input, rig.yaw, colliders, elapsed);
     buildings.update(dt, elapsed, player);
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
@@ -485,12 +567,14 @@ function step() {
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
-  const target = paused || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
+  const target = paused || filming || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
   hintTarget = target ? target.prompt().split(' — ').slice(1).join(' — ') : null;
+  if (target && target.kind === 'pickup') tip('pickup', 'Press E to pick things up. They go in your backpack: press B to look inside.');
   if (target) {
     ui.setPrompt(target.prompt());
     ui.setMarker(target.position.x, target.markerY, target.position.z);
     if (pressed) {
+      if (target.kind === 'flag' && !filmsSeen.has('flag') && target.prompt().includes('raise')) later(0.3, () => film('flag'));
       const g = target.kind === 'villager' ? GREETINGS[greetings++ % GREETINGS.length] : GESTURES[target.kind];
       if (g) player.gesture(g[0], g[1], target.position);
       target.interact();
@@ -509,7 +593,9 @@ function step() {
 
   if (!paused) {
     for (const [id, p, r] of PLACES) if (!journal.has(id) && Math.hypot(playerXZ.x - p.x, playerXZ.z - p.z) < r) discover(id);
-    if (buildings.inside) discover('place-inside');
+    if (buildings.inside) { discover('place-inside'); tip('bed', 'The bed with the gold pillow is yours. Lie down in it to sleep until morning.'); }
+    if (Math.hypot(playerXZ.x - FLAGPOLE.x, playerXZ.z - FLAGPOLE.z) < 10) progress('arrive');
+    if (journal.has('place-lookout') && !filmsSeen.has('summit') && !filming) { if (!film('summit')) filmsSeen.add('summit'); tip('fox', 'The flying fox starts here: climb the launch tower and press E.'); }
   }
   const ground = SURFACES[player.riding ? 'wood' : player.surface] || SURFACES.grass;
   hud.setGround(player.riding ? 'Flying fox' : ground.label, ground.color);
@@ -521,7 +607,18 @@ function step() {
     else { speechPos.set(speech.x, speech.y, speech.z).project(camera); hud.placeBubble((speechPos.x * 0.5 + 0.5) * window.innerWidth, (-speechPos.y * 0.5 + 0.5) * window.innerHeight, speechPos.z < 1); }
   }
 
-  rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 });
+  // The journey's next place, marked on the picture (pinned to the edge when it is out of view).
+  const goal = guideOn && !filming && !paused && journey.current && journey.current.where;
+  if (goal && Math.hypot(goal.x - playerXZ.x, goal.z - playerXZ.z) > 5) {
+    wayPos.set(goal.x, groundAt(goal.x, goal.z) + 2.2, goal.z).project(camera);
+    let sx = wayPos.x, sy = wayPos.y; const behind = wayPos.z > 1;
+    if (behind) { sx = -sx; sy = -sy; }
+    const off = behind || Math.abs(sx) > 0.9 || Math.abs(sy) > 0.8;
+    if (off) { const k = Math.max(Math.abs(sx) / 0.9, Math.abs(sy) / 0.8, behind ? 1e3 : 1); sx /= k; sy /= k; if (behind) { const m = Math.max(Math.abs(sx) / 0.9, Math.abs(sy) / 0.8) || 1; sx /= m; sy /= m; } }
+    hud.setWaypoint((sx * 0.5 + 0.5) * window.innerWidth, (-sy * 0.5 + 0.5) * window.innerHeight, Math.hypot(goal.x - playerXZ.x, goal.z - playerXZ.z), off);
+  } else hud.setWaypoint(null);
+
+  if (!director.update(clampDt(raw))) rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 });
   sky.update(timeOfDay, elapsed, player.position);
   island.update(elapsed);
   island.setLight(sky.waterLight, sky.fogColor, sky.fogDensity);
@@ -542,7 +639,7 @@ frame();
 
 // Handles for automated checks in the browser.
 window.__game = {
-  player, rig, input, stats, vitals, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
+  player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
 };
 if (params.has('dbg')) setInterval(() => { const i = renderer.info; document.title = JSON.stringify({ calls: i.render.calls, tris: i.render.triangles, ratio }); }, 300);

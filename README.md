@@ -46,3 +46,12 @@ Press J for the journal of things to find.
 - Nothing is saved; every visit starts in the late afternoon.
 - A full day takes about 8 minutes. Lanterns and windows light up at night.
 - `npm test` runs the rule tests. `npm run build` makes a production build in `dist/`.
+
+## Added keys
+
+| Key | What it does |
+|---|---|
+| B | Backpack |
+| 1 to 6 | Use what is in that pocket |
+| G | Journey guide on or off |
+| Space | Skip a film |

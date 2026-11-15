@@ -101,3 +101,30 @@ against the debug URL options above. The Playwright browser tools were removed p
 - Scouts short and chubby with tapered limbs; only staff tall.
 - Interface: white text and line icons, no panels during play.
 - Wants things built and merged without check-ins, and tests by hand afterwards.
+
+## Sixth round (added after the notes above)
+
+- **Backpack, items and stats.** `src/logic/items.js` (catalogue), `bag.js` (12 pockets), `stats.js`
+  (food, water, energy, cheer; low values only slow you, nothing can hurt you), `src/world/pickups.js`
+  (shells, mushrooms, sticks, flowers, stones, feathers, eggs, berry bushes, plus water barrels, the
+  stew and bread table, marshmallow crate and first-aid box). B opens the backpack, 1 to 6 use a
+  pocket, E picks up. Cooking and feeding a fire need a lit campfire nearby. Trees drop apples and
+  coconuts when shaken.
+- **Start menu, journey, tips, films.** "Start the journey" plays an intro film and starts you on
+  the dock with a 15-step guide (`src/logic/journey.js`); steps tick off in any order and G hides
+  the guide. "Explore freely" skips it. One-line tips appear the first time something comes up.
+  `src/cutscene.js` flies the camera for short films: the intro, each timetable activity once
+  (16 seconds after it starts), the first flag raising, the summit, the journey's end. Space skips;
+  the pause menu can switch films off.
+- **Wild jungle.** The land now continues behind the hill (`WILD` in `config.js`, `landR` and
+  `wildDepth` in `terrain.js`, scenery in `src/world/wilds.js`). A rope with signs marks the border;
+  past it the screen edges turn red with a warning, and 6.5 m in you are turned back.
+- **Hill trail.** Now a 71 m spiral round the back of the hill at one steady 18% slope, with broad
+  low steps. The headquarters tent moved 2.6 m east to clear it.
+- **Movement.** Feet are planted: the body rests on the lowest point of either shoe every frame
+  (`setGround` in `figure.js`). Walk 1.9 m/s, run 3.9 m/s, much less bounce.
+- **Fixed.** Invisible pause-menu buttons were catching clicks in the middle of the screen.
+- **New debug options:** `?journey` (guide, no intro), `?intro`, `?kit` (sample items, low food),
+  `?bag`. `window.__game.film('campfire')` plays a film.
+- **Not checked by hand:** item use by keyboard, stat pacing over a full day, the films triggered
+  by the timetable itself, the danger turn-back while walking, sound. No tests cover any of this.

@@ -72,7 +72,7 @@ const lunchSpots = (() => {
 })();
 const lunchStaff = (k) => ({ x: 12.4 + k * 0.9, z: 20.9 - (k % 2) * 0.7, rot: 0.4 + k * 0.5 });
 // Lessons: rows sitting in front of the headquarters tent.
-const classSpot = (i) => ({ x: 6.6 + (i % 5) * 1.05, z: -2.6 + Math.floor(i / 5) * 1.1, rot: Math.PI });
+const classSpot = (i) => ({ x: 9.4 + (i % 5) * 1.05, z: -2.6 + Math.floor(i / 5) * 1.1, rot: Math.PI });
 // Bed: a camp bed each in the patrol tents for scouts, and in the staff tent for the teachers.
 const beds = allBeds();
 const scoutBeds = beds.filter((b) => !b.staff && !b.yours), staffBeds = beds.filter((b) => b.staff);

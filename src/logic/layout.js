@@ -21,7 +21,7 @@ export const COTTAGE_SIZE = { width: 5, depth: 4, floor: 0.55 };
 // `rot` turns the front (+z) of the building; width/depth are its footprint; `floor` is the
 // height of the floor above the ground (cabins stand on short stilts).
 const BUILDINGS = [
-  { type: 'hall', x: 9, z: -7.5, rot: 0, width: 8, depth: 6 },        // big marquee: camp headquarters
+  { type: 'hall', x: 11.6, z: -7.3, rot: 0, width: 8, depth: 6 },        // big marquee: camp headquarters
   { type: 'patrol', x: -3, z: 6, rot: 1.3, width: 5, depth: 6 },       // patrol dormitory tents, eight beds each
   { type: 'patrol', x: -2.5, z: 16.5, rot: 0.9, width: 5, depth: 6 },
   { type: 'patrol', x: 22, z: 2, rot: -1.9, width: 5, depth: 6 },

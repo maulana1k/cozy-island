@@ -164,6 +164,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     cheer() { tone(D5, { dur: 0.2, gain: 0.06 }); tone(G5, { dur: 0.3, gain: 0.06, delay: 0.1 }); },
     alarm() { for (let i = 0; i < 3; i++) { tone(620, { type: 'square', dur: 0.16, gain: 0.035, delay: i * 0.34 }); tone(465, { type: 'square', dur: 0.16, gain: 0.035, delay: i * 0.34 + 0.17 }); } },
     growl() { tone(62, { type: 'sawtooth', dur: 1.3, gain: 0.07, to: 48 }); tone(93, { type: 'sawtooth', dur: 1.1, gain: 0.03, to: 70, delay: 0.1 }); hiss({ type: 'lowpass', freq: 300, dur: 1.2, gain: 0.05 }); },
+    song() { [C5, C5, G5, G5, A5, A5, G5, 0, E5 * 1.0, E5, D5, D5, C5].forEach((f, i) => { if (f) { tone(f, { dur: 0.42, gain: 0.05, delay: i * 0.36 }); tone(f / 2, { type: 'sine', dur: 0.42, gain: 0.035, delay: i * 0.36 }); } }); },
     pickup() { tone(G5, { dur: 0.12, gain: 0.07 }); tone(C5 * 2, { dur: 0.22, gain: 0.07, delay: 0.07 }); },
     munch() { for (let i = 0; i < 4; i++) hiss({ type: 'bandpass', freq: 1300 + Math.random() * 500, q: 1.2, dur: 0.07, gain: 0.07, delay: i * 0.17 }); },
     gulp() { for (let i = 0; i < 3; i++) tone(240, { type: 'sine', dur: 0.12, gain: 0.09, delay: i * 0.22, to: 420 }); },

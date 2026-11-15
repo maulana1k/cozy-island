@@ -187,6 +187,17 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
 - **Small movements:** head wobble, a bounce on each step, idle fidgets,
   stumbles, skids and bumping into things.
 
+### Sixth round of owner feedback
+
+- **Backpack and stats:** things to collect, use, eat, drink and cook; food, water, energy and
+  cheer. Designer's call: low stats only slow you down, in keeping with "nothing punishes".
+- **Guided start:** a start menu, an intro film, a 15-step journey that can be followed or
+  ignored, first-time tips, and short films for camp activities.
+- **Wild jungle:** a large jungle behind the hill that cannot be entered; a rope, warning signs,
+  an on-screen danger alert and a turn-back. This replaces "no locked areas" for that one place.
+- **Hill trail:** long, gentle and stepped. **Movement:** feet planted on the ground, slower run,
+  calmer walk.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

@@ -208,7 +208,7 @@ export function createFigure({
       lastElapsed = elapsed;
       const ease = (k) => 1 - Math.exp(-dt * k);
       gait += (clamp(speed / 0.7, 0, 1) - gait) * ease(10);
-      run += (clamp((speed - 3.6) / 2.2, 0, 1) - run) * ease(7);
+      run += (clamp((speed - 2.6) / 1.3, 0, 1) - run) * ease(7);
       // Feet must keep up with the ground: each step covers a set distance, so the legs
       // turn over exactly as fast as the body is moving. Faster means longer strides.
       const stepLen = 0.26 + 0.12 * speed;
@@ -221,18 +221,18 @@ export function createFigure({
       // The legs open just wide enough to cover that step, whatever the length of leg.
       const A = Math.min(1.0, Math.asin(Math.min(0.9, stepLen / (2 * LEG * scale)))) * gait;
       t.thL = -s * A - run * 0.12 * gait; t.thR = s * A - run * 0.12 * gait;
-      t.knL = (0.12 + (0.7 + run * 0.75) * Math.max(0, c2)) * gait;
-      t.knR = (0.12 + (0.7 + run * 0.75) * Math.max(0, -c2)) * gait;
+      t.knL = (0.1 + (0.6 + run * 0.6) * Math.max(0, c2)) * gait;
+      t.knR = (0.1 + (0.6 + run * 0.6) * Math.max(0, -c2)) * gait;
       const B = (0.45 + run * 0.45) * gait;
       t.shLx = s * B; t.shRx = -s * B;
       // Arms flap out a bit when running flat out, like a kid who cannot quite keep them in.
-      t.shLz = -0.14 - run * (0.2 + Math.max(0, Math.sin(phase * 2 + 1)) * 0.22); t.shRz = 0.14 + run * (0.2 + Math.max(0, Math.sin(phase * 2)) * 0.22);
-      t.hp = -run * 0.12 + Math.sin(phase * 2) * 0.05 * gait;
+      t.shLz = -0.14 - run * 0.12; t.shRz = 0.14 + run * 0.12;
+      t.hp = -run * 0.1 + Math.sin(phase * 2) * 0.015 * gait;
       t.elL = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, -s) * 0.25 * gait;
       t.elR = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, s) * 0.25 * gait;
       t.spreadL = 0; t.spreadR = 0;
-      t.py = -Math.cos(phase * 2) * (0.014 + run * 0.035) * gait - (1 - Math.cos(A)) * LEG * 0.9 * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
-      t.lean = 0.05 * gait + run * 0.2;
+      t.py = -Math.cos(phase * 2) * (0.006 + run * 0.014) * gait - (1 - Math.cos(A)) * LEG * 0.9 * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
+      t.lean = 0.04 * gait + run * 0.13;
       let snap = 14; // how quickly joints chase their targets
 
       // ---- In the air: tuck on the way up, reach for the ground on the way down
@@ -372,13 +372,13 @@ export function createFigure({
       inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w;
       const stretch = o.air !== undefined ? Math.abs(o.air) * 0.05 : 0;
       // A springy little squash on every footfall, more so at a run.
-      const boing = Math.sin(phase * 2 + 0.6) * 0.04 * gait * (1 + run * 0.9);
+      const boing = Math.sin(phase * 2 + 0.6) * 0.008 * gait * (1 + run * 0.8);
       inner.scale.set(1 + land * 0.09 - stretch * 0.5 - boing * 0.5, 1 - land * 0.14 + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.008 + boing, 1 + land * 0.09 - stretch * 0.5 - boing * 0.5);
       // The head stays level and looks about a little when standing.
       // The head bobbles from side to side with each step, and looks about when standing.
       neck.rotation.x = -inner.rotation.x * 0.6 + pose.hp;
       neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) + pose.hy;
-      neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.09 * gait * (1 + run * 0.6);
+      neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.03 * gait * (1 + run * 0.5);
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
       else {

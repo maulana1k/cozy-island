@@ -184,7 +184,7 @@ let inWild = false, wildNag = 0, growlAt = 0;
 let wasWinded = false, nagFood = 0, nagWater = 0;
 function feel(dt) {
   const near = player.sitting && props.fireNear(player.position.x, player.position.z);
-  vitals.tick(dt, { running: player.speed > 4.2, moving: player.moving, sitting: player.sitting, cosy: !!near || !!player.act });
+  vitals.tick(dt, { running: player.speed > 3.1, moving: player.moving, sitting: player.sitting, cosy: !!near || !!player.act });
   player.canRun = vitals.canRun; player.speedFactor = vitals.speedFactor;
   if (vitals.winded && !wasWinded) { player.gesture('pant', 1.6); say('Out of puff! Walk or sit down for a bit.', '😮‍💨'); }
   wasWinded = vitals.winded;
@@ -521,7 +521,7 @@ function step() {
     else { speechPos.set(speech.x, speech.y, speech.z).project(camera); hud.placeBubble((speechPos.x * 0.5 + 0.5) * window.innerWidth, (-speechPos.y * 0.5 + 0.5) * window.innerHeight, speechPos.z < 1); }
   }
 
-  rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed });
+  rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 });
   sky.update(timeOfDay, elapsed, player.position);
   island.update(elapsed);
   island.setLight(sky.waterLight, sky.fogColor, sky.fogDensity);

@@ -135,15 +135,24 @@ export function nearestOnTrail(x, z) {
   return best;
 }
 
-const TRAIL_BED = 1.6, TRAIL_BANK = 2.0; // half-width of the level bed, and how far the cut banks reach beyond it
+let trailRun = null;
+const TRAIL_BED = 1.6, TRAIL_BANK = 2.6; // half-width of the level bed, and how far the cut banks reach beyond it
 
 // Ground height. Along the hill trail a level bed is cut into the slope, so the trail is flat
 // from side to side, with a bank above it and a fill below.
 export function heightAt(x, z) {
   const h = rawHeight(x, z);
-  if (Math.abs(x + 13) > 20 || Math.abs(z + 12) > 15) return h; // nowhere near the trail
+  if (Math.hypot(x - HILL.x, z - HILL.z) > HILL.radius + 4) return h; // nowhere near the trail
   const n = nearestOnTrail(x, z);
   if (n.d >= TRAIL_BED + TRAIL_BANK) return h;
-  const bed = rawHeight(n.x, n.z);
+  // The bed climbs at one steady rate from the foot of the trail to the top, whatever the
+  // hillside does beside it: no sudden steep bits, no dips.
+  if (!trailRun) {
+    const cum = [0];
+    for (let i = 0; i < HILL_TRAIL.length - 1; i++) cum.push(cum[i] + Math.hypot(HILL_TRAIL[i + 1].x - HILL_TRAIL[i].x, HILL_TRAIL[i + 1].z - HILL_TRAIL[i].z));
+    const a = HILL_TRAIL[0], b = HILL_TRAIL[HILL_TRAIL.length - 1];
+    trailRun = { cum, total: cum[cum.length - 1], h0: rawHeight(a.x, a.z), h1: rawHeight(b.x, b.z) };
+  }
+  const bed = trailRun.h0 + (trailRun.h1 - trailRun.h0) * ((trailRun.cum[n.i] + n.s) / trailRun.total);
   return bed + (h - bed) * smooth((n.d - TRAIL_BED) / TRAIL_BANK);
 }

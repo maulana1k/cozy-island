@@ -11,7 +11,24 @@ export const GRASS_HEIGHT = 1.2;
 export const HILL = { x: -18, z: -22, radius: 30, height: 13, plateau: 6.5 };
 export const SHOULDER = { x: -37, z: -3, radius: 12, height: 4.5 };
 // The trail that winds up the hill. A level bed is cut into the hillside along it.
-export const HILL_TRAIL = [{ x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 }, { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }];
+// It starts at the camp side and winds two-thirds of the way round the hill, behind it and up
+// the far side, gaining height evenly all the way, so it is an easy walk for short legs.
+export const HILL_TRAIL = (() => {
+  const s = (t) => t * t * (3 - 2 * t), span = HILL.radius - HILL.plateau;
+  const pAt = (d) => s(Math.min(1, Math.max(0, 1 - (d - HILL.plateau) / span)));
+  const start = { x: 1, z: -2 }, d0 = Math.hypot(start.x - HILL.x, start.z - HILL.z), a0 = Math.atan2(start.z - HILL.z, start.x - HILL.x);
+  const dEnd = HILL.plateau + 1, turn = -4.15, N = 18;
+  const f0 = pAt(d0) ** 1.2, f1 = pAt(dEnd) ** 1.2;
+  const out = [];
+  for (let i = 0; i <= N; i++) {
+    const u = i / N, p = (f0 + (f1 - f0) * u) ** (1 / 1.2);
+    let lo = dEnd, hi = d0; // find the distance from the top where the hill is this high
+    for (let k = 0; k < 30; k++) { const mid = (lo + hi) / 2; if (pAt(mid) > p) lo = mid; else hi = mid; }
+    const d = i === 0 ? d0 : (lo + hi) / 2, a = a0 + turn * u;
+    out.push({ x: +(HILL.x + Math.cos(a) * d).toFixed(2), z: +(HILL.z + Math.sin(a) * d).toFixed(2) });
+  }
+  return out;
+})();
 // Behind the hill the land runs on into a wide wild jungle, far bigger than the camp's corner of
 // the island. A rope marks the `border` (metres from the middle of camp); nobody gets more than
 // `limit` metres past it.
@@ -62,8 +79,8 @@ export const DAY_LENGTH = 480;
 export const START_TIME = 0.64;
 
 // Player and camera
-export const WALK_SPEED = 2.2;
-export const RUN_SPEED = 6;
+export const WALK_SPEED = 1.9;
+export const RUN_SPEED = 3.9; // a child's run, not a sprinter's
 export const HOP_VELOCITY = 5;
 export const GRAVITY = 15;
 export const PLAYER_RADIUS = 0.35;

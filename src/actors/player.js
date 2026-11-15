@@ -111,7 +111,7 @@ export function createPlayer(scene, opts = {}) {
           const before = Math.hypot(vel.x, vel.z);
           if (dt > 0) { vel.x = (next.x - prev.x) / dt; vel.z = (next.z - prev.z) / dt; }
           // Running flat out into something: bounce off with a silly recoil.
-          if (before > 4.6 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture) {
+          if (before > 3.5 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture) {
             vel.x = -Math.sin(heading) * 1.6; vel.z = -Math.cos(heading) * 1.6;
             gesture = { name: 'bonk', t: 0, dur: 0.7 }; if (player.onOops) player.onOops('bonk');
           }
@@ -121,15 +121,15 @@ export function createPlayer(scene, opts = {}) {
         // One footfall per step, in time with the legs (same step length as the animation).
         const stride = 0.26 + 0.12 * speed;
         if (sinceStep >= stride && !airborne) {
-          sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 4);
+          sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 3.1);
           // Now and then a running scout trips over their own feet, more often on slippery ground.
           stumbleRest -= 1;
-          if (speed > 4.6 && stumbleRest <= 0 && !gesture && Math.random() < (surface === 'mud' ? 0.14 : surface === 'forest' || surface === 'meadow' ? 0.035 : 0.018)) {
+          if (speed > 3.5 && stumbleRest <= 0 && !gesture && Math.random() < (surface === 'mud' ? 0.14 : surface === 'forest' || surface === 'meadow' ? 0.035 : 0.018)) {
             gesture = { name: 'stumble', t: 0, dur: 0.75 }; vel.x *= 0.5; vel.z *= 0.5; stumbleRest = 14; if (player.onOops) player.onOops('stumble');
           }
         }
         // Letting go of the keys at a run: skid to a stop.
-        if (!wantsMove && speed > 4.4 && !airborne && !gesture) { gesture = { name: 'skid', t: 0, dur: 0.45 }; if (player.onOops) player.onOops('skid'); }
+        if (!wantsMove && speed > 3.5 && !airborne && !gesture) { gesture = { name: 'skid', t: 0, dur: 0.45 }; if (player.onOops) player.onOops('skid'); }
 
         const ground = groundAt(position.x, position.z);
         coyote = airborne ? coyote - dt : COYOTE;

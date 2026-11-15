@@ -101,8 +101,7 @@ export const ZIPLINE = {
 };
 // The long walk back: along the farm trail, through the camp and up the hill trail to the tower.
 export const RIDER_ROUTE = [
-  ...ZIPLINE.trail, { x: 24, z: 11 }, { x: 14.5, z: 6.5 }, { x: 5, z: 1 }, { x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 },
-  { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }, onSummit(-2.4, 1.4), ZIPLINE.queue,
+  ...ZIPLINE.trail, { x: 24, z: 11 }, { x: 14.5, z: 6.5 }, { x: 5, z: 1 }, ...HILL_TRAIL, onSummit(-2.4, 1.4), ZIPLINE.queue,
 ];
 export const CAMPFIRES = [{ id: 'fire-village', ...VILLAGE_FIRE, lit: true }, { id: 'fire-camp', ...CAMPFIRE, lit: false }, { id: 'fire-summit', ...SUMMIT.fire, lit: true }];
 export const CHICKEN_YARD = { x: 25, z: 23, r: 3 };
@@ -171,7 +170,7 @@ export const HILL_PATH = PATHS[COTTAGES.length + 2];
 
 // Steps: wherever the hill trail climbs steeply it is built as a flight of level treads.
 // Each tread is one flat step { i: stretch of trail, s0, s1: where it starts and ends along it, top: its height }.
-export const TREAD = 0.55, STAIR_HALF = 1.1;
+export const TREAD = 1.1, STAIR_HALF = 1.1; // broad, low steps: easy for short legs
 export const STAIRS = (() => {
   const out = [];
   for (let i = 0; i < HILL_TRAIL.length - 1; i++) {
@@ -179,7 +178,7 @@ export const STAIRS = (() => {
     const hAt = (s) => heightAt(a.x + dx * s, a.z + dz * s);
     for (let k = 0; (k + 1) * TREAD <= len; k++) {
       const h0 = hAt(k * TREAD), h1 = hAt((k + 1) * TREAD);
-      if (Math.abs(h1 - h0) / TREAD < 0.2) continue; // gentle enough to leave as a ramp
+      if (Math.abs(h1 - h0) / TREAD < 0.12) continue; // gentle enough to leave as a ramp
       out.push({ i, k, s0: k * TREAD, s1: (k + 1) * TREAD, top: Math.max(h0, h1) + 0.02, rising: h1 > h0, x: a.x + dx * (k + 0.5) * TREAD, z: a.z + dz * (k + 0.5) * TREAD, rot: Math.atan2(dx, dz) });
     }
   }
@@ -188,7 +187,7 @@ export const STAIRS = (() => {
 const stairIndex = new Map(STAIRS.map((t) => [`${t.i}:${t.k}`, t]));
 // The step under a point, if it is on one.
 function stairAt(x, z) {
-  if (Math.abs(x + 13) > 18 || Math.abs(z + 12) > 13) return null;
+  if (Math.hypot(x - HILL.x, z - HILL.z) > HILL.radius + 2) return null;
   const n = nearestOnTrail(x, z);
   if (n.d > STAIR_HALF) return null;
   return stairIndex.get(`${n.i}:${Math.floor(n.s / TREAD)}`) || null;

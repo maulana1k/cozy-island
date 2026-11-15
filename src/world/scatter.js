@@ -68,7 +68,7 @@ function stick(x0, y0, z0, x1, y1, z1, r0, r1) {
 const pad = (x, y, z, w, h, d, rot = 0) => leafy(x, y, z, w, h, d, rot);
 
 // Trees are a bare, slightly leaning trunk with branches, each carrying its own pad of leaves.
-const TREE_KINDS = [
+export const TREE_KINDS = [
   { // umbrella pine
     color: 0x56733f,
     trunk: () => mergeGeometries([stick(0, 0, 0, 0.3, 2.3, 0.05, 0.3, 0.22), stick(0.3, 2.3, 0.05, 0.15, 3.9, 0.1, 0.22, 0.15),
@@ -118,13 +118,13 @@ const TREE_KINDS = [
   },
 ];
 
-const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
+export const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
 // Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
-const tuftGeometry = () => ribbonClump({ blades: 9, height: 0.8, width: 0.05, spread: 0.2, droop: 0.42, rows: 2 });
+export const tuftGeometry = () => ribbonClump({ blades: 9, height: 0.8, width: 0.05, spread: 0.2, droop: 0.42, rows: 2 });
 
 // A chunky angular block of stone with a flat top.
-function rockGeometry() {
+export function rockGeometry() {
   const g = new THREE.DodecahedronGeometry(0.75, 0);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * 1.15, Math.max(-0.3, Math.min(0.42, p.getY(i))), p.getZ(i) * 0.9);
@@ -133,7 +133,7 @@ function rockGeometry() {
 }
 
 // A rounded leafy bush made of a few lumps.
-function bushGeometry() {
+export function bushGeometry() {
   return mergeGeometries([leafy(0, 0.42, 0, 0.62, 0.48, 0.58), leafy(0.42, 0.32, 0.12, 0.42, 0.36, 0.4, 1), leafy(-0.4, 0.3, -0.1, 0.44, 0.34, 0.42, 2), leafy(0.05, 0.3, -0.42, 0.38, 0.32, 0.36, 3), leafy(-0.05, 0.62, 0.2, 0.36, 0.3, 0.34, 4)]);
 }
 

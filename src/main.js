@@ -34,7 +34,7 @@ import { createDirector } from './cutscene.js';
 import { createJourney } from './logic/journey.js';
 import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
 import { createWilds } from './world/wilds.js';
-import { wildDepth } from './logic/terrain.js';
+import { wildDepth, wildness, landR } from './logic/terrain.js';
 import { WILD } from './config.js';
 import { ITEMS, FLASK_SIPS, SIP } from './logic/items.js';
 import { createBag } from './logic/bag.js';
@@ -186,7 +186,7 @@ function dropItem(id) {
 }
 function toggleBag() { if (hud.started && !director.active) { hud.toggleBag(); audio.play('ui'); syncLook(); if (hud.bagOpen) progress('bag'); } }
 // Feeling hungry, thirsty or out of puff: a gentle nudge, never a punishment.
-let inWild = false, wildNag = 0, growlAt = 0;
+let inWild = false, growlAt = 0, turnedBack = 0;
 let wasWinded = false, nagFood = 0, nagWater = 0;
 function feel(dt) {
   const near = player.sitting && props.fireNear(player.position.x, player.position.z);
@@ -290,7 +290,7 @@ const FILMS = {
   lunch: () => [{ at: on({ x: 15, z: 23 }), r: 14, r1: 11, h: 6, h1: 4, a0: -0.4, a1: 0.5, lookH: 0.8, dur: 6, title: 'Lunch', sub: 'Camp stew for everyone' }],
   campfire: () => [{ at: on(VILLAGE_FIRE), r: 11, r1: 8.5, h: 3.4, h1: 2.6, a0: 0.3, a1: 1.6, lookH: 1.2, dur: 8, title: 'Campfire night', sub: 'Songs and stories round the big fire' }],
   sleep: () => [{ at: on({ x: 10, z: 8 }), r: 38, r1: 32, h: 17, h1: 14, a0: 0.9, a1: 1.5, lookH: 0, dur: 6, title: 'Lights out', sub: 'Two scouts keep the night watch' }],
-  summit: () => [{ at: on(LOOKOUT), r: 10, r1: 8, h: 4.5, h1: 5.5, a0: wildAngle + Math.PI - 0.6, a1: wildAngle + Math.PI + 0.5, lookH: 1, dur: 7, title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
+  summit: () => [{ at: on(LOOKOUT), r: 15, r1: 13, h: 9.5, h1: 10.5, a0: wildAngle + Math.PI - 0.6, a1: wildAngle + Math.PI + 0.5, lookH: 0.5, dur: 7, title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
   flag: () => [{ at: on(FLAGPOLE), r: 7.5, r1: 6, h: 1.3, h1: 1.8, a0: 2.4, a1: 2.0, lookH: 4.4, dur: 4.5, title: 'The flag goes up', sub: '' }],
   finale: () => [{ at: () => player.position, r: 5, r1: 10, h: 2, h1: 6, a0: 0, a1: 3.1, lookH: 1, dur: 7, title: 'A true scout', sub: 'Your first day is done. The island is yours.' }],
 };
@@ -532,7 +532,8 @@ function step() {
   if (!paused) {
     const colliders = openStatic.concat(pickups.colliders, wilds.colliders, buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
     zipline.update(dt, elapsed, player);
-    player.update(dt, filming ? idleInput : input, rig.yaw, colliders, elapsed);
+    // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
+    player.update(dt, filming && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
     buildings.update(dt, elapsed, player);
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
@@ -552,13 +553,26 @@ function step() {
       if (!inWild) { inWild = true; audio.play('alarm'); discover('place-wild'); growlAt = elapsed + 1.5; }
       hud.setDanger(Math.min(1, 0.4 + depth / WILD.limit * 0.6));
       if (elapsed > growlAt) { growlAt = elapsed + 3 + Math.random() * 3; audio.play('growl'); }
-      if (depth > WILD.limit) {
-        const k = (WILD.border + WILD.limit) / Math.hypot(player.position.x, player.position.z);
-        player.position.x *= k; player.position.z *= k;
-        if (elapsed > wildNag) { wildNag = elapsed + 2.5; player.gesture('bonk', 0.7); audio.play('alarm'); say('Too dangerous! Turn back to camp.', '⚠️'); }
+      // Keep going despite the warning and the game takes over: a stop screen, and you are walked back out.
+      if (depth > WILD.limit && !turnedBack) {
+        const r0 = Math.hypot(player.position.x, player.position.z);
+        turnedBack = 3.2; player.auto = { x: -player.position.x / r0, z: -player.position.z / r0 };
+        hud.setStop(true); audio.play('alarm'); player.gesture('bonk', 0.7); vitals.add({ cheer: -6 });
+        if (hud.bagOpen) hud.toggleBag(); if (hud.mapOpen) hud.toggleMap(); if (hud.journalOpen) hud.toggleJournal();
       }
     } else if (inWild) { inWild = false; hud.setDanger(0); say('Phew. Back on safe ground.', '😮‍💨'); }
+    if (turnedBack) {
+      turnedBack = Math.max(0, turnedBack - dt);
+      // Never past the line, whatever happens.
+      const r0 = Math.hypot(player.position.x, player.position.z), max = WILD.border + WILD.limit + 0.5;
+      if (depth > 0 && r0 > max) { player.position.x *= max / r0; player.position.z *= max / r0; }
+      if (!turnedBack) { player.auto = null; hud.setStop(false); say('Stay where the camp can see you.', '🧭'); }
+    }
   }
+  // Fog thickens among the big trees, and the sea is loud only near the shore.
+  const wn = wildness(player.position.x, player.position.z);
+  scene.fog.density = sky.fogDensity * (1 + wn * 1.6);
+  audio.setSea(Math.min(1, Math.max(0, (landR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
   torch.position.set(player.position.x + player.facing.x * 0.9, player.position.y + 1.15, player.position.z + player.facing.z * 0.9);
@@ -621,7 +635,7 @@ function step() {
   if (!director.update(clampDt(raw))) rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 });
   sky.update(timeOfDay, elapsed, player.position);
   island.update(elapsed);
-  island.setLight(sky.waterLight, sky.fogColor, sky.fogDensity);
+  island.setLight(sky.waterLight, sky.fogColor, scene.fog.density);
   village.update(elapsed);
   village.setNight(night);
   buildings.setNight(night);
@@ -639,7 +653,7 @@ frame();
 
 // Handles for automated checks in the browser.
 window.__game = {
-  player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
+  wilds, player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
 };
 if (params.has('dbg')) setInterval(() => { const i = renderer.info; document.title = JSON.stringify({ calls: i.render.calls, tris: i.render.triangles, ratio }); }, 300);

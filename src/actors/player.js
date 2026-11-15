@@ -38,6 +38,7 @@ export function createPlayer(scene, opts = {}) {
       gesture = { name, t: 0, dur: seconds };
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
+    auto: null, // { x, z }: walk this way whatever the keys say (being turned back)
     speedFactor: 1, canRun: true, // set from how the scout is feeling
     riding: null, // set while hanging from the flying fox; the ride moves the player
     asleep: null, // set while lying in bed: { x, z, rot }
@@ -74,7 +75,7 @@ export function createPlayer(scene, opts = {}) {
         figure.animate(0, elapsed, { pose: 'hang' });
         return;
       }
-      const move = input.move;
+      const move = player.auto ? { x: 0, z: 1 } : input.move;
       const wantsMove = move.x !== 0 || move.z !== 0;
       buffer = input.consumeHop() ? JUMP_BUFFER : buffer - dt;
 
@@ -95,6 +96,7 @@ export function createPlayer(scene, opts = {}) {
           // Mud and soft sand are slower going; a trodden trail is a touch quicker.
           const top = (input.run && player.canRun ? RUN_SPEED : WALK_SPEED) * player.speedFactor * wadeSpeedFactor(groundAt(position.x, position.z)) * ((surfaces[surface] && surfaces[surface].speed) || 1);
           tx = (rx * move.x + fx * move.z) * top; tz = (rz * move.x + fz * move.z) * top;
+          if (player.auto) { tx = player.auto.x * WALK_SPEED * 1.25; tz = player.auto.z * WALK_SPEED * 1.25; }
         }
         // Speed builds up and bleeds off instead of switching on and off.
         const dvx = tx - vel.x, dvz = tz - vel.z, dv = Math.hypot(dvx, dvz);

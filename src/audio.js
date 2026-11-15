@@ -5,7 +5,7 @@ const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.0;
 
 export function createAudio(makeContext = () => new AudioContext()) {
   let ctx = null, master = null, noise = null, cricketTimer = null;
-  let tried = false, night = 0, fireLevel = 0, fireGain = null;
+  let tried = false, night = 0, fireLevel = 0, fireGain = null, seaGain = null;
   const api = {
     muted: false,
     started: false,
@@ -38,7 +38,11 @@ export function createAudio(makeContext = () => new AudioContext()) {
     // How close you are to a burning fire, 0 to 1: a low roar and random cracks and pops.
     setFire(level) {
       fireLevel = level;
-      try { if (fireGain) fireGain.gain.setTargetAtTime(level * 0.09, ctx.currentTime, 0.25); } catch { /* audio is optional */ }
+      try { if (fireGain) fireGain.gain.setTargetAtTime(level * level * 0.035, ctx.currentTime, 0.2); } catch { /* audio is optional */ }
+    },
+    // How close the sea is, 0 to 1: the waves are loud on the beach and all but gone in the middle of camp.
+    setSea(level) {
+      try { if (seaGain) seaGain.gain.setTargetAtTime(0.12 + level * 0.88, ctx.currentTime, 0.6); } catch { /* audio is optional */ }
     },
     play(name) {
       if (!api.started || !ctx) return;
@@ -62,7 +66,8 @@ export function createAudio(makeContext = () => new AudioContext()) {
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.11;
     const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.07;
     lfo.connect(lfoGain).connect(swell.gain);
-    waves.connect(lp).connect(swell).connect(master);
+    seaGain = ctx.createGain(); seaGain.gain.value = 0.3;
+    waves.connect(lp).connect(swell).connect(seaGain).connect(master);
     waves.start(); lfo.start();
 
     // Wind: a thin band of noise, quieter still.
@@ -78,14 +83,16 @@ export function createAudio(makeContext = () => new AudioContext()) {
     // Fire: a soft roar that swells as you come near, and sharp cracks from the burning wood.
     const roar = noiseSource(true);
     const roarBand = ctx.createBiquadFilter(); roarBand.type = 'bandpass'; roarBand.frequency.value = 420; roarBand.Q.value = 0.5;
+    roarBand.frequency.value = 950; roarBand.Q.value = 0.35;
     fireGain = ctx.createGain(); fireGain.gain.value = 0;
     roar.connect(roarBand).connect(fireGain).connect(master); roar.start(0, 1.1);
     setInterval(() => {
       if (!ctx || fireLevel < 0.04 || Math.random() > 0.25 + fireLevel * 0.45) return;
       try {
+        // Dry wood snapping: a sharp tick, now and then a deeper pop with a little shower of ticks after it.
         const loud = fireLevel * (0.35 + Math.random() * 0.65);
-        hiss({ type: 'highpass', freq: 1800 + Math.random() * 2600, dur: 0.02 + Math.random() * 0.03, gain: 0.12 * loud });
-        if (Math.random() < 0.3) hiss({ type: 'bandpass', freq: 900 + Math.random() * 600, q: 2, dur: 0.05, gain: 0.1 * loud, delay: 0.03 });
+        hiss({ type: 'bandpass', freq: 2600 + Math.random() * 2200, q: 3, dur: 0.012 + Math.random() * 0.02, gain: 0.16 * loud });
+        if (Math.random() < 0.18) { tone(150 + Math.random() * 70, { type: 'sine', dur: 0.06, gain: 0.07 * loud, to: 70, attack: 0.002 }); for (let k = 1; k <= 3; k++) hiss({ type: 'bandpass', freq: 3200 + Math.random() * 1500, q: 4, dur: 0.01, gain: 0.08 * loud, delay: 0.04 * k + Math.random() * 0.03 }); }
       } catch { /* audio is optional */ }
     }, 70);
 

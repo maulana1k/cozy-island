@@ -31,7 +31,7 @@ export const landR = (x, z) => melt(Math.hypot(x, z), wildEq(x, z));
 // 0 in camp country, rising to 1 where the big jungle has fully taken over.
 export function wildness(x, z) {
   const r0 = Math.hypot(x, z);
-  return smooth((r0 - wildEq(x, z) + 6) / 14) * smooth((r0 - WILD.trees + 4) / 16);
+  return smooth((r0 - wildEq(x, z) + 30) / 40) * smooth((r0 - WILD.trees + 6) / 30);
 }
 // How many metres past the rope into the wild jungle a spot is; negative on the camp side.
 export function wildDepth(x, z) {
@@ -94,9 +94,10 @@ function rawHeight(x, z) {
   if (eq < r0) {
     const w = smooth((GRASS_RADIUS - 2 - eq) / 22);
     if (w > 0) {
-      const dW = Math.hypot(x - WILD.x, z - WILD.z), dP = Math.hypot(x - WILD.x + 34, z - WILD.z - 14);
-      h += w * (2.6 + 2.2 * noise(x / 17 + 31, z / 17 + 13) + 1.0 * noise(x / 6 + 5, z / 6 + 77));
-      h += 30 * smooth(1 - dW / 50) * (1 + 0.22 * noise(x / 13, z / 13 + 50)) + 15 * smooth(1 - dP / 30);
+      h += w * (2.4 + 2.0 * noise(x / 17 + 31, z / 17 + 13) + 0.9 * noise(x / 6 + 5, z / 6 + 77));
+      // Far inland the jungle rises into broad hills and ridges.
+      const inland = smooth((r0 - 95) / 80) * smooth((GRASS_RADIUS - 8 - eq) / 40);
+      if (inland > 0) h += inland * Math.max(0, 10 + 15 * noise(x / 75 + 3, z / 75 + 9) + 6 * noise(x / 27, z / 27 + 4));
     }
   }
   const kd = Math.hypot(x - KNOLL.x, z - KNOLL.z);

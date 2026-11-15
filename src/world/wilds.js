@@ -1,138 +1,204 @@
-// The wild jungle behind the hill: far more land than the camp's corner of the island, thick
-// with giant trees. A rope with warning signs marks where the camp ends; nobody goes past it.
+// The wild jungle. Most of the island is jungle, far too much to draw at once, so it is kept in
+// square tiles and only the tiles near you exist. Near tiles get real trees (the same kinds that
+// grow round the camp, plus jungle giants), bushes, rocks, ferns and grass; far tiles get a simple
+// lump per treetop. There is no fence: the camp's woods just thicken into it.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { createRng } from '../logic/rng.js';
-import { heightAt, landR, wildDepth } from '../logic/terrain.js';
+import { heightAt, landR, wildDepth, wildness } from '../logic/terrain.js';
+import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
-const MAIN_HALF = 85; // the camp's own ground mesh covers this far from the middle
+const TILE = 48, VIEW = 300, NEAR = 88, UNDER = 58; // tile size; how far tiles exist; how far real trees and undergrowth go
+const MAIN_HALF = 85;                                  // the camp's own ground mesh covers this far from the middle
+const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 
-const tint = new THREE.Color();
-function part(geo, hex, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx, rz = 0) {
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, rz)), new THREE.Vector3(sx, sy, sz)));
-  tint.setHex(hex);
-  const n = g.attributes.position.count, col = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { col[i * 3] = tint.r; col[i * 3 + 1] = tint.g; col[i * 3 + 2] = tint.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
-  return g;
+// Repeatable random numbers for one tile.
+function tileRng(ix, iz) {
+  let a = (Math.imul(ix, 73856093) ^ Math.imul(iz, 19349663) ^ SEED) >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-const join = (...parts) => { const g = mergeGeometries(parts); g.computeVertexNormals(); return g; };
+// Slow, smooth variation across the land: where the groves, stands and clearings are.
+const wave = (x, z, s, o) => Math.sin(x / s + o) * Math.cos(z / (s * 0.83) - o * 1.7) + 0.5 * Math.sin((x + z) / (s * 0.47) + o * 2.3);
 
-// The rest of the land, beyond the camp's own ground mesh. Coarser, because nobody walks on it.
-function buildGround() {
-  const size = 190, seg = 118;
-  const geo = new THREE.PlaneGeometry(size + 20, size + 20, seg, seg);
-  geo.rotateX(-Math.PI / 2); geo.translate(WILD.x, 0, WILD.z);
-  const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3);
-  const floor = new THREE.Color(0x4f7a40), floorDark = new THREE.Color(0x3d6638), high = new THREE.Color(0x6a8f4a), sand = new THREE.Color(PALETTE.sand), wet = new THREE.Color(PALETTE.sandWet), c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x, z), r = landR(x, z);
-    // Tuck under the camp's mesh where the two overlap, so they never flicker against each other.
-    pos.setY(i, h - 0.3 * smooth((MAIN_HALF - 0.5 - Math.max(Math.abs(x), Math.abs(z))) / 2.5));
-    if (r < GRASS_RADIUS + 1) {
-      c.copy(floor).lerp(floorDark, 0.5 + 0.5 * Math.sin(x * 0.23 + Math.cos(z * 0.19) * 2)).lerp(high, smooth((h - 9) / 16));
-      c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
-    } else c.copy(sand).lerp(wet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-// A jungle giant: a tall buttressed trunk and a heavy crown in a few dark lumps.
-function giantGeometry() {
-  const ico = (r) => new THREE.IcosahedronGeometry(r, 0);
-  return join(
-    part(new THREE.CylinderGeometry(0.28, 0.5, 7, 6), 0xf0b590, 0, 3.5, 0),
-    part(new THREE.ConeGeometry(0.95, 1.6, 5), 0xe0a682, 0, 0.75, 0),
-    part(ico(2.6), 0xffffff, 0, 8.2, 0, 1, 0.72, 1), part(ico(2.0), 0xe2f0d8, 1.7, 7.2, 0.6, 1, 0.7, 1), part(ico(1.9), 0xd3e6c8, -1.5, 7.0, -0.9, 1, 0.7, 1), part(ico(1.5), 0xf2fae8, 0.2, 9.6, -0.3, 1, 0.7, 1),
-    part(new THREE.CylinderGeometry(0.03, 0.03, 3.2, 4), 0x7fa05c, 1.9, 5.3, 0.7), part(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 4), 0x7fa05c, -1.6, 5.5, -1.0), // hanging vines
-  );
-}
-function fernGeometry() {
-  const blade = (a) => { const g = part(new THREE.ConeGeometry(0.16, 1.5, 3), 0xffffff, 0, 0.55, 0.5, 1, 1, 0.35); g.applyMatrix4(new THREE.Matrix4().makeRotationX(0.95)); g.applyMatrix4(new THREE.Matrix4().makeRotationY(a)); return g; };
-  return join(...[0, 1.05, 2.1, 3.15, 4.2, 5.25].map(blade));
-}
-
-function signTexture() {
-  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 192;
-  const c = cv.getContext('2d');
-  c.fillStyle = '#f6d23c'; c.fillRect(0, 0, 256, 192);
-  c.fillStyle = '#2b2b2b'; for (let x = -192; x < 256; x += 48) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 24, 0); c.lineTo(x + 24 + 30, 30); c.lineTo(x + 30, 30); c.fill(); c.beginPath(); c.moveTo(x, 162); c.lineTo(x + 24, 162); c.lineTo(x + 54, 192); c.lineTo(x + 30, 192); c.fill(); }
-  c.fillStyle = '#c62f24'; c.textAlign = 'center'; c.font = '900 58px system-ui, sans-serif'; c.fillText('DANGER', 128, 92);
-  c.fillStyle = '#2b2b2b'; c.font = '800 25px system-ui, sans-serif'; c.fillText('WILD JUNGLE', 128, 124); c.fillText('KEEP OUT', 128, 152);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return t;
-}
+// A jungle giant: a tall buttressed trunk and a heavy crown, with vines.
+const giant = {
+  color: 0x5a9450, top: 8,
+  trunk: () => { const a = new THREE.CylinderGeometry(0.28, 0.5, 7, 6).toNonIndexed(); a.translate(0, 3.5, 0); const b = new THREE.ConeGeometry(0.95, 1.6, 5).toNonIndexed(); b.translate(0, 0.75, 0); return mergeGeometries([a, b]); },
+  canopy: () => mergeGeometries([[2.6, 0, 8.2, 0], [2.0, 1.7, 7.2, 0.6], [1.9, -1.5, 7.0, -0.9], [1.5, 0.2, 9.6, -0.3]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.72, 1); g.translate(x, y, z); return g; })
+    .concat([[1.9, 5.3, 0.7, 3.2], [-1.6, 5.5, -1.0, 2.4]].map(([x, y, z, len]) => { const g = new THREE.CylinderGeometry(0.03, 0.03, len, 4).toNonIndexed(); g.translate(x, y, z); return g; }))),
+};
+const KINDS = [...TREE_KINDS, giant];
 
 export function createWilds(scene) {
-  const rng = createRng(SEED + 7);
   const group = new THREE.Group(); scene.add(group);
-  group.add(buildGround());
+  const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  const dummy = new THREE.Object3D(), color = new THREE.Color();
   const colliders = [];
 
-  const axis = Math.atan2(WILD.z, WILD.x);
-  // ---- Trees: sparse just past the rope, a solid wall of green a little further in.
-  const spots = [];
-  for (let tries = 0; spots.length < 1250 && tries < 60000; tries++) {
-    const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * (WILD.radius - 9);
-    const x = WILD.x + Math.cos(a) * d, z = WILD.z + Math.sin(a) * d, depth = wildDepth(x, z);
-    const edge = Math.hypot(x, z) - WILD.trees;
-    if (depth < -900 || edge < 0 || landR(x, z) > GRASS_RADIUS - 3) continue;
-    // The first giants stand well apart among the camp's own trees; further in they close up.
-    if (rng() > 0.12 + Math.min(1, edge / 22) * 0.88) continue;
-    if (spots.some((s) => Math.abs(s.x - x) < 2.4 && Math.abs(s.z - z) < 2.4)) continue;
-    spots.push({ x, z, depth, scale: 0.85 + rng() * 0.75 + Math.min(0.5, depth / 90), rot: rng() * 6.28, shade: rng() });
+  // ---- Shared pools: one instanced mesh per kind of thing, refilled when the nearby tiles change.
+  const pool = (geo, material, cap, shadow) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.castShadow = shadow; m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m; };
+  const trunkMat = flat(PALETTE.treeTrunk), white = flat(0xffffff);
+  const trees = KINDS.map((def) => ({ trunk: pool(def.trunk(), trunkMat, 2600, true), canopy: pool(def.canopy(), white, 2600, true) }));
+  const lumpGeo = new THREE.IcosahedronGeometry(1, 0); lumpGeo.scale(1, 0.62, 1);
+  const lumps = pool(lumpGeo, white, 26000, false);
+  const leaves = flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide });
+  const bushes = pool(bushGeometry(), white, 2400, true), rocks = pool(rockGeometry(), white, 700, true);
+  const ferns = pool(fernGeometry(), leaves, 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
+
+  // ---- One tile: its ground and a list of what grows on it. Made once, then kept while it is near.
+  const C = (hex) => new THREE.Color(hex);
+  const cJungle = C(0xc9b866), cSoil = C(0xb39a58), cGreen = C(0x8fb45c), cDeep = C(0x5f8a48), cHigh = C(0x9fb070), cSand = C(PALETTE.sand), cWet = C(PALETTE.sandWet);
+  function buildTile(ix, iz) {
+    const x0 = ix * TILE, z0 = iz * TILE, rng = tileRng(ix, iz);
+    // Nothing but sea here?
+    let land = false;
+    for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]]) if (landR(x0 + u * TILE, z0 + v * TILE) < ISLAND_RADIUS + 14) land = true;
+    if (!land) return { empty: true };
+    const tile = { ix, iz, cx: x0 + TILE / 2, cz: z0 + TILE / 2, trees: [], bushes: [], rocks: [], ferns: [], tufts: [], mesh: null };
+
+    // Ground, unless the camp's own mesh already covers the whole tile.
+    const inside = (x, z) => Math.max(Math.abs(x), Math.abs(z)) < MAIN_HALF - 3;
+    if (!(inside(x0, z0) && inside(x0 + TILE, z0 + TILE))) {
+      const seg = 12, geo = new THREE.PlaneGeometry(TILE, TILE, seg, seg);
+      geo.rotateX(-Math.PI / 2); geo.translate(tile.cx, 0, tile.cz);
+      const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x, z), r = landR(x, z);
+        // Tuck under the camp's mesh where the two overlap, so they never flicker against each other.
+        pos.setY(i, h - 0.35 * smooth((MAIN_HALF - 0.5 - Math.max(Math.abs(x), Math.abs(z))) / 3));
+        if (r < GRASS_RADIUS + 1) {
+          // The same dry jungle floor as round the camp, greener in the damp hollows, paler on the heights.
+          const damp = smooth(wave(x, z, 46, 1.3) * 0.5 + 0.5), deep = smooth(wave(x, z, 23, 4.1) * 0.6 + 0.3);
+          color.copy(cJungle).lerp(cSoil, smooth(wave(x, z, 9, 0.7) * 0.5 + 0.2) * 0.5).lerp(cGreen, damp * 0.75).lerp(cDeep, deep * damp * 0.6).lerp(cHigh, smooth((h - 9) / 12) * 0.7);
+          color.lerp(cSand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
+        } else color.copy(cSand).lerp(cWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
+        colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      tile.mesh = new THREE.Mesh(geo, groundMat); tile.mesh.receiveShadow = true;
+      group.add(tile.mesh);
+    }
+
+    // What grows here. Groves of palms, stands of pine, giants in the damp, open glades between.
+    const grows = (x, z) => { const w = wildness(x, z); return w > 0 && landR(x, z) < GRASS_RADIUS - 2 ? w : 0; };
+    for (let n = 0; n < 230; n++) {
+      const x = x0 + rng() * TILE, z = z0 + rng() * TILE, pick = rng(), size = rng(), turn = rng(), chance = rng();
+      const w = grows(x, z);
+      if (!w) continue;
+      const glade = smooth((wave(x, z, 31, 2.9) + 0.75) / 0.5); // 0 in a clearing
+      if (chance > w * (0.1 + 0.9 * glade)) continue;
+      const y = heightAt(x, z);
+      if (y < 0.5) continue;
+      const biome = wave(x, z, 52, 0.4), damp = wave(x, z, 46, 1.3);
+      let kind;
+      if (pick < 0.22) kind = Math.floor((pick / 0.22) * 7);                    // a bit of everything everywhere
+      else if (biome > 0.45) kind = pick < 0.8 ? 3 : 5;                          // palm grove with saplings
+      else if (biome < -0.45) kind = pick < 0.5 ? 0 : pick < 0.8 ? 4 : 2;        // pine stand
+      else if (damp > 0.2) kind = pick < 0.72 ? 6 : pick < 0.86 ? 1 : 5;         // giants in the damp hollows
+      else kind = pick < 0.45 ? 1 : pick < 0.7 ? 2 : pick < 0.85 ? 0 : 6;        // open mixed wood
+      // Close to camp the trees stay camp-sized; the giants only come in further out.
+      const depthIn = Math.hypot(x, z) - WILD.trees;
+      if (kind === 6 && depthIn < 10 && size > depthIn / 10) kind = 1 + Math.floor(turn * 2);
+      const scale = (kind === 6 ? 0.8 + size * 0.8 : kind === 5 ? 0.7 + size * 0.6 : 0.85 + size * 0.7) * (0.9 + Math.min(0.35, depthIn / 200));
+      tile.trees.push({ x, y: y - 0.1, z, kind, scale, rot: turn * 6.283, tint: size - 0.5 });
+    }
+    for (let n = 0; n < 150; n++) {
+      const x = x0 + rng() * TILE, z = z0 + rng() * TILE, what = rng(), size = rng(), turn = rng();
+      const w = grows(x, z);
+      if (!w || what > w * 1.2) continue;
+      const y = heightAt(x, z);
+      if (y < 0.5) continue;
+      const item = { x, y, z, s: 0.7 + size * 0.8, rot: turn * 6.283, tint: size };
+      const glade = wave(x, z, 31, 2.9) < -0.5;
+      if (what < 0.035) tile.rocks.push(item);
+      else if (what < 0.2) tile.bushes.push(item);
+      else if (what < 0.55 && !glade) tile.ferns.push(item);
+      else tile.tufts.push(item);
+    }
+    return tile;
   }
-  const near = spots.filter((s) => s.depth < 34), far = spots.filter((s) => s.depth >= 34);
-  const geo = giantGeometry(), treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
-  const dummy = new THREE.Object3D(), color = new THREE.Color();
-  for (const [list, shadows] of [[near, true], [far, false]]) {
-    const mesh = new THREE.InstancedMesh(geo, treeMat, list.length);
-    mesh.castShadow = shadows; mesh.receiveShadow = false; mesh.frustumCulled = false;
-    list.forEach((s, i) => {
-      dummy.position.set(s.x, heightAt(s.x, s.z) - 0.2, s.z); dummy.rotation.set(0, s.rot, 0); dummy.scale.set(s.scale, s.scale * (0.9 + s.shade * 0.35), s.scale); dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, color.setHex([0x5f9a50, 0x6aa85a, 0x528a52, 0x78b060][i % 4]).offsetHSL(0, 0, (s.shade - 0.5) * 0.06));
-      if (s.depth < WILD.limit + 4) colliders.push({ x: s.x, z: s.z, r: 0.5 * s.scale });
-    });
-    group.add(mesh);
+
+  // ---- Filling the pools from the tiles that are near enough.
+  const tiles = new Map();
+  const TREE_TINTS = [0x5f9a50, 0x6aa85a, 0x528a52, 0x78b060];
+  function refill(px, pz) {
+    const counts = KINDS.map(() => 0);
+    let nLump = 0, nBush = 0, nRock = 0, nFern = 0, nTuft = 0;
+    colliders.length = 0;
+    const put = (mesh, i, x, y, z, s, rot, sy = s) => { dummy.position.set(x, y, z); dummy.rotation.set(0, rot, 0); dummy.scale.set(s, sy, s); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); };
+    for (const tile of tiles.values()) {
+      if (tile.empty) continue;
+      const d = Math.hypot(tile.cx - px, tile.cz - pz);
+      const real = d < NEAR;
+      for (const t of tile.trees) {
+        const def = KINDS[t.kind];
+        if (real && counts[t.kind] < 2600) {
+          const i = counts[t.kind]++;
+          put(trees[t.kind].trunk, i, t.x, t.y, t.z, t.scale, t.rot); trees[t.kind].canopy.setMatrixAt(i, dummy.matrix);
+          trees[t.kind].canopy.setColorAt(i, color.setHex(def.color).offsetHSL(t.tint * 0.03, 0, t.tint * 0.07));
+          if (Math.hypot(t.x, t.z) < WILD.border + WILD.limit + 3) colliders.push({ x: t.x, z: t.z, r: (t.kind === 6 ? 0.5 : 0.4) * t.scale });
+        } else if (nLump < 26000 && t.kind !== 5) {
+          // Far away a tree is just its crown: one lump at treetop height.
+          const r = (t.kind === 6 ? 3.3 : t.kind === 3 ? 1.9 : 2.5) * t.scale;
+          put(lumps, nLump, t.x, t.y + def.top * t.scale * 0.92, t.z, r, t.rot, r * (t.kind === 3 ? 0.7 : 1));
+          lumps.setColorAt(nLump++, color.setHex(def.color).offsetHSL(t.tint * 0.03, 0, t.tint * 0.07 - 0.02));
+        }
+      }
+      if (d < UNDER) {
+        for (const b of tile.bushes) if (nBush < 2400) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
+        for (const b of tile.rocks) if (nRock < 700) { put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
+        for (const b of tile.ferns) if (nFern < 3600) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
+        for (const b of tile.tufts) if (nTuft < 5200) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.6 ? 0xd9c46a : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
+      }
+    }
+    KINDS.forEach((_, k) => { for (const m of [trees[k].trunk, trees[k].canopy]) { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; } });
+    for (const [m, n] of [[lumps, nLump], [bushes, nBush], [rocks, nRock], [ferns, nFern], [tufts, nTuft]]) { m.count = n; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   }
-  // Ferns crowd the ground between the first trees.
-  const ferns = [];
-  for (let tries = 0; ferns.length < 260 && tries < 20000; tries++) {
-    const a = axis + (rng() - 0.5) * 1.5, r = WILD.trees + 2 + rng() * 40, x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (wildDepth(x, z) < -900 || heightAt(x, z) < 0.6 || rng() > 0.2 + (r - WILD.trees) / 30) continue;
-    ferns.push({ x, z, s: 0.7 + rng() * 0.9, rot: rng() * 6.28 });
+
+  // Makes the tiles that have come into range (a few at a time) and drops the ones left behind.
+  let lastFill = { x: 1e9, z: 1e9 }, dirty = true;
+  function stream(px, pz, budget) {
+    const ci = Math.floor(px / TILE), cj = Math.floor(pz / TILE), reach = Math.ceil(VIEW / TILE);
+    for (let dj = -reach; dj <= reach && budget > 0; dj++) for (let di = -reach; di <= reach && budget > 0; di++) {
+      const ix = ci + di, iz = cj + dj, key = `${ix},${iz}`;
+      if (tiles.has(key) || Math.hypot((ix + 0.5) * TILE - px, (iz + 0.5) * TILE - pz) > VIEW) continue;
+      const tile = buildTile(ix, iz);
+      tiles.set(key, tile);
+      if (!tile.empty) { dirty = true; budget--; }
+    }
+    for (const [key, tile] of tiles) {
+      if (tile.empty || Math.hypot(tile.cx - px, tile.cz - pz) < VIEW + 70) continue;
+      if (tile.mesh) { group.remove(tile.mesh); tile.mesh.geometry.dispose(); }
+      tiles.delete(key); dirty = true;
+    }
+    if (dirty || Math.hypot(px - lastFill.x, pz - lastFill.z) > 20) { refill(px, pz); lastFill = { x: px, z: pz }; dirty = false; }
   }
-  const fernMesh = new THREE.InstancedMesh(fernGeometry(), treeMat, ferns.length);
-  ferns.forEach((f, i) => { dummy.position.set(f.x, heightAt(f.x, f.z), f.z); dummy.rotation.set(0, f.rot, 0); dummy.scale.setScalar(f.s); dummy.updateMatrix(); fernMesh.setMatrixAt(i, dummy.matrix); fernMesh.setColorAt(i, color.setHex(i % 3 ? 0x4f9a4a : 0x3f8244)); });
-  fernMesh.frustumCulled = false; group.add(fernMesh);
 
   // ---- Eyes in the dark: something is watching from between the trees.
+  const axis = Math.atan2(WILD.z, WILD.x);
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffe36b, fog: false, transparent: true });
-  const eyes = [];
-  for (let i = 0; i < 9; i++) {
-    const a = axis + (i / 8 - 0.5) * 0.85, r = WILD.border + WILD.limit + 4 + rng() * 9, x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (heightAt(x, z) < 0.6) continue;
+  const eyes = [], erng = tileRng(7, 7);
+  for (let i = 0; i < 11; i++) {
+    const a = axis + (i / 10 - 0.5) * 1.3, r = WILD.border + WILD.limit + 5 + erng() * 10, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (heightAt(x, z) < 0.6 || wildDepth(x, z) < 0) continue;
     const pair = new THREE.Group(), m = eyeMat.clone();
     for (const s of [-0.13, 0.13]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 5), m); e.position.x = s; e.scale.y = 0.6; pair.add(e); }
-    pair.position.set(x, heightAt(x, z) + 0.7 + rng() * 0.9, z);
+    pair.position.set(x, heightAt(x, z) + 0.7 + erng() * 0.9, z);
     group.add(pair);
-    eyes.push({ pair, m, seed: rng() * 20 });
+    eyes.push({ pair, m, seed: erng() * 20 });
   }
 
+  let started = false;
   return {
     colliders,
-    // The eyes only show when you are close to the rope, brighter after dark, and they blink.
+    get counts() { return { lumps: lumps.count, bushes: bushes.count, rocks: rocks.count, ferns: ferns.count, tufts: tufts.count, trees: trees.map((t) => t.canopy.count), tris: [lumps, bushes, rocks, ferns, tufts, ...trees.flatMap((t) => [t.trunk, t.canopy])].map((m) => Math.round(m.count * m.geometry.attributes.position.count / 3 / (m.geometry.index ? m.geometry.attributes.position.count / m.geometry.index.count : 1))) }; },
+    get tileCount() { let n = 0; for (const t of tiles.values()) if (!t.empty) n++; return n; },
     update(elapsed, night, p) {
+      // Everything in range is made at the start; after that, a couple of tiles a frame as you move.
+      stream(p.x, p.z, started ? 2 : 1e6); started = true;
+      // The eyes only show when you are deep among the trees, brighter after dark, and they blink.
       const close = smooth((wildDepth(p.x, p.z) + 10) / 12);
       for (const e of eyes) {
         const blink = Math.sin(elapsed * 0.7 + e.seed) > 0.93 ? 0 : 1, show = Math.sin(elapsed * 0.23 + e.seed * 3) > -0.2 ? 1 : 0;

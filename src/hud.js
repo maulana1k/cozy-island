@@ -158,6 +158,7 @@ export function createHUD(handlers) {
   const toasts = el('div', 'toasts');
   const banner = el('div', 'banner'); const bannerBig = el('div', 'big'); const bannerSmall = el('div', 'small'); banner.append(bannerBig, el('i'), bannerSmall);
   const danger = el('div', 'danger'); const alertBox = el('div', 'alert'); alertBox.append(el('div', 'big', '⚠ DANGER ⚠'), el('div', 'small', 'You are too deep in the wild jungle. Go back to camp!'));
+  const stop = el('div', 'stop'); stop.append(el('div', 'hand', '✋'), el('div', 'big', 'STOP'), el('div', 'small', 'You cannot go any further. It is not safe.'), el('div', 'small dim', 'Heading back to camp…'));
   const bubble = el('div', 'bubble'); const bubbleName = el('div', 'who'); const bubbleText = el('div', 'said'); bubble.append(bubbleName, bubbleText);
 
   // ---- Journal: a spiral notebook
@@ -218,7 +219,7 @@ export function createHUD(handlers) {
   filmRow.addEventListener('click', () => handlers.onToggleFilms());
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(danger, alertBox, night, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, stop, night, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -310,6 +311,8 @@ export function createHUD(handlers) {
     // Film bars slide in and everything else steps back.
     setCine(on) { root.classList.toggle('filming', on); },
     setCaption(title, sub) { cineTitle.textContent = title || ''; cineSub.textContent = sub || ''; barBottom.classList.remove('in'); void barBottom.offsetWidth; barBottom.classList.add('in'); },
+    // The hard stop: the whole screen is taken over while you are walked back.
+    setStop(on) { root.classList.toggle('stopped', on); },
     setSleeping(on) { root.classList.toggle('asleep', on); },
     setActivity(label) { nowLine.textContent = label; },
     setJoin() {}, // the join hint now lives in the key list

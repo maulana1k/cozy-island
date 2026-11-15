@@ -262,7 +262,7 @@ export function createProps(scene, deps) {
       prompt: () => (fire.lit ? 'E — put out fire' : 'E — light fire'),
       interact() { fire.lit = !fire.lit; audio.play('fire'); },
     });
-    fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 16 : 7, loud: big ? 1 : 0.45 });
+    fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 9 : 5, loud: big ? 1 : 0.55 });
     updaters.push((dt, elapsed) => {
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       flames.visible = fire.level > 0.02;

@@ -5,7 +5,7 @@ import { SEED } from '../config.js';
 
 const SUN_SCALE = 1.0;
 const AMBIENT_SCALE = 1.25;
-const FOG_DENSITY = 0.0026;
+const FOG_DENSITY = 0.0038; // far things fade into haze
 const SHADOW_HALF = 42;
 
 function buildDome() {

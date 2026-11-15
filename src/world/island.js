@@ -43,7 +43,8 @@ function buildTerrain() {
       // Bare rock near the top of the hill.
       c.lerp(rock, smooth((h - ROCK_HEIGHT) / 1.2) * (0.6 + speck(x, z) * 0.4));
       // Past the rope the ground turns dark and damp under the big trees.
-      if (wd > 0) c.lerp(wildFloor, wd * (0.75 + blotch(x * 1.7, z * 1.7) * 0.25));
+      // Deeper into the jungle the same ground just grows greener and damper, in patches.
+      if (wd > 0) c.lerp(forest, wd * 0.5).lerp(wildFloor, wd * (0.25 + 0.45 * blotch(x * 0.6 + 9, z * 0.6)));
       c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
     } else {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));

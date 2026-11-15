@@ -15,7 +15,7 @@ export function createPlayer(scene, opts = {}) {
   const groundAt = opts.groundAt || heightAt;
   const surfaceAt = opts.surfaceAt || (() => 'grass');
   const surfaces = opts.surfaces || {};
-  const figure = createFigure({ bodyColor: PALETTE.player, accent: 'hat', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x6f9a5a });
+  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'hat', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x6f9a5a });
   scene.add(figure.group);
 
   const position = new THREE.Vector3(PLAYER_START.x, groundAt(PLAYER_START.x, PLAYER_START.z), PLAYER_START.z);
@@ -38,6 +38,8 @@ export function createPlayer(scene, opts = {}) {
       gesture = { name, t: 0, dur: seconds };
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
+    torch: false, setTorch(on) { player.torch = on; figure.setTorch(on); },
+    focus: null, // { x, z } of the thing in reach, set by the game
     auto: null, // { x, z }: walk this way whatever the keys say (being turned back)
     speedFactor: 1, canRun: true, // set from how the scout is feeling
     riding: null, // set while hanging from the flying fox; the ride moves the player
@@ -190,6 +192,8 @@ export function createPlayer(scene, opts = {}) {
         sitting: player.sitting && !onGround, sitGround: (player.sitting && onGround) || !!(act && act.sit), air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
         sink: player.surface === 'mud' ? 0.05 : 0,
+        hold: player.torch ? 'torch' : null,
+        look: player.focus, // what you are about to use: the head and eyes turn to it
       });
     },
   };

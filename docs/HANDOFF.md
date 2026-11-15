@@ -129,3 +129,21 @@ against the debug URL options above. The Playwright browser tools were removed p
   `?bag`. `window.__game.film('campfire')` plays a film.
 - **Not checked by hand:** item use by keyboard, stat pacing over a full day, the films triggered
   by the timetable itself, the danger turn-back while walking, sound. No tests cover any of this.
+
+## Seventh round
+
+- **Jungle.** The island is now mostly jungle (`WILD.radius` 300 m). `src/world/wilds.js` keeps it in
+  48 m tiles: tiles within 300 m exist, real trees (the six camp kinds plus giants, in groves,
+  stands and glades) within 88 m, undergrowth within 58 m, one lump per treetop beyond. Fog is
+  thicker (`FOG_DENSITY` in `sky.js`) and thickens further among the big trees.
+- **Hard stop.** Warning from 70 m out; at 82 m a full-screen STOP takes over and the player is
+  walked back for about three seconds (`player.auto`), passing through trees so nothing snags.
+- **People.** Faces with blinking eyes that look at things, brows, lashes, a mouth that opens,
+  five hair styles; uniform details (collar, buttons, pockets, belt, badge); hands with thumbs;
+  feet on ankle joints that keep the sole level. Everyone turns to look at you when you come close.
+- **Night and torch.** Nights are much darker. The torch is a forward cone (`SpotLight`), and the
+  scout holds it out when it is on.
+- **Sound.** Fire is a dry crackle heard only within 9 m (5 m for small fires); the sea is loud
+  only near the shore.
+- **Not measured:** frame rate after this round. The jungle adds roughly 600,000 triangles and
+  each person three to five more things to draw.

@@ -86,7 +86,8 @@ props.onBell((pos) => villagers.hearBell(pos));
 const bag = createBag(12);
 const vitals = createStats();
 let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
-const torch = new THREE.PointLight(0xfff0c8, 0, 15, 1.5); scene.add(torch);
+// The torch throws a cone of light ahead of you, not a glow all round.
+const torch = new THREE.SpotLight(0xfff0c8, 0, 30, 0.42, 0.55, 1.1); scene.add(torch, torch.target);
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
 const say = (text, pic) => hud.note(text, pic);
@@ -154,7 +155,7 @@ function useItem(id, plain = false) {
   else if (item.use === 'flask') {
     if (sips <= 0) { say('Your flask is empty. Fill it at a water barrel or the pond.', '🍶'); audio.play('nope'); return; }
     sips--; vitals.add(SIP); player.gesture('drink', 1.3); audio.play('gulp'); busy(1.0); discover('drink');
-  } else if (item.use === 'torch') { torchOn = !torchOn; audio.play('click'); say(torchOn ? 'Torch on.' : 'Torch off.', '🔦'); }
+  } else if (item.use === 'torch') { torchOn = !torchOn; player.setTorch(torchOn); audio.play('click'); say(torchOn ? 'Torch on.' : 'Torch off.', '🔦'); }
   else if (item.use === 'bugle') { player.gesture('blow', 1.3); audio.play('bugle'); villagers.hearBell({ x: p.x, z: p.z }); vitals.add({ cheer: 3 }); busy(1.2); }
   else if (item.use === 'bandage') { bag.remove(id, 1); vitals.add({ energy: 45, cheer: 5 }); player.gesture('rub', 1.3); audio.play('discover'); say('Good as new.', '🩹'); busy(1.2); }
   else if (item.use === 'stoke') {
@@ -575,14 +576,16 @@ function step() {
   audio.setSea(Math.min(1, Math.max(0, (landR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
-  torch.position.set(player.position.x + player.facing.x * 0.9, player.position.y + 1.15, player.position.z + player.facing.z * 0.9);
-  torch.intensity += ((torchOn ? 5 + night * 9 : 0) - torch.intensity) * 0.2;
+  torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.62, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
+  torch.target.position.set(player.position.x + player.facing.x * 9, player.position.y + 0.1, player.position.z + player.facing.z * 9);
+  torch.intensity += ((torchOn && !player.asleep ? 30 + night * 190 : 0) - torch.intensity) * 0.25;
 
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
   const target = paused || filming || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
   hintTarget = target ? target.prompt().split(' — ').slice(1).join(' — ') : null;
+  player.focus = target ? target.position : null;
   if (target && target.kind === 'pickup') tip('pickup', 'Press E to pick things up. They go in your backpack: press B to look inside.');
   if (target) {
     ui.setPrompt(target.prompt());

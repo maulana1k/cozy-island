@@ -40,7 +40,7 @@ export function sunDirection(t) {
 }
 
 // Key looks through the day; values between keys are blended.
-const NIGHT = { top: 0x232f66, horizon: 0x52639e, sun: 0xa9bcff, ambient: 0x8f9ee0, fog: 0x44548c, sunIntensity: 0.7, ambientIntensity: 1.25 };
+const NIGHT = { top: 0x070b24, horizon: 0x18203f, sun: 0x8fa4e6, ambient: 0x56669f, fog: 0x0e142c, sunIntensity: 0.2, ambientIntensity: 0.3 }; // properly dark: bring a torch
 const KEYS = [
   [0.00, NIGHT],
   [0.06, NIGHT],

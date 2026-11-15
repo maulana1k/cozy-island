@@ -41,7 +41,7 @@ test('holding E does not repeat', () => {
 });
 test('hop and mute are consumed once', () => {
   const { keys, input } = make();
-  keys.dispatchEvent(key('keydown', 'Space')); keys.dispatchEvent(key('keydown', 'KeyM'));
+  keys.dispatchEvent(key('keydown', 'Space')); keys.dispatchEvent(key('keydown', 'KeyN'));
   expect(input.consumeHop()).toBe(true); expect(input.consumeHop()).toBe(false);
   expect(input.consumeMute()).toBe(true); expect(input.consumeMute()).toBe(false);
 });

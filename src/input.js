@@ -21,7 +21,7 @@ export function createInput(keyTarget, pointerTarget) {
     held.add(e.code);
     if (e.code === 'Space') hop = true;
     if (e.code === 'KeyE') interact = true;
-    if (e.code === 'KeyM') mute = true;
+    if (e.code === 'KeyN') mute = true;
     if (e.code === 'KeyX') sit = true;
     if (e.code === 'KeyF') join = true;
   });

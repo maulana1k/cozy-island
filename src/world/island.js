@@ -18,7 +18,7 @@ function buildTerrain() {
   const grass = C(PALETTE.grass), grassDark = C(PALETTE.grassDark), grassHill = C(PALETTE.grassHill);
   const sand = C(PALETTE.sand), sandWet = C(PALETTE.sandWet);
   const trail = C(0xedd2a0), trailEdge = C(0xc9a26a), soil = C(0xc4914f), meadow = C(0x9cc468), meadowDark = C(0x7fae56);
-  const forest = C(0x86a85a), forestSoil = C(0x8f7a4c), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xb3a8ad);
+  const forest = C(0xc9b866), forestSoil = C(0xb39a58), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xb3a8ad);
   const c = new THREE.Color();
   const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
   const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);
@@ -33,7 +33,7 @@ function buildTerrain() {
       c.lerp(grassHill, Math.min(1, Math.max(0, (h - 2) / HILL.height)) * 0.8);
       // Jungle floor: greener, with dark leaf-litter soil showing through.
       const j = jungleAt(x, z);
-      if (j > 0) c.lerp(forest, j * 0.85).lerp(forestSoil, j * smooth((speck(x * 0.6, z * 0.6) - 0.55) / 0.3) * 0.6);
+      if (j > 0) c.lerp(forest, j * 0.7).lerp(forestSoil, j * smooth((speck(x * 0.6, z * 0.6) - 0.55) / 0.3) * 0.45);
       // Lush meadow round the pond, mud at its edge, a dark bed under the water.
       c.lerp(meadow, smooth(1 - (pd - POND.rw - 2) / 8)).lerp(meadowDark, smooth(1 - (pd - POND.rw - 2) / 8) * blotch(x * 2, z * 2) * 0.5);
       c.lerp(mud, smooth(1 - (pd - POND.rw - 0.4) / 1.8)).lerp(mudWet, smooth(1 - (pd - POND.rw + 0.6) / 1.2));
@@ -97,7 +97,9 @@ const waterFragment = /* glsl */ `
     float wobble = sin(ang * 14.0 + uTime * 0.6) * 0.35 + sin(ang * 31.0 - uTime * 0.9) * 0.18;
     float tide = sin(uTime * 0.5) * 0.45;
     float edge = r - (uShore + 0.25 + wobble + tide);
-    float foam = 1.0 - smoothstep(0.0, 0.7, abs(edge));
+    // A broad band of white surf lapping at the shore, with a broken leading edge.
+    float surf = edge + sin(ang * 60.0 + uTime * 1.4) * 0.25 + sin(ang * 133.0 - uTime) * 0.12;
+    float foam = step(-0.9, surf) * (1.0 - smoothstep(1.6, 2.5, surf));
     float edge2 = r - (uShore + 2.6 + wobble * 1.4 - tide);
     foam += (1.0 - smoothstep(0.0, 0.35, abs(edge2))) * 0.55;
     col = mix(col, uFoam, clamp(foam, 0.0, 1.0) * 0.85);

@@ -182,7 +182,7 @@ export function createFigure({
   let phase = 0, lastElapsed = null, gait = 0, run = 0;
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
-  const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0 };
+  const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0 };
 
   return {
     group,
@@ -208,6 +208,7 @@ export function createFigure({
       phase += (dt * speed * Math.PI) / stepLen;
       const s = Math.sin(phase), c2 = Math.cos(phase + 0.6);
       const t = { ...pose };
+      t.hy = 0; t.hp = 0;
 
       // ---- Walking and running
       // The legs open just wide enough to cover that step, whatever the length of leg.
@@ -217,7 +218,9 @@ export function createFigure({
       t.knR = (0.12 + (0.7 + run * 0.75) * Math.max(0, -c2)) * gait;
       const B = (0.45 + run * 0.45) * gait;
       t.shLx = s * B; t.shRx = -s * B;
-      t.shLz = -0.14 - run * 0.2; t.shRz = 0.14 + run * 0.2;
+      // Arms flap out a bit when running flat out, like a kid who cannot quite keep them in.
+      t.shLz = -0.14 - run * (0.2 + Math.max(0, Math.sin(phase * 2 + 1)) * 0.22); t.shRz = 0.14 + run * (0.2 + Math.max(0, Math.sin(phase * 2)) * 0.22);
+      t.hp = -run * 0.12 + Math.sin(phase * 2) * 0.05 * gait;
       t.elL = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, -s) * 0.25 * gait;
       t.elR = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, s) * 0.25 * gait;
       t.spreadL = 0; t.spreadR = 0;
@@ -319,6 +322,22 @@ export function createFigure({
           case 'throw': mix('shRx', u < 0.45 ? 0.9 : -2.6); mix('elR', u < 0.45 ? -1.6 : -0.1); mix('shRz', 0.3); t.lean += (u < 0.45 ? -0.15 : 0.22) * env; break;
           case 'catch': mix('shRx', -2.3); mix('shLx', -2.3); mix('elR', -0.5); mix('elL', -0.5); mix('shRz', -0.15); mix('shLz', 0.15); break;
           case 'laugh': mix('shRx', -0.6); mix('shLx', -0.6); mix('elR', -1.7); mix('elL', -1.7); mix('shRz', -0.4); mix('shLz', 0.4); t.py += Math.abs(osc(10)) * 0.05 * env; t.lean += 0.2 * env; break;
+          // ---- Little accidents and idle fidgets
+          case 'stumble': { // trip, windmill the arms, catch yourself with a hop
+            const fall = Math.sin(Math.min(1, u * 1.6) * Math.PI);
+            t.lean += 0.75 * fall; t.shLx = lerp(t.shLx, Math.sin(u * 26) * 1.6 - 0.8, env); t.shRx = lerp(t.shRx, Math.sin(u * 26 + 2) * 1.6 - 0.8, env);
+            mix('shLz', -1.0); mix('shRz', 1.0); mix('elL', -0.3); mix('elR', -0.3); t.thL += Math.sin(u * 30) * 0.6 * env; t.thR -= Math.sin(u * 30) * 0.6 * env;
+            t.py += Math.max(0, Math.sin((u - 0.55) * Math.PI * 2.2)) * 0.1; t.hp += 0.3 * fall; break;
+          }
+          case 'bonk': // walked into something: rock back, hands up, shake it off
+            t.lean -= 0.42 * env; mix('shLx', -2.2); mix('shRx', -2.2); mix('elL', -1.4); mix('elR', -1.4); t.hy += osc(9) * 0.5 * env; t.hp -= 0.3 * env; t.py -= 0.03 * env; break;
+          case 'skid': // stopping in a hurry: lean back, arms out front, heels dug in
+            t.lean -= 0.4 * env; mix('shLx', -1.1); mix('shRx', -1.1); mix('shLz', -0.5); mix('shRz', 0.5); mix('thL', -0.7); mix('thR', -0.45); mix('knL', 0.2); mix('knR', 0.5); break;
+          case 'scratch': mix('shRx', -2.5); mix('shRz', -0.25); mix('elR', -1.7 + osc(14) * 0.18); t.hy += 0.25 * env; t.hp += 0.12 * env; break;
+          case 'stretch': mix('shRz', 2.75); mix('shLz', -2.75); mix('shRx', 0); mix('shLx', 0); mix('elR', -0.15); mix('elL', -0.15); t.lean -= 0.16 * env; t.py += 0.035 * env; t.hp -= 0.3 * env; break;
+          case 'yawn': mix('shRx', -1.9); mix('elR', -2.2); mix('shRz', -0.3); t.hp -= 0.4 * env; t.lean -= 0.06 * env; break;
+          case 'tapfoot': t.thR = lerp(t.thR, -0.35 + Math.max(0, osc(10)) * 0.3, env); mix('shLz', -0.5); mix('elL', -1.7); mix('shRz', 0.5); mix('elR', -1.7); t.hy += osc(2) * 0.4 * env; break;
+          case 'lookabout': t.hy += Math.sin(u * Math.PI * 2) * 0.95; t.hp -= 0.08 * env; mix('shRx', -0.2); break;
           case 'peer': mix('shRx', -1.5); mix('shLx', -1.5); mix('elR', -2.0); mix('elL', -2.0); mix('shRz', -0.3); mix('shLz', 0.3); t.lean += 0.12 * env; break;
           default: mix('shRx', -1.35); mix('elR', -0.25); mix('shRz', 0.1); t.lean += 0.1 * env; // 'reach'
         }
@@ -340,11 +359,14 @@ export function createFigure({
       inner.rotation.x = pose.lean + (o.pitch || 0);
       inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w;
       const stretch = o.air !== undefined ? Math.abs(o.air) * 0.05 : 0;
-      inner.scale.set(1 + land * 0.07 - stretch * 0.5, 1 - land * 0.1 + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.008, 1 + land * 0.07 - stretch * 0.5);
+      // A springy little squash on every footfall, more so at a run.
+      const boing = Math.sin(phase * 2 + 0.6) * 0.04 * gait * (1 + run * 0.9);
+      inner.scale.set(1 + land * 0.09 - stretch * 0.5 - boing * 0.5, 1 - land * 0.14 + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.008 + boing, 1 + land * 0.09 - stretch * 0.5 - boing * 0.5);
       // The head stays level and looks about a little when standing.
-      neck.rotation.x = -inner.rotation.x * 0.6;
-      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1);
-      neck.rotation.z = -inner.rotation.z * 0.5;
+      // The head bobbles from side to side with each step, and looks about when standing.
+      neck.rotation.x = -inner.rotation.x * 0.6 + pose.hp;
+      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) + pose.hy;
+      neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.09 * gait * (1 + run * 0.6);
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
       else inner.position.set(0, 0, 0);

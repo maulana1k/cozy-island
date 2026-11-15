@@ -23,7 +23,8 @@ export function createPlayer(scene, opts = {}) {
   const vel = { x: 0, z: 0 };
   let vy = 0, airborne = false, heading = Math.PI;
   let buffer = 0, coyote = 0, land = 0, roll = 0, pitch = 0, sinceStep = 0, lastSpeed = 0;
-  let gesture = null, look = null, onGround = false;
+  let gesture = null, look = null, onGround = false, idleFor = 0, nextFidget = 5, stumbleRest = 0;
+  const FIDGETS = [['scratch', 1.3], ['stretch', 1.6], ['yawn', 1.6], ['tapfoot', 1.8], ['lookabout', 1.8], ['lookabout', 1.8]];
 
   const player = {
     position, facing, radius: PLAYER_RADIUS,
@@ -31,6 +32,7 @@ export function createPlayer(scene, opts = {}) {
     get heading() { return heading; },
     onStep: null, // (surface, running) => void
     onLand: null, // (surface) => void
+    onOops: null, // (kind: 'stumble' | 'bonk' | 'skid') => void
     // Plays a one-off gesture; while standing still the body also turns to face what it is for.
     gesture(name = 'reach', seconds = 0.75, target = null) {
       gesture = { name, t: 0, dur: seconds };
@@ -105,13 +107,28 @@ export function createPlayer(scene, opts = {}) {
           next = constrainToShore(prev, next, groundAt);
           position.x = next.x; position.z = next.z;
           // Whatever a wall took away is gone from the speed too, so you slide along it.
+          const before = Math.hypot(vel.x, vel.z);
           if (dt > 0) { vel.x = (next.x - prev.x) / dt; vel.z = (next.z - prev.z) / dt; }
+          // Running flat out into something: bounce off with a silly recoil.
+          if (before > 4.6 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture) {
+            vel.x = -Math.sin(heading) * 1.6; vel.z = -Math.cos(heading) * 1.6;
+            gesture = { name: 'bonk', t: 0, dur: 0.7 }; if (player.onOops) player.onOops('bonk');
+          }
           sinceStep += Math.hypot(next.x - prev.x, next.z - prev.z);
         }
         const speed = Math.hypot(vel.x, vel.z);
         // One footfall per step, in time with the legs (same step length as the animation).
         const stride = 0.26 + 0.12 * speed;
-        if (sinceStep >= stride && !airborne) { sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 4); }
+        if (sinceStep >= stride && !airborne) {
+          sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 4);
+          // Now and then a running scout trips over their own feet, more often on slippery ground.
+          stumbleRest -= 1;
+          if (speed > 4.6 && stumbleRest <= 0 && !gesture && Math.random() < (surface === 'mud' ? 0.14 : surface === 'forest' || surface === 'meadow' ? 0.035 : 0.018)) {
+            gesture = { name: 'stumble', t: 0, dur: 0.75 }; vel.x *= 0.5; vel.z *= 0.5; stumbleRest = 14; if (player.onOops) player.onOops('stumble');
+          }
+        }
+        // Letting go of the keys at a run: skid to a stop.
+        if (!wantsMove && speed > 4.4 && !airborne && !gesture) { gesture = { name: 'skid', t: 0, dur: 0.45 }; if (player.onOops) player.onOops('skid'); }
 
         const ground = groundAt(position.x, position.z);
         coyote = airborne ? coyote - dt : COYOTE;
@@ -154,6 +171,9 @@ export function createPlayer(scene, opts = {}) {
       lastSpeed = speed;
       land = Math.max(0, land - dt / 0.3);
       if (gesture) { gesture.t += dt; if (gesture.t >= gesture.dur) gesture = null; }
+      // Left standing about, a scout soon starts to fidget.
+      idleFor = speed < 0.1 && !gesture && !player.sitting && !player.act && !airborne ? idleFor + dt : 0;
+      if (idleFor > nextFidget) { const f = FIDGETS[Math.floor(Math.random() * FIDGETS.length)]; gesture = { name: f[0], t: 0, dur: f[1] }; idleFor = 0; nextFidget = 4 + Math.random() * 6; }
 
       facing.x = Math.sin(heading); facing.z = Math.cos(heading);
       player.speed = speed; player.moving = speed > 0.3; player.airborne = airborne;

@@ -24,7 +24,9 @@ Then open the address it prints (normally http://localhost:5173).
 | Shift | Run |
 | Space | Hop |
 | E | Use the thing in front of you |
-| M | Mute or unmute |
+| M | Open or close the map |
+| N | Sound on or off |
+| F | Join in with what the camp is doing |
 | X | Sit down or stand up |
 | C | Free look on or off |
 | J | Open or close the journal side bar |

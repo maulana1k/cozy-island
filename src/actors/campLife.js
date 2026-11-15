@@ -92,7 +92,7 @@ export function createCampLife(scene, deps) {
 
   const staff = [chief, trainer, clerk, carrier, doctor];
   const interactables = staff.map((p, k) => ({
-    id: `staff-${k}`, kind: 'villager', position: p, get markerY() { return groundAt(p.x, p.z) + 1.95; },
+    id: `staff-${k}`, kind: 'villager', speaker: ['Chief Scout', 'Trainer', 'Stores Teacher', 'Logistics Teacher', 'Medical Teacher'][k], position: p, get markerY() { return groundAt(p.x, p.z) + 1.95; },
     get enabled() { return !p.member.hidden; },
     prompt: () => `E — greet ${p.name}`,
     interact() { react(p, k === 0 ? 'salute' : 'wave', 1.2); emote(p, 'heart'); audio.play('squeak'); },
@@ -160,6 +160,8 @@ export function createCampLife(scene, deps) {
           const wl = Math.hypot(wx, wz) || 1, tx = (wx / wl) * top, tz = (wz / wl) * top;
           const dvx = tx - r.vx, dvz = tz - r.vz, dv = Math.hypot(dvx, dvz), step = 11 * dt;
           if (dv <= step) { r.vx = tx; r.vz = tz; } else { r.vx += (dvx / dv) * step; r.vz += (dvz / dv) * step; }
+          // Every so often somebody trips over their own feet.
+          if (!r.react && r.speed > 3.5 && Math.random() < dt * 0.05) { react(r, 'stumble', 0.75); r.vx *= 0.4; r.vz *= 0.4; }
           r.x += r.vx * dt; r.z += r.vz * dt; r.speed = Math.hypot(r.vx, r.vz);
           if (r.speed > 0.3) r.rot = Math.atan2(r.vx, r.vz);
         });

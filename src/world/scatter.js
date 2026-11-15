@@ -8,7 +8,7 @@ import { PALETTE, SEED } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 const SHAKE_TIME = 0.8;
-const GRASS_TUFTS = 9500;
+const GRASS_TUFTS = 7000;
 const FERNS = 260;
 
 // A faceted lump, squashed and placed.
@@ -38,7 +38,7 @@ function ribbonClump({ blades, height, width, spread, droop, rows = 4, shape = '
     for (let i = 0; i <= rows; i++) {
       const t = i / rows, out = r0 + bend * hb * t * t, y = hb * (t - 0.22 * bend * t * t);
       const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : (1 - t * t * 0.92));
-      pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, 0.58 + 0.42 * t]);
+      pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, 0.8 + 0.2 * t]);
     }
     for (let i = 0; i < rows; i++) {
       const p = pts[i], q = pts[i + 1];
@@ -64,27 +64,32 @@ function stick(x0, y0, z0, x1, y1, z1, r0, r1) {
 }
 
 // Three kinds of tree: a tall umbrella pine, a low forked olive, and a slim cypress.
+// A flat, rounded pad of foliage: the canopy of these trees is a few such pads, one at the end of each branch.
+const pad = (x, y, z, w, h, d, rot = 0) => leafy(x, y, z, w, h, d, rot);
+
+// Trees are a bare, slightly leaning trunk with branches, each carrying its own pad of leaves.
 const TREE_KINDS = [
-  {
-    color: 0x6f8a4c,
-    trunk: () => mergeGeometries([stick(0, 0, 0, 0.15, 3.3, 0, 0.3, 0.17), stick(0.1, 2.3, 0, -0.9, 3.4, 0.3, 0.12, 0.07), stick(0.1, 2.5, 0, 0.9, 3.5, -0.4, 0.12, 0.07)]),
-    canopy: () => mergeGeometries([blob(0.1, 3.9, 0, 1.9, 0.62, 1.7), blob(-1.3, 3.6, 0.4, 1.2, 0.5, 1.1, 0.6), blob(1.3, 3.7, -0.5, 1.25, 0.5, 1.1, 1.1), blob(0.2, 3.55, 1.2, 1.0, 0.42, 0.9, 2), blob(0, 4.3, -0.2, 1.1, 0.45, 1.0, 0.3)]),
-    top: 3.8,
+  { // umbrella pine
+    color: 0x56733f,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0.3, 2.3, 0.05, 0.3, 0.22), stick(0.3, 2.3, 0.05, 0.15, 3.9, 0.1, 0.22, 0.15),
+      stick(0.2, 3.3, 0.08, -1.3, 4.3, 0.35, 0.12, 0.07), stick(0.18, 3.6, 0.1, 1.35, 4.6, -0.4, 0.12, 0.07), stick(0.15, 3.9, 0.1, 0.25, 5.0, 0.95, 0.1, 0.06)]),
+    canopy: () => mergeGeometries([pad(-1.45, 4.55, 0.4, 1.25, 0.42, 1.05, 0.4), pad(1.5, 4.85, -0.45, 1.3, 0.44, 1.1, 1.2), pad(0.3, 5.25, 1.05, 1.1, 0.4, 0.95, 2.1), pad(0.1, 5.5, -0.1, 1.45, 0.46, 1.25, 0.2)]),
+    top: 4.7,
   },
-  {
-    color: 0x9db38a,
-    trunk: () => mergeGeometries([stick(0, 0, 0, -0.1, 1.2, 0, 0.3, 0.2), stick(-0.1, 1.1, 0, -0.75, 2.1, 0.2, 0.15, 0.08), stick(-0.1, 1.1, 0, 0.7, 2.2, -0.15, 0.15, 0.08), stick(-0.1, 1.1, 0, 0.05, 2.3, 0.6, 0.12, 0.07)]),
-    canopy: () => mergeGeometries([blob(-0.85, 2.45, 0.25, 0.95, 0.6, 0.9), blob(0.8, 2.55, -0.2, 1.0, 0.62, 0.9, 0.8), blob(0.05, 2.75, 0.7, 0.85, 0.55, 0.8, 1.6), blob(0, 2.95, -0.1, 0.9, 0.5, 0.85, 2.4)]),
+  { // olive: low and wide, forking near the ground
+    color: 0x82966a,
+    trunk: () => mergeGeometries([stick(0, 0, 0, -0.1, 1.1, 0, 0.3, 0.2), stick(-0.1, 1.0, 0, -0.9, 2.0, 0.25, 0.15, 0.08), stick(-0.1, 1.0, 0, 0.8, 2.15, -0.2, 0.15, 0.08), stick(-0.1, 1.0, 0, 0.1, 2.3, 0.75, 0.12, 0.07)]),
+    canopy: () => mergeGeometries([pad(-1.0, 2.3, 0.3, 0.95, 0.42, 0.85), pad(0.9, 2.45, -0.25, 1.0, 0.44, 0.9, 0.8), pad(0.1, 2.65, 0.85, 0.85, 0.4, 0.8, 1.6), pad(0, 2.9, -0.1, 0.9, 0.4, 0.85, 2.4)]),
     top: 2.6,
   },
-  {
-    color: 0x5c7f58,
-    trunk: () => stick(0, 0, 0, 0, 1.3, 0, 0.2, 0.16),
-    canopy: () => { const g = new THREE.ConeGeometry(0.95, 4.2, 6).toNonIndexed(); g.translate(0, 3.1, 0); return g; },
-    top: 3.2,
+  { // young pine: one trunk, one broad pad and a smaller one
+    color: 0x4c6a3c,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0.12, 2.7, 0, 0.2, 0.12), stick(0.1, 2.0, 0, -0.75, 2.75, 0.2, 0.08, 0.05)]),
+    canopy: () => mergeGeometries([pad(0.12, 3.05, 0, 1.2, 0.45, 1.05), pad(-0.85, 2.85, 0.25, 0.7, 0.32, 0.62, 1)]),
+    top: 3.0,
   },
   { // palm: a leaning trunk with drooping fronds
-    color: 0x7fb257,
+    color: 0x7f9a55,
     trunk: () => mergeGeometries([stick(0, 0, 0, 0.25, 1.7, 0, 0.24, 0.18), stick(0.25, 1.7, 0, 0.7, 3.3, 0, 0.18, 0.15), stick(0.7, 3.3, 0, 0.95, 4.7, 0, 0.15, 0.12)]),
     canopy: () => {
       const fronds = [];
@@ -98,24 +103,34 @@ const TREE_KINDS = [
     },
     top: 4.4,
   },
-  { // jungle giant: thick trunk, buttress roots and a deep layered crown
-    color: 0x4c8750,
-    trunk: () => mergeGeometries([stick(0, 0, 0, 0, 4.4, 0, 0.5, 0.3), stick(0.75, 0, 0.2, 0.15, 1.3, 0, 0.16, 0.1), stick(-0.6, 0, 0.5, -0.1, 1.2, 0, 0.16, 0.1), stick(-0.2, 0, -0.8, 0, 1.2, 0, 0.16, 0.1),
-      stick(0, 3.4, 0, 1.5, 4.8, 0.4, 0.16, 0.09), stick(0, 3.6, 0, -1.4, 4.9, -0.6, 0.16, 0.09)]),
-    canopy: () => mergeGeometries([blob(0, 5.4, 0, 2.4, 1.0, 2.2), blob(1.7, 5.0, 0.6, 1.5, 0.8, 1.4, 0.7), blob(-1.6, 5.1, -0.7, 1.6, 0.8, 1.4, 1.4), blob(0.3, 4.8, -1.7, 1.3, 0.7, 1.2, 2.2), blob(-0.4, 4.9, 1.8, 1.3, 0.7, 1.2, 0.2), blob(0, 6.3, 0, 1.6, 0.8, 1.5, 1)]),
-    top: 5.0,
+  { // old pine: a thick, tall trunk and a wide crown of big pads
+    color: 0x455f39,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0.35, 3.0, 0.1, 0.48, 0.36), stick(0.35, 3.0, 0.1, 0.2, 5.2, 0.15, 0.36, 0.22),
+      stick(0.3, 4.2, 0.12, -2.0, 5.5, 0.5, 0.17, 0.09), stick(0.28, 4.6, 0.12, 2.1, 5.9, -0.6, 0.17, 0.09), stick(0.22, 5.0, 0.14, 0.3, 6.3, 1.7, 0.14, 0.08), stick(0.22, 5.1, 0.14, 0.1, 6.5, -1.5, 0.14, 0.08)]),
+    canopy: () => mergeGeometries([pad(-2.2, 5.8, 0.55, 1.75, 0.55, 1.5, 0.5), pad(2.3, 6.2, -0.65, 1.8, 0.56, 1.55, 1.3), pad(0.35, 6.6, 1.9, 1.5, 0.5, 1.3, 2.2), pad(0.1, 6.8, -1.65, 1.5, 0.5, 1.3, 0.9), pad(0.15, 7.1, 0.1, 2.0, 0.6, 1.8, 0.1)]),
+    top: 5.8,
   },
-  { // young tree: a slim stem and a small round crown
-    color: 0x8fb866,
+  { // sapling
+    color: 0x7f9a5e,
     trunk: () => mergeGeometries([stick(0, 0, 0, 0.05, 1.5, 0, 0.09, 0.06), stick(0.03, 1.0, 0, 0.4, 1.6, 0.1, 0.04, 0.03), stick(0.03, 1.1, 0, -0.35, 1.7, -0.1, 0.04, 0.03)]),
-    canopy: () => mergeGeometries([leafy(0.05, 2.0, 0, 0.75, 0.7, 0.72), leafy(0.5, 1.75, 0.15, 0.48, 0.42, 0.46, 1), leafy(-0.45, 1.85, -0.15, 0.5, 0.44, 0.46, 2)]),
+    canopy: () => mergeGeometries([pad(0.05, 1.95, 0, 0.75, 0.38, 0.7), pad(0.5, 1.72, 0.15, 0.45, 0.26, 0.42, 1), pad(-0.45, 1.82, -0.15, 0.48, 0.28, 0.44, 2)]),
     top: 1.9,
   },
 ];
 
 const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
-const tuftGeometry = () => ribbonClump({ blades: 8, height: 0.42, width: 0.022, spread: 0.2, droop: 0.9, rows: 3 });
+// Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
+const tuftGeometry = () => ribbonClump({ blades: 9, height: 0.8, width: 0.05, spread: 0.2, droop: 0.42, rows: 2 });
+
+// A chunky angular block of stone with a flat top.
+function rockGeometry() {
+  const g = new THREE.DodecahedronGeometry(0.75, 0);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * 1.15, Math.max(-0.3, Math.min(0.42, p.getY(i))), p.getZ(i) * 0.9);
+  g.translate(0, 0.25, 0); g.computeVertexNormals();
+  return g;
+}
 
 // A rounded leafy bush made of a few lumps.
 function bushGeometry() {
@@ -168,13 +183,17 @@ export function createScatter(scene) {
   });
 
   // ---- Rocks
-  const rockGeo = new THREE.DodecahedronGeometry(0.6, 0); rockGeo.scale(1.15, 0.75, 0.95); rockGeo.translate(0, 0.25, 0);
-  const rocks = new THREE.InstancedMesh(rockGeo, flat(0xffffff), data.rocks.length);
+  // Rocks: the ones laid out on land, plus dark boulders scattered along the waterline.
+  const rockRng = createRng(SEED + 61);
+  const shore = Array.from({ length: 34 }, () => { const a = rockRng() * Math.PI * 2, r = 57.5 + rockRng() * 5; return { x: Math.cos(a) * r, z: Math.sin(a) * r, scale: 0.7 + rockRng() * 1.6, rot: rockRng() * 6.28, shore: true }; });
+  const allRocks = [...data.rocks, ...shore];
+  const ROCK_TONES = [0xd9b47c, 0xcba56c, 0xbf9a68, 0xa98a6c], SHORE_TONES = [0x7a6050, 0x8a6e5a, 0x6b5648];
+  const rocks = new THREE.InstancedMesh(rockGeometry(), flat(0xffffff), allRocks.length);
   rocks.castShadow = true; rocks.receiveShadow = true;
-  data.rocks.forEach((r, i) => {
-    dummy.position.set(r.x, heightAt(r.x, r.z) - 0.05, r.z); dummy.rotation.set(Math.sin(i) * 0.2, r.rot, Math.cos(i * 1.3) * 0.2); dummy.scale.setScalar(r.scale); dummy.updateMatrix();
+  allRocks.forEach((r, i) => {
+    dummy.position.set(r.x, Math.max(heightAt(r.x, r.z), -0.25) - 0.08, r.z); dummy.rotation.set(Math.sin(i) * 0.12, r.rot, Math.cos(i * 1.3) * 0.12); dummy.scale.set(r.scale, r.scale * (0.8 + (i % 3) * 0.25), r.scale); dummy.updateMatrix();
     rocks.setMatrixAt(i, dummy.matrix);
-    rocks.setColorAt(i, color.setHex(i % 2 ? PALETTE.stone : PALETTE.stoneDark).offsetHSL(0, 0, Math.sin(i * 1.7) * 0.03));
+    rocks.setColorAt(i, color.setHex(r.shore ? SHORE_TONES[i % 3] : ROCK_TONES[i % 4]).offsetHSL(0, 0, Math.sin(i * 1.7) * 0.02));
   });
 
   // ---- Flowers: stems and heads
@@ -199,29 +218,32 @@ export function createScatter(scene) {
       #ifdef USE_INSTANCING
         float swayA = sin(uTime * 1.5 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27);
         float swayB = cos(uTime * 1.1 + instanceMatrix[3].x * 0.21 - instanceMatrix[3].z * 0.18);
-        transformed.x += swayA * 0.22 * position.y * position.y;
-        transformed.z += swayB * 0.14 * position.y * position.y;
+        transformed.x += swayA * 0.1 * position.y * position.y;
+        transformed.z += swayB * 0.07 * position.y * position.y;
       #endif`);
   };
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
-  const grassColors = [0xf0cf72, 0xe3b85a, 0xf6dc8c, 0xd7b257, 0xc9c06a];
-  const lushColors = [0x8fbf5f, 0x7aae52, 0xa6cf6e, 0x6f9f4c, 0xb7d27a];
-  while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 12) {
+  const grassColors = [0xdcd29c, 0xcfc58a, 0xe6deb0, 0xc3bd80, 0xd3c489];
+  const lushColors = [0xa3ad68, 0x93a05c, 0xb3bb76, 0x869555, 0xbcc07f];
+  while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 40) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.25) continue;
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 6.2 || Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 2.6) continue;
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < Math.max(c.width, c.depth) / 2 + 1)) continue;
     if (Math.hypot(x - FIELD.x, z - FIELD.z) < 5 || TENTS.some((t) => Math.hypot(x - t.x, z - t.z) < 1.9)) continue;
     // Grass grows in drifts rather than evenly.
-    const drift = Math.sin(x * 0.22 + Math.cos(z * 0.19) * 1.7) * Math.cos(z * 0.17 + 1.3);
-    if (drift < -0.25 && rng() < 0.8) continue;
+    // Grass grows in thick stands with open ground between, and is kept thin and short round the camp.
+    const drift = Math.sin(x * 0.31 + Math.cos(z * 0.27) * 1.9) * Math.cos(z * 0.29 + 1.3) + Math.sin(x * 0.9 + z * 0.7) * 0.25;
+    const inCamp = Math.hypot(x - 10, z - 8) < 19;
+    if (drift < 0.12 && rng() < 0.93) continue;
+    if (inCamp && rng() < 0.7) continue;
     const pd = Math.hypot(x - POND.x, z - POND.z);
     if (pd < POND.rw + 1.3) continue; // bare mud at the water's edge
     const lush = Math.max(jungleAt(x, z), pd < POND.rw + 9 ? 1 : 0);
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0);
-    const s = 0.7 + rng() * 0.7; dummy.scale.set(s, s * (lush > 0.5 ? 1.0 + rng() * 0.9 : 0.6 + rng() * 0.8), s); dummy.updateMatrix();
+    const s = 0.75 + rng() * 0.6; dummy.scale.set(s, s * (inCamp ? 0.45 + rng() * 0.3 : 0.7 + rng() * 0.8), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
     grass.setColorAt(placed, color.setHex((lush > 0.5 ? lushColors : grassColors)[Math.floor(rng() * 5)]));
     placed++;

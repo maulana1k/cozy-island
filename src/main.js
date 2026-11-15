@@ -83,6 +83,15 @@ player.onStep = (surface, running) => {
   if (surface === 'sand') discover('place-beach');
   if (surface === 'water' && pondDistance(player.position.x, player.position.z) < POND.rw) discover('place-pond');
 };
+// Little accidents: a puff of dust, a squeak and a startled look.
+const overHead = () => new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
+player.onOops = (kind) => {
+  const p = player.position;
+  if (kind === 'skid') { effects.puff(p.x, p.y, p.z, 5, 0xe9d3a0, 0.35, 0.3); audio.play('step:sand'); return; }
+  ui.emote(overHead(), kind === 'bonk' ? 'star' : 'surprise');
+  audio.play(kind === 'bonk' ? 'door' : 'squeak');
+  effects.puff(p.x, p.y, p.z, 4, 0xe9d3a0, 0.3, 0.4);
+};
 player.onLand = (surface) => { audio.play(`step:${surface}`); effects.land(surface, player.position); };
 
 // Buildings are hollow for the player (walls with a doorway); everyone else treats them as solid.
@@ -90,6 +99,8 @@ const allStatic = getColliders();
 const openStatic = allStatic.filter((c) => !c.building);
 const interactables = [...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 const playerXZ = { x: 0, z: 0 };
+const hintList = [];
+let hintTarget = null;
 
 // A different movement for each kind of thing you do: [gesture, seconds].
 const GESTURES = {
@@ -98,6 +109,20 @@ const GESTURES = {
 };
 const GREETINGS = [['wave', 0.9], ['salute', 0.9], ['cheer', 1.0], ['clap', 0.9]];
 let greetings = 0;
+
+// What people say when you greet them, depending on what the camp is doing.
+const CHATTER = {
+  exercise: ['One, two, three, four!', 'Morning! Try to keep up!', 'Stretch those arms!'],
+  ceremony: ['Shh! The flag is going up.', 'Stand up straight, scout.'],
+  work: ['I am practising my knots.', 'Semaphore is harder than it looks.', 'Lashings first, then the tripod.'],
+  lunch: ['Mmm, camp stew again.', 'Save me a seat!', 'Have you eaten yet?'],
+  free: ['Tag! You are it!', 'Have you been down the flying fox yet?', 'Race you to the dock!', 'The pond is great for wading.', 'Watch out for the chickens.'],
+  campfire: ['Do you know this song?', 'The chief tells the best stories.', 'Pass the marshmallows!'],
+  sleep: ['Zzz...', 'Shh, lights out.'],
+};
+const STAFF_CHATTER = { 'Chief Scout': ['Well done, scout. Keep exploring!', 'A scout is always prepared.'], Trainer: ['Fancy a few star jumps?'], 'Stores Teacher': ['Forty-two tins of beans. All present.'], 'Logistics Teacher': ['Mind your toes, heavy crate coming through!'], 'Medical Teacher': ['No scraped knees today, I hope?'] };
+let chatter = 0, speech = null;
+const speechPos = new THREE.Vector3();
 
 // ---- Interface: journal, ranks, clock, minimap, menu -----------------------
 const journal = createJournal();
@@ -108,6 +133,8 @@ function discover(id) {
   if (!d) return;
   hud.toast(d.label, journal.count, journal.total);
   refreshProgress();
+  // Finding a new place is worth a little jump for joy.
+  if (id.startsWith('place-') && !player.riding && !player.asleep) player.gesture('cheer', 1.0);
   const rank = journal.rank();
   if (rank.index > before) { hud.rankUp(rank.name); audio.play('rank'); } else audio.play('discover');
 }
@@ -118,6 +145,7 @@ function toggleMenu() {
   syncLook();
 }
 function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('ui'); syncLook(); } }
+function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syncLook(); } }
 
 // ---- Free look: the mouse turns the camera with no button held ---------------
 // The browser captures the mouse for this, so it is released whenever a menu or the journal
@@ -125,7 +153,7 @@ function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('u
 let freeLook = false;
 const mouseHeld = () => document.pointerLockElement === canvas;
 function syncLook() {
-  const want = freeLook && hud.started && !hud.menuOpen && !hud.journalOpen;
+  const want = freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen;
   if (want && !mouseHeld()) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* the browser may refuse; a click on the picture retries */ } }
   if (!want && mouseHeld()) document.exitPointerLock();
 }
@@ -133,7 +161,7 @@ function toggleLook() { freeLook = !freeLook; hud.setLook(freeLook); audio.play(
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
   // Esc releases the mouse before the game sees the key, so treat that as "pause".
-  if (!mouseHeld() && freeLook && hud.started && !hud.menuOpen && !hud.journalOpen) hud.openMenu();
+  if (!mouseHeld() && freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen) hud.openMenu();
 });
 canvas.addEventListener('click', syncLook);
 const hud = createHUD({
@@ -142,6 +170,7 @@ const hud = createHUD({
   onToggleMenu: toggleMenu,
   onToggleSound: toggleSound,
   onToggleJournal: toggleJournal,
+  onToggleMap: toggleMap,
   onSetTime: (t) => { timeOfDay = t; },
 });
 refreshProgress();
@@ -160,9 +189,10 @@ window.addEventListener('keydown', (e) => {
   if (!hud.started) { wake(); return; }
   if (e.repeat) return;
   if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
+  if (e.code === 'KeyM' && !hud.menuOpen) toggleMap();
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
   // Esc closes the journal first, then opens the pause menu.
-  if (e.code === 'Escape') { if (hud.journalOpen && !hud.menuOpen) toggleJournal(); else toggleMenu(); }
+  if (e.code === 'Escape') { if (hud.journalOpen && !hud.menuOpen) toggleJournal(); else if (hud.mapOpen && !hud.menuOpen) toggleMap(); else toggleMenu(); }
 });
 window.addEventListener('pointerdown', wake);
 // Debug aids for automated screenshots: ?play skips the start screen, ?x=&z=&yaw= place the player and camera.
@@ -170,6 +200,8 @@ if (params.has('play')) wake();
 if (params.has('x')) { player.position.x = Number(params.get('x')); player.position.z = Number(params.get('z') || 0); player.position.y = groundAt(player.position.x, player.position.z); }
 if (params.has('yaw')) rig.yaw = Number(params.get('yaw'));
 if (params.has('journal')) hud.toggleJournal();
+if (params.has('map')) hud.toggleMap();
+if (params.has('pause')) hud.openMenu();
 if (params.has('ride')) zipline.interactables[0].interact();
 if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0, Number(params.get('found')) || 5).forEach(discover);
 // Leaving the window pauses the game, so nothing happens while you are away.
@@ -253,7 +285,17 @@ function step() {
     player.act = player.act ? null : { pose: join.pose, sit: !!join.sit };
     if (player.act) { audio.play('ui'); discover('join'); }
   }
-  hud.setJoin(join ? join.verb : null, !!player.act);
+  // The key list bottom-right: only what is useful right now, the main action first.
+  hintList.length = 0;
+  if (hintTarget) hintList.push(['E', hintTarget, true]);
+  if (player.asleep) hintList.push(['W A S D', 'get up', true]);
+  else if (player.riding) hintList.push(['', 'hold on tight!', true]);
+  else {
+    if (join) hintList.push(['F', player.act ? `${join.verb} (move to stop)` : join.verb, false]);
+    hintList.push(['X', player.sitting ? 'stand up' : 'sit down', false]);
+    if (elapsed < 14) hintList.push(['W A S D', 'move', false], ['Shift', 'run', false], ['Space', 'hop', false]);
+  }
+  hud.setHints(hud.started ? hintList : []);
 
   // X sits you down: on a log or bench if one is right beside you, otherwise on the ground.
   if (!paused && input.consumeSit() && !player.riding) {
@@ -282,6 +324,7 @@ function step() {
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
   const target = paused || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
+  hintTarget = target ? target.prompt().split(' — ').slice(1).join(' — ') : null;
   if (target) {
     ui.setPrompt(target.prompt());
     ui.setMarker(target.position.x, target.markerY, target.position.z);
@@ -289,6 +332,11 @@ function step() {
       const g = target.kind === 'villager' ? GREETINGS[greetings++ % GREETINGS.length] : GESTURES[target.kind];
       if (g) player.gesture(g[0], g[1], target.position);
       target.interact();
+      if (target.kind === 'villager') {
+        const who = target.speaker || 'Scout', lines = Math.random() < 0.5 && STAFF_CHATTER[who] ? STAFF_CHATTER[who] : CHATTER[block.id] || CHATTER.free;
+        hud.say(who, lines[chatter++ % lines.length]);
+        speech = { x: target.position.x, z: target.position.z, y: target.markerY + 0.1, until: performance.now() + 2800 };
+      }
       discover(target.kind);
     }
   } else {
@@ -305,6 +353,10 @@ function step() {
   hud.setClock(clockText(timeOfDay), phaseLabel(phaseAt(timeOfDay)), night > 0.5, dayNumber);
   hud.setSteps(stepCount);
   hud.drawMap(playerXZ, player.facing, villagers.villagers.map((v) => v.position));
+  if (speech) {
+    if (performance.now() > speech.until) speech = null;
+    else { speechPos.set(speech.x, speech.y, speech.z).project(camera); hud.placeBubble((speechPos.x * 0.5 + 0.5) * window.innerWidth, (-speechPos.y * 0.5 + 0.5) * window.innerHeight, speechPos.z < 1); }
+  }
 
   rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed });
   sky.update(timeOfDay, elapsed, player.position);

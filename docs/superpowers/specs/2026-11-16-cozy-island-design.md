@@ -169,6 +169,24 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
   meshes, lantern lights are pooled, and resolution steps down
   automatically when frames run slow.
 
+### Fifth round of owner feedback
+
+- **Interface:** during play only white text and line icons over the
+  picture, no panels: rank and time top-left, tool icons bottom-left, a list
+  of the keys that matter right now bottom-right. The journal is a spiral
+  notebook, the map is a paper sheet opened with M (the minimap is gone),
+  greetings show a speech bubble, and the pause menu is white words on the
+  dimmed picture. Sound moved to N.
+- **World look:** trees with separate pads of foliage, tall flat-bladed
+  grass in stands, chunky angular rocks, sandier ground, a white surf line.
+  Both taken from the owner's reference pictures as style direction only.
+- **Sleeping:** six dormitory tents and a staff tent with a bed for
+  everyone; scouts lie in bed at night; the player sleeps until morning in
+  the gold-pillow bed.
+- **Joining in:** F does what the camp is doing; X sits.
+- **Small movements:** head wobble, a bounce on each step, idle fidgets,
+  stumbles, skids and bumping into things.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

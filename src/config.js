@@ -39,3 +39,7 @@ export const PALETTE = {
   lantern: 0xffc97a,
   fire: 0xff9a4a,
 };
+
+// Day cycle. Time of day is a fraction in [0, 1), 0 = midnight.
+export const DAY_LENGTH = 480;
+export const START_TIME = 0.69;

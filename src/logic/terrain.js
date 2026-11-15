@@ -28,8 +28,14 @@ export function heightAt(x, z) {
   const r = Math.hypot(x, z);
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
-  else if (r <= ISLAND_RADIUS) h = GRASS_HEIGHT * (1 - smooth((r - GRASS_RADIUS) / (ISLAND_RADIUS - GRASS_RADIUS)));
-  else h = SEA_FLOOR_DEPTH * smooth((r - ISLAND_RADIUS) / (SEA_FLOOR_RADIUS - ISLAND_RADIUS));
+  else if (r <= ISLAND_RADIUS) {
+    // Flat where it meets the grass, but still sloping where it meets the sea, so the waterline is crisp.
+    const t = (r - GRASS_RADIUS) / (ISLAND_RADIUS - GRASS_RADIUS);
+    h = GRASS_HEIGHT * (1 - t * t);
+  } else {
+    const s = Math.min(1, (r - ISLAND_RADIUS) / (SEA_FLOOR_RADIUS - ISLAND_RADIUS));
+    h = SEA_FLOOR_DEPTH * (0.5 * s + 0.5 * s * s);
+  }
 
   const hillDist = Math.hypot(x - HILL.x, z - HILL.z);
   if (hillDist < HILL.radius) h += HILL.height * smooth(1 - hillDist / HILL.radius);

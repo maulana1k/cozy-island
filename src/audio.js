@@ -162,6 +162,15 @@ export function createAudio(makeContext = () => new AudioContext()) {
     whistle() { tone(2300, { type: 'sine', dur: 0.16, gain: 0.05 }); tone(2300, { type: 'sine', dur: 0.4, gain: 0.05, delay: 0.22 }); },
     laugh() { for (let i = 0; i < 5; i++) tone(700 + i * 60 + Math.random() * 80, { type: 'triangle', dur: 0.09, gain: 0.05, delay: i * 0.1, to: 560 }); },
     cheer() { tone(D5, { dur: 0.2, gain: 0.06 }); tone(G5, { dur: 0.3, gain: 0.06, delay: 0.1 }); },
+    pickup() { tone(G5, { dur: 0.12, gain: 0.07 }); tone(C5 * 2, { dur: 0.22, gain: 0.07, delay: 0.07 }); },
+    munch() { for (let i = 0; i < 4; i++) hiss({ type: 'bandpass', freq: 1300 + Math.random() * 500, q: 1.2, dur: 0.07, gain: 0.07, delay: i * 0.17 }); },
+    gulp() { for (let i = 0; i < 3; i++) tone(240, { type: 'sine', dur: 0.12, gain: 0.09, delay: i * 0.22, to: 420 }); },
+    pour() { hiss({ freq: 1800, q: 0.5, dur: 0.9, gain: 0.05 }); tone(300, { type: 'sine', dur: 0.9, gain: 0.03, to: 760 }); },
+    rumble() { tone(70, { type: 'sine', dur: 0.5, gain: 0.12, to: 95 }); tone(88, { type: 'triangle', dur: 0.35, gain: 0.06, delay: 0.3, to: 60 }); },
+    bugle() { [[G5 / 2, 0], [C5, 0.16], [E5, 0.32], [G5, 0.48]].forEach(([f, d]) => { tone(f, { type: 'sawtooth', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.035, delay: d }); tone(f, { type: 'triangle', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.06, delay: d }); }); },
+    sizzle() { hiss({ type: 'highpass', freq: 3200, dur: 1.0, gain: 0.05 }); },
+    click() { tone(900, { type: 'square', dur: 0.03, gain: 0.03 }); },
+    nope() { tone(220, { type: 'triangle', dur: 0.12, gain: 0.06 }); tone(180, { type: 'triangle', dur: 0.16, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };
 

@@ -38,6 +38,7 @@ export function createPlayer(scene, opts = {}) {
       gesture = { name, t: 0, dur: seconds };
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
+    speedFactor: 1, canRun: true, // set from how the scout is feeling
     riding: null, // set while hanging from the flying fox; the ride moves the player
     asleep: null, // set while lying in bed: { x, z, rot }
     act: null,    // joining in with the camp: { pose, sit }. Any movement stops it.
@@ -92,7 +93,7 @@ export function createPlayer(scene, opts = {}) {
         if (wantsMove) {
           const fx = -Math.sin(cameraYaw), fz = -Math.cos(cameraYaw), rx = Math.cos(cameraYaw), rz = -Math.sin(cameraYaw);
           // Mud and soft sand are slower going; a trodden trail is a touch quicker.
-          const top = (input.run ? RUN_SPEED : WALK_SPEED) * wadeSpeedFactor(groundAt(position.x, position.z)) * ((surfaces[surface] && surfaces[surface].speed) || 1);
+          const top = (input.run && player.canRun ? RUN_SPEED : WALK_SPEED) * player.speedFactor * wadeSpeedFactor(groundAt(position.x, position.z)) * ((surfaces[surface] && surfaces[surface].speed) || 1);
           tx = (rx * move.x + fx * move.z) * top; tz = (rz * move.x + fz * move.z) * top;
         }
         // Speed builds up and bleeds off instead of switching on and off.

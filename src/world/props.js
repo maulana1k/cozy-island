@@ -200,7 +200,7 @@ export function createProps(scene, deps) {
         scatter.shakeTree(t.id, deps.now());
         audio.play('rustle');
         const top = scatter.treeTop(t.id);
-        if (Math.random() < 0.25) {
+        if (deps.onShake ? deps.onShake(t) : Math.random() < 0.25) {
           spawn(fruitGeo, fruitMat, top.clone().add(new THREE.Vector3((Math.random() - 0.5), -0.6, (Math.random() - 0.5))), new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 1.5), 2.2, { gravity: 9, floor: t.y + 0.1 });
         }
         const n = 4 + Math.floor(Math.random() * 3);
@@ -256,21 +256,22 @@ export function createProps(scene, deps) {
     g.position.set(f.x, y - 0.02, f.z);
     group.add(g);
 
-    const fire = { lit: f.lit, level: f.lit ? 1 : 0, sparkTimer: 0 };
+    const fire = { lit: f.lit, level: f.lit ? 1 : 0, sparkTimer: 0, boost: 0 };
     interactables.push({
       id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + (big ? 3.1 : 1.7),
       prompt: () => (fire.lit ? 'E — put out fire' : 'E — light fire'),
       interact() { fire.lit = !fire.lit; audio.play('fire'); },
     });
-    fires.push({ x: f.x, z: f.z, fire, reach: big ? 16 : 7, loud: big ? 1 : 0.45 });
+    fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 16 : 7, loud: big ? 1 : 0.45 });
     updaters.push((dt, elapsed) => {
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       flames.visible = fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
-      const fs = big ? 1.25 : 1;
+      fire.boost = Math.max(0, fire.boost - dt / 9); // fresh wood makes it roar for a while
+      const fs = (big ? 1.25 : 1) * (1 + fire.boost * 0.45);
       flames.scale.set(fs * fire.level * (1 + flick * 0.5), fs * fire.level * (1 + flick), fs * fire.level * (1 - flick * 0.5));
       cones.forEach((c, i) => { c.rotation.y = elapsed * (1 + i * 0.4); c.position.y = [0.62, 0.5, 0.42, 0.4][i] + Math.sin(elapsed * (9 + i * 3) + i) * 0.04; });
-      light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1);
+      light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1) * (1 + fire.boost * 0.5);
       fire.sparkTimer -= dt;
       if (fire.lit && fire.sparkTimer <= 0) {
         fire.sparkTimer = (0.12 + Math.random() * 0.3) * (big ? 0.45 : 1);
@@ -294,6 +295,13 @@ export function createProps(scene, deps) {
     interactables,
     onBell(cb) { bellListeners.push(cb); },
     setFlag(up) { if (flagState) flagState.up = up; },
+    // The nearest burning fire within reach, for cooking on or feeding.
+    fireNear(x, z, lit = true) { let best = null, bd = Infinity; for (const f of fires) { const d = Math.hypot(x - f.x, z - f.z); if (d < (f.big ? 4.6 : 3) && d < bd && (!lit || f.fire.lit)) { best = f; bd = d; } } return best; },
+    // Throw wood on: the fire catches if it was out, flares up and throws sparks.
+    stoke(f) {
+      f.fire.lit = true; f.fire.boost = 1;
+      for (let i = 0; i < 14; i++) spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, f.y + (f.big ? 1.4 : 0.7), f.z + (Math.random() - 0.5) * 0.6), new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.6 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1.2, { gravity: 1.2, flutter: 0.8 });
+    },
     // How loudly the nearest burning fire can be heard from here, 0 to 1.
     fireLoudness(x, z) { let best = 0; for (const f of fires) best = Math.max(best, f.fire.level * f.loud * Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / f.reach)); return best; },
     update(dt, elapsed, nightF) {

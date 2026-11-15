@@ -3,6 +3,7 @@ export const CATEGORIES = [
   { id: 'skills', label: 'Camp skills' },
   { id: 'friends', label: 'Friends and animals' },
   { id: 'places', label: 'Places' },
+  { id: 'pack', label: 'Backpack' },
 ];
 
 export const DISCOVERIES = [
@@ -28,12 +29,18 @@ export const DISCOVERIES = [
   { id: 'place-camp', cat: 'places', label: 'Visit the beach camp', hint: 'South-west, down on the sand.' },
   { id: 'place-windmill', cat: 'places', label: 'Visit the windmill', hint: 'On the knoll to the north-east.' },
   { id: 'place-lookout', cat: 'places', label: 'Reach the summit camp', hint: 'Take the winding hill trail.' },
+  { id: 'collect', cat: 'pack', label: 'Pick something up', hint: 'Shells, sticks, flowers: look on the ground.' },
+  { id: 'eat', cat: 'pack', label: 'Eat a snack', hint: 'Open your backpack with B.' },
+  { id: 'drink', cat: 'pack', label: 'Drink some water', hint: 'From your flask, or at a water barrel.' },
+  { id: 'cook', cat: 'pack', label: 'Cook over a campfire', hint: 'Marshmallows, mushrooms and eggs.' },
+  { id: 'stoke', cat: 'pack', label: 'Feed a campfire', hint: 'Bring it firewood from the jungle.' },
+  { id: 'hoard', cat: 'pack', label: 'Carry eight different things', hint: 'A scout is always prepared.' },
 ];
 
 // Ranks are earned by how much you have found.
 export const RANKS = [
-  { at: 0, name: 'New Scout' }, { at: 4, name: 'Tenderfoot' }, { at: 8, name: 'Pathfinder' },
-  { at: 13, name: 'Explorer' }, { at: DISCOVERIES.length, name: 'Camp Legend' },
+  { at: 0, name: 'New Scout' }, { at: 5, name: 'Tenderfoot' }, { at: 10, name: 'Pathfinder' },
+  { at: 17, name: 'Explorer' }, { at: DISCOVERIES.length, name: 'Camp Legend' },
 ];
 
 export function rankFor(count) {

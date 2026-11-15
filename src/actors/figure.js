@@ -338,6 +338,11 @@ export function createFigure({
           case 'yawn': mix('shRx', -1.9); mix('elR', -2.2); mix('shRz', -0.3); t.hp -= 0.4 * env; t.lean -= 0.06 * env; break;
           case 'tapfoot': t.thR = lerp(t.thR, -0.35 + Math.max(0, osc(10)) * 0.3, env); mix('shLz', -0.5); mix('elL', -1.7); mix('shRz', 0.5); mix('elR', -1.7); t.hy += osc(2) * 0.4 * env; break;
           case 'lookabout': t.hy += Math.sin(u * Math.PI * 2) * 0.95; t.hp -= 0.08 * env; mix('shRx', -0.2); break;
+          case 'eat': mix('shRx', -0.8); mix('elR', -2.0 + osc(8) * 0.22); mix('shRz', -0.3); mix('shLx', -0.5); mix('elL', -1.0); t.hp += 0.14 * env + osc(8) * 0.05 * env; break;
+          case 'drink': mix('shRx', -1.35); mix('elR', -2.15); mix('shRz', -0.25); t.hp -= 0.5 * env; t.lean -= 0.1 * env; break;
+          case 'blow': mix('shRx', -1.55); mix('elR', -1.9); mix('shRz', -0.2); mix('shLz', -0.6); mix('elL', -1.6); t.hp -= 0.22 * env; t.lean -= 0.08 * env; break;
+          case 'rub': mix('shRx', -0.55); mix('elR', -1.5); mix('shRz', -0.45 + osc(8) * 0.12); t.lean += 0.14 * env; t.hp += 0.2 * env; break;
+          case 'pant': mix('shRx', -0.6); mix('shLx', -0.6); mix('elR', -0.3); mix('elL', -0.3); t.lean += 0.45 * env; mix('thL', -0.3); mix('thR', -0.3); mix('knL', 0.55); mix('knR', 0.55); t.py -= 0.05 * env + Math.abs(osc(6)) * 0.02; t.hp += 0.25 * env; break;
           case 'peer': mix('shRx', -1.5); mix('shLx', -1.5); mix('elR', -2.0); mix('elL', -2.0); mix('shRz', -0.3); mix('shLz', 0.3); t.lean += 0.12 * env; break;
           default: mix('shRx', -1.35); mix('elR', -0.25); mix('shRz', 0.1); t.lean += 0.1 * env; // 'reach'
         }

@@ -1,7 +1,7 @@
 // The flying fox: launch tower, cable, landing frame, and scouts who ride it and climb back up.
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
-import { ZIPLINE, HILL_TRAIL_TOP } from '../logic/layout.js';
+import { ZIPLINE, RIDER_ROUTE } from '../logic/layout.js';
 import { createFigure } from '../actors/figure.js';
 import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
 
@@ -39,7 +39,11 @@ export function createZipline(scene, deps) {
     const coil = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 6, 12), shared(ROPE)); coil.rotation.x = Math.PI / 2; coil.position.set(-1.8, 0.52, -0.9); g.add(coil);
   }
   // ---- Cable and safety line
-  root.add(stick([A.x, A.y, A.z], [B.x, B.y, B.z], 0.025, DARK), stick([A.x, A.y + 0.3, A.z], [B.x, B.y + 0.3, B.z], 0.012, ROPE));
+  // A long cable hangs in a shallow curve rather than a straight line.
+  const sagAt = (f) => ZIPLINE.sag * 4 * f * (1 - f);
+  const curvePoints = (lift) => Array.from({ length: 33 }, (_, k) => { const f = k / 32; return new THREE.Vector3(A.x + (B.x - A.x) * f, A.y + (B.y - A.y) * f - sagAt(f) + lift, A.z + (B.z - A.z) * f); });
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePoints(0)), 64, 0.028, 6), shared(DARK)); cable.castShadow = true;
+  root.add(cable, new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePoints(0.32)), 64, 0.012, 5), shared(ROPE)));
   // ---- Landing frame by the beach: an A-frame, a brake tyre, a crash mat and a bench
   {
     const g = new THREE.Group(); g.position.set(B.x, bottomY - 0.02, B.z); g.rotation.y = heading; root.add(g);
@@ -52,10 +56,10 @@ export function createZipline(scene, deps) {
     const pen = new THREE.Mesh(roofGeometry(0.5, 0.85, 0.02), shared(0xe8503a)); pen.rotation.z = -Math.PI / 2; pen.position.set(-2.25, 2.5, 0.6); g.add(pen);
   }
 
-  const pointAt = (f, out) => out.copy(A).lerp(B, f);
+  const pointAt = (f, out) => { out.copy(A).lerp(B, f); out.y -= sagAt(f); return out; };
   // One ride down the cable: quick away, fast in the middle, braking into the frame.
   function advance(ride, dt) {
-    ride.v = ride.f < 0.8 ? Math.min(11, ride.v + 5 * dt) : Math.max(2.4, ride.v - 15 * dt);
+    ride.v = ride.f < 0.925 ? Math.min(12.5, ride.v + 4.5 * dt) : Math.max(2.4, ride.v - 15 * dt);
     ride.f = Math.min(1, ride.f + (ride.v * dt) / length);
     return ride.f >= 0.985;
   }
@@ -64,15 +68,15 @@ export function createZipline(scene, deps) {
 
   // ---- Scouts on a loop: queue, climb the tower, ride, land, walk back up the hill
   const landing = { x: B.x - dirX * 2.4, z: B.z - dirZ * 2.4 };
-  const route = [...ZIPLINE.trail, ...HILL_TRAIL_TOP, ZIPLINE.queue];
+  const route = RIDER_ROUTE;
   const SKIN = [0xf1c7a0, 0x9a6a4a, 0xe6b48a, 0xc98d62], HELMET = [0xe8503a, 0xf2b63b, 0x4f7fc9, 0x3f8f6a];
-  const riders = [0, 1, 2, 3].map((i) => {
-    const figure = createFigure({ bodyColor: 0xd8c08a, neckerchief: HELMET[(i + 1) % 4], skinColor: SKIN[i], hairColor: 0x3d3230, shortsColor: 0x5f7fa6, accent: 'cap', accentColor: HELMET[i] });
+  const riders = [0, 1, 2, 3, 4, 5].map((i) => {
+    const figure = createFigure({ bodyColor: 0xd8c08a, neckerchief: HELMET[(i + 1) % 4], skinColor: SKIN[i % 4], hairColor: 0x3d3230, shortsColor: 0x5f7fa6, accent: 'cap', accentColor: HELMET[i % 4] });
     scene.add(figure.group);
     const r = { i, figure, trolley: makeTrolley(), state: 'walk', leg: 0, x: 0, z: 0, y: 0, rot: 0, t: 0, ride: null, cheer: 0 };
     // Start them spread out along the way back up, the first already waiting at the top.
     if (i === 0) { r.state = 'wait'; r.x = ZIPLINE.queue.x; r.z = ZIPLINE.queue.z; }
-    else { r.leg = Math.min(route.length - 1, i * 2 - 1); r.x = route[r.leg - 1 >= 0 ? r.leg - 1 : 0].x; r.z = route[r.leg - 1 >= 0 ? r.leg - 1 : 0].z; }
+    else { r.leg = Math.min(route.length - 1, 1 + Math.floor(((i - 1) * (route.length - 1)) / 5)); r.x = route[r.leg - 1].x; r.z = route[r.leg - 1].z; }
     return r;
   });
   let launchTimer = 2, cableBusy = false;
@@ -105,18 +109,18 @@ export function createZipline(scene, deps) {
         if (r.state === 'walk') {
           const target = route[r.leg], dx = target.x - r.x, dz = target.z - r.z, d = Math.hypot(dx, dz);
           if (d < 0.25) { r.leg++; if (r.leg >= route.length) { r.state = 'wait'; r.leg = 0; } }
-          else { speed = 1.9; r.x += (dx / d) * speed * dt; r.z += (dz / d) * speed * dt; r.rot = Math.atan2(dx, dz); }
+          else { speed = 2.4; r.x += (dx / d) * speed * dt; r.z += (dz / d) * speed * dt; r.rot = Math.atan2(dx, dz); }
           r.y = heightAt(r.x, r.z);
         } else if (r.state === 'wait') {
           r.y = heightAt(r.x, r.z); r.rot = heading;
-          if (launchTimer <= 0 && !cableBusy) { r.state = 'climb'; r.t = 0; cableBusy = true; launchTimer = 7; }
+          if (launchTimer <= 0 && !cableBusy) { r.state = 'climb'; r.t = 0; cableBusy = true; launchTimer = 9; }
         } else if (r.state === 'climb') {
           // Up the ladder at the back of the tower and onto the deck.
           r.t += dt / 1.6;
           const k = Math.min(1, r.t), e = k * k * (3 - 2 * k);
           r.x = ZIPLINE.queue.x + (A.x - dirX * 0.4 - ZIPLINE.queue.x) * e; r.z = ZIPLINE.queue.z + (A.z - dirZ * 0.4 - ZIPLINE.queue.z) * e;
           r.y = topY + PLATFORM * e; r.rot = heading; speed = 1.2;
-          if (k >= 1) { r.state = 'ride'; r.ride = { f: 0.02, v: 2.5 }; if (Math.hypot(player.position.x - A.x, player.position.z - A.z) < 30) audio.play('zip'); }
+          if (k >= 1) { r.state = 'ride'; r.ride = { f: 0.02, v: 2.5 }; if (Math.hypot(player.position.x - A.x, player.position.z - A.z) < 18) audio.play('zip'); }
         } else if (r.state === 'ride') {
           const done = advance(r.ride, dt);
           pointAt(r.ride.f, tmp);

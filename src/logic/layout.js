@@ -64,16 +64,22 @@ export const LOOKOUT = { x: HILL.x, z: HILL.z };
 const onSummit = (dx, dz) => ({ x: LOOKOUT.x + dx, z: LOOKOUT.z + dz });
 export const SUMMIT = {
   fire: onSummit(1.6, 1.8), mast: onSummit(0, -0.8), shelter: { ...onSummit(3.9, -2.2), rot: -1.2 },
-  telescope: onSummit(-1.9, -4.1), cairn: onSummit(1.4, -4.2), signallers: [onSummit(-1.6, 3.4), onSummit(0.3, 4.3)],
+  telescope: onSummit(-1.9, -4.1), cairn: onSummit(1.4, -4.2), signallers: [onSummit(-1.5, 3.7), onSummit(-3.3, 2.9)],
   watcher: onSummit(-3.1, -3.5), mapper: onSummit(3.3, 0.9),
 };
-// The flying fox: a cable from a launch tower on the summit down to a landing frame by the beach,
-// and the trail riders climb back up by.
+// The flying fox: a long cable from a launch tower on the summit, out over the parade ground,
+// the campfire and the tents, down to a landing frame on the far beach.
 export const ZIPLINE = {
-  top: onSummit(-5.35, -2.5), bottom: { x: -46.2, z: -21.6 }, topHeight: 4.4, bottomHeight: 2.7,
-  trail: [{ x: -45.2, z: -20.4 }, { x: -41, z: -16 }, { x: -34, z: -13.5 }, { x: -26, z: -13 }],
-  queue: onSummit(-3.7, -1.0),
+  top: onSummit(4.02, 4.31), bottom: { x: 36.6, z: 36.5 }, topHeight: 4.4, bottomHeight: 2.7, sag: 1.6,
+  // A trail from the landing round the farm shed to the barn path.
+  trail: [{ x: 36.9, z: 35.3 }, { x: 38.2, z: 30 }, { x: 37.5, z: 23.5 }, { x: 33.5, z: 18 }, { x: 29.5, z: 19 }],
+  queue: onSummit(2.7, 3.1),
 };
+// The long walk back: along the farm trail, through the camp and up the hill trail to the tower.
+export const RIDER_ROUTE = [
+  ...ZIPLINE.trail, { x: 24, z: 11 }, { x: 14.5, z: 6.5 }, { x: 5, z: 1 }, { x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 },
+  { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }, onSummit(-2.4, 1.4), ZIPLINE.queue,
+];
 export const CAMPFIRES = [{ id: 'fire-village', ...VILLAGE_FIRE, lit: true }, { id: 'fire-camp', ...CAMPFIRE, lit: false }, { id: 'fire-summit', ...SUMMIT.fire, lit: true }];
 export const CHICKEN_YARD = { x: 25, z: 23, r: 3 };
 // A windmill stands on the north-east meadow, with sheep grazing beside it.
@@ -94,7 +100,7 @@ export const SEATS = [
   seat('log-0', 'log', around(CAMPFIRE, 200, 2.0), CAMPFIRE),
   seat('log-1', 'log', around(CAMPFIRE, 320, 2.0), CAMPFIRE),
   seat('bench-2', 'bench', lookoutSeat, { x: lookoutSeat.x * 3, z: lookoutSeat.z * 3 }),
-  seat('log-4', 'log', around(SUMMIT.fire, 25, 2.0), SUMMIT.fire),
+  seat('log-4', 'log', around(SUMMIT.fire, 200, 2.0), SUMMIT.fire),
   seat('log-5', 'log', around(SUMMIT.fire, 120, 2.0), SUMMIT.fire),
 ];
 
@@ -133,8 +139,6 @@ export const PATHS = [
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
 ];
-// The last stretch of the hill trail, from where the flying fox trail joins it up to the summit.
-export const HILL_TRAIL_TOP = [{ x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }];
 const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1], HILL_PATH = PATHS[COTTAGES.length + 2];
 
 function distanceToSegment(x, z, a, b) {
@@ -246,7 +250,7 @@ export function getScatter() {
     ...TENTS.map((t) => ({ ...t, r: 3 })),
     { x: POND.x, z: POND.z, r: POND.rw + 1.4 }, { ...GATE, r: 3.2 },
     // Nothing may grow under the flying fox cable.
-    ...Array.from({ length: 9 }, (_, k) => ({ x: ZIPLINE.top.x + (ZIPLINE.bottom.x - ZIPLINE.top.x) * (k / 8), z: ZIPLINE.top.z + (ZIPLINE.bottom.z - ZIPLINE.top.z) * (k / 8), r: 3.4 })), { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
+    ...Array.from({ length: 21 }, (_, k) => ({ x: ZIPLINE.top.x + (ZIPLINE.bottom.x - ZIPLINE.top.x) * (k / 20), z: ZIPLINE.top.z + (ZIPLINE.bottom.z - ZIPLINE.top.z) * (k / 20), r: 4.6 })), { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
     ...SALUTE_LINE.map((p) => ({ ...p, r: 1.6 })), { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
     { ...LOOKOUT, r: 8.6 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
   ];

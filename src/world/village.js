@@ -4,6 +4,7 @@ import {
   COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
+import { texture } from './build.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -50,7 +51,7 @@ function buildField(mats) {
 // A canvas ridge tent with an open front.
 function buildTent(t, i, mats) {
   const g = new THREE.Group();
-  const canvas = flat(PALETTE.tents[i % PALETTE.tents.length], { side: THREE.DoubleSide });
+  const canvas = flat(PALETTE.tents[i % PALETTE.tents.length], { side: THREE.DoubleSide, map: texture('fabric', 0.8, 0.8) });
   const body = new THREE.Mesh(roofGeometry(2.5, 1.75, 2.7), canvas);
   body.castShadow = true; body.receiveShadow = true;
   const opening = new THREE.Mesh(roofGeometry(1.5, 1.25, 0.04), mats.tentInside);
@@ -161,7 +162,7 @@ function buildBoat(mats) {
 // A stone windmill with slowly turning sails.
 function buildWindmill(mats) {
   const g = new THREE.Group();
-  const stone = flat(0xf1e6cf), cap = flat(PALETTE.roofs[0]);
+  const stone = flat(0xf1e6cf, { map: texture('stone', 5, 2) }), cap = flat(PALETTE.roofs[0], { map: texture('wood', 4, 1) });
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 2.25, 6.2, 8), stone);
   tower.position.y = 3.0; tower.castShadow = true; tower.receiveShadow = true;
   const base = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.55, 0.5, 8), mats.stone); base.position.y = 0.15; base.receiveShadow = true;
@@ -171,7 +172,7 @@ function buildWindmill(mats) {
   hub.add(box(0.5, 0.5, 0.7, mats.woodDark));
   for (let i = 0; i < 4; i++) {
     const sail = new THREE.Group();
-    sail.add(box(0.14, 4.4, 0.1, mats.woodDark, 0, 2.3, 0.3), box(1.0, 3.2, 0.05, flat(0xfaf3e2, { side: THREE.DoubleSide }), 0.5, 2.75, 0.3));
+    sail.add(box(0.14, 4.4, 0.1, mats.woodDark, 0, 2.3, 0.3), box(1.0, 3.2, 0.05, flat(0xfaf3e2, { side: THREE.DoubleSide, map: texture('fabric', 1, 3) }), 0.5, 2.75, 0.3));
     for (let k = 0; k < 4; k++) sail.add(box(1.0, 0.07, 0.08, mats.woodDark, 0.5, 1.3 + k * 0.97, 0.32));
     sail.rotation.z = (i / 4) * Math.PI * 2;
     hub.add(sail);
@@ -184,8 +185,8 @@ function buildWindmill(mats) {
 
 export function createVillage(scene) {
   const mats = {
-    stone: flat(PALETTE.stone), stoneDark: flat(PALETTE.stoneDark),
-    wood: flat(PALETTE.wood), woodDark: flat(PALETTE.woodDark), woodLight: flat(0xd3a877),
+    stone: flat(PALETTE.stone, { map: texture('stone', 2, 1) }), stoneDark: flat(PALETTE.stoneDark, { map: texture('stone', 2, 1) }),
+    wood: flat(PALETTE.wood, { map: texture('wood', 1, 1) }), woodDark: flat(PALETTE.woodDark, { map: texture('wood', 1, 1) }), woodLight: flat(0xd3a877, { map: texture('wood', 1, 1) }),
     tentInside: new THREE.MeshBasicMaterial({ color: 0x5a4038 }),
     puffGeo: new THREE.IcosahedronGeometry(1, 1),
     cream: flat(0xfaf3e2), barnSeam: flat(0x9c4636),

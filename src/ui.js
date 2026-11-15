@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const HINT_KEYS = [['WASD', 'move'], ['Shift', 'run'], ['Space', 'hop'], ['E', 'use'], ['J', 'journal'], ['Esc', 'pause']];
+const HINT_KEYS = [['WASD', 'move'], ['Shift', 'run'], ['Space', 'hop'], ['E', 'use'], ['C', 'free look'], ['J', 'journal'], ['Esc', 'pause']];
 
 function drawIcon(ctx, icon) {
   ctx.save();

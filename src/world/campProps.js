@@ -175,7 +175,7 @@ export function createCampProps(scene) {
     for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; t.add(stick([Math.cos(a) * 0.45, 0, Math.sin(a) * 0.45], [0, 1.05, 0], 0.025, DARK)); }
     const tube = cyl(0.07, 0.1, 0.95, 0xd9a05b, 0, 1.12, 0.1, 10); tube.rotation.x = Math.PI / 2 - 0.12; t.add(tube, cyl(0.105, 0.105, 0.06, 0xe9c46a, 0, 1.17, 0.56, 10).rotateX(Math.PI / 2));
 
-    const g = at(SUMMIT.fire.x + 2.6, SUMMIT.fire.z + 2.2, 0.5); crates(g, 2); firewood(at(SUMMIT.fire.x - 2.4, SUMMIT.fire.z + 1.6, 1.1));
+    const g = at(SUMMIT.shelter.x - 2.0, SUMMIT.shelter.z + 1.0, 0.5); crates(g, 2); firewood(at(SUMMIT.fire.x - 2.4, SUMMIT.fire.z + 1.6, 1.1));
     const tbl = at(SUMMIT.mapper.x + 0.9, SUMMIT.mapper.z + 0.4, 0.3); tbl.add(box(0.7, 0.4, 0.5, 0xc79a62, 0, 0.2, 0), box(0.6, 0.02, 0.42, 0xf5ecd6, 0, 0.42, 0), box(0.2, 0.02, 0.14, 0x9fc98a, -0.1, 0.435, 0.05));
     bucket(at(SUMMIT.mast.x + 1.1, SUMMIT.mast.z - 1.2), 0, 0, 0x4f7fc9);
   }

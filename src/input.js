@@ -11,7 +11,7 @@ export function createInput(keyTarget, pointerTarget) {
   const held = new Set();
   let hop = false, interact = false, mute = false;
   let dragging = false, lookX = 0, lookY = 0, zoom = 0;
-  let anyKey = false;
+  let anyKey = false, freeLook = false;
 
   keyTarget.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -31,13 +31,19 @@ export function createInput(keyTarget, pointerTarget) {
   // A key held while the window loses focus never sends keyup, so drop everything.
   keyTarget.addEventListener('blur', () => { held.clear(); dragging = false; });
 
-  pointerTarget.addEventListener('pointerdown', (e) => { if (e.button === 0) dragging = true; });
+  // Capturing the pointer keeps a drag alive when the cursor slides over a button or off the picture.
+  pointerTarget.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    dragging = true;
+    try { e.target?.setPointerCapture?.(e.pointerId); } catch { /* not every target can capture */ }
+  });
   const stopDrag = () => { dragging = false; };
   pointerTarget.addEventListener('pointerup', stopDrag);
   pointerTarget.addEventListener('pointercancel', stopDrag);
-  pointerTarget.addEventListener('pointerleave', stopDrag);
+  pointerTarget.addEventListener('dragstart', (e) => { e.preventDefault?.(); });
   pointerTarget.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
+    // In free look the mouse turns the camera without any button held.
+    if (!dragging && !freeLook) return;
     lookX += e.movementX || 0;
     lookY += e.movementY || 0;
   });
@@ -55,6 +61,8 @@ export function createInput(keyTarget, pointerTarget) {
     },
     get run() { return held.has('ShiftLeft') || held.has('ShiftRight'); },
     get anyKeyPressed() { return anyKey; },
+    // Turned on while the mouse is captured for free look.
+    setFreeLook(on) { freeLook = !!on; },
     consumeHop: take(() => hop, () => { hop = false; }),
     consumeInteract: take(() => interact, () => { interact = false; }),
     consumeMute: take(() => mute, () => { mute = false; }),

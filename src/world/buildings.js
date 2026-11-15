@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, floorHeight } from '../logic/layout.js';
-import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
+import { box, cyl, ball, stick, roofGeometry, shared, texture } from './build.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
 const DOOR_W = 1.1, DOOR_H = 1.85;
@@ -36,9 +36,10 @@ export function createBuildings(scene, deps) {
     const sliced = (color, extra = {}) => new THREE.MeshStandardMaterial({
       color, roughness: 1, metalness: 0, flatShading: true, side: THREE.DoubleSide, clippingPlanes: [plane], clipShadows: true, ...extra,
     });
-    const canvas = sliced(st.canvas, { emissive: 0xffb86b, emissiveIntensity: 0 });
-    const roofMat = sliced(st.roof, { emissive: 0xffb86b, emissiveIntensity: 0 });
-    const trim = sliced(st.trim), pole = sliced(BAMBOO), rope = sliced(ROPE);
+    // Walls are panels of woven canvas about 1.3 m wide; the roof is the same cloth, seen in metres.
+    const canvas = sliced(st.canvas, { emissive: 0xffb86b, emissiveIntensity: 0, map: texture('fabric', Math.max(2, Math.round(Math.max(W, D) / 1.4)), 1) });
+    const roofMat = sliced(st.roof, { emissive: 0xffb86b, emissiveIntensity: 0, map: texture('fabric', 0.75, 0.75) });
+    const trim = sliced(st.trim, { map: texture('fabric', 6, 1) }), pole = sliced(BAMBOO, { map: texture('bamboo', 1, 3) }), rope = sliced(ROPE);
     const use = (mesh, m) => { mesh.material = m; return mesh; };
 
     const g = new THREE.Group();
@@ -49,7 +50,7 @@ export function createBuildings(scene, deps) {
     const solid = (mesh, hw, hd) => { g.add(mesh); wall(mesh.position.x, mesh.position.z, hw, hd); return mesh; };
 
     // ---- Shell: groundsheet, canvas walls with a doorway, and a pitched roof
-    const sheet = box(W - 0.02, SKIRT, D - 0.02, st.floor, 0, 0.06 - SKIRT / 2, 0); sheet.castShadow = false; g.add(sheet);
+    const sheet = box(W - 0.02, SKIRT, D - 0.02, new THREE.MeshStandardMaterial({ color: st.floor, roughness: 1, map: texture('fabric', Math.round(W / 1.2), Math.round(D / 1.2)) }), 0, 0.06 - SKIRT / 2, 0); sheet.castShadow = false; g.add(sheet);
     const hh = H + SKIRT, hy = (H - SKIRT) / 2;
     g.add(use(box(0.07, hh, D, 0, -W / 2, hy, 0), canvas), use(box(0.07, hh, D, 0, W / 2, hy, 0), canvas));
     g.add(use(box(W, hh, 0.07, 0, 0, hy, -front), canvas));
@@ -71,7 +72,7 @@ export function createBuildings(scene, deps) {
 
     // ---- Door flap: hinged at one side, swings outward
     const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, front + 0.06);
-    hinge.add(use(box(DOOR_W - 0.04, DOOR_H - 0.04, 0.045, 0, DOOR_W / 2, DOOR_H / 2, 0), sliced(new THREE.Color(st.canvas).multiplyScalar(0.9))));
+    hinge.add(use(box(DOOR_W - 0.04, DOOR_H - 0.04, 0.045, 0, DOOR_W / 2, DOOR_H / 2, 0), sliced(new THREE.Color(st.canvas).multiplyScalar(0.9), { map: texture('fabric', 1, 1) })));
     hinge.add(use(box(DOOR_W - 0.04, 0.12, 0.06, 0, DOOR_W / 2, DOOR_H * 0.55, 0), trim));
     g.add(hinge);
     const door = { open: false, angle: 0, speed: 0 };

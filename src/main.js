@@ -105,10 +105,30 @@ function toggleSound() { hud.setSound(!audio.toggleMute()); }
 function toggleMenu() {
   if (!hud.started) return;
   if (hud.menuOpen) hud.closeMenu(); else hud.openMenu();
+  syncLook();
 }
-function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('ui'); } }
+function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('ui'); syncLook(); } }
+
+// ---- Free look: the mouse turns the camera with no button held ---------------
+// The browser captures the mouse for this, so it is released whenever a menu or the journal
+// is open (you need the cursor there) and taken again when you go back to playing.
+let freeLook = false;
+const mouseHeld = () => document.pointerLockElement === canvas;
+function syncLook() {
+  const want = freeLook && hud.started && !hud.menuOpen && !hud.journalOpen;
+  if (want && !mouseHeld()) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* the browser may refuse; a click on the picture retries */ } }
+  if (!want && mouseHeld()) document.exitPointerLock();
+}
+function toggleLook() { freeLook = !freeLook; hud.setLook(freeLook); audio.play('ui'); syncLook(); }
+document.addEventListener('pointerlockchange', () => {
+  input.setFreeLook(mouseHeld());
+  // Esc releases the mouse before the game sees the key, so treat that as "pause".
+  if (!mouseHeld() && freeLook && hud.started && !hud.menuOpen && !hud.journalOpen) hud.openMenu();
+});
+canvas.addEventListener('click', syncLook);
 const hud = createHUD({
-  onResume: () => hud.closeMenu(),
+  onResume: () => { hud.closeMenu(); syncLook(); },
+  onToggleLook: () => toggleLook(),
   onToggleMenu: toggleMenu,
   onToggleSound: toggleSound,
   onToggleJournal: toggleJournal,
@@ -130,6 +150,7 @@ window.addEventListener('keydown', (e) => {
   if (!hud.started) { wake(); return; }
   if (e.repeat) return;
   if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
+  if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
   // Esc closes the journal first, then opens the pause menu.
   if (e.code === 'Escape') { if (hud.journalOpen && !hud.menuOpen) toggleJournal(); else toggleMenu(); }
 });

@@ -139,7 +139,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     rank() { [C5, E5, G5, C5 * 2, E5 * 2].forEach((f, i) => tone(f, { dur: 0.7, gain: 0.09, delay: i * 0.11 })); tone(C5 / 2, { type: 'sine', dur: 1.2, gain: 0.07 }); },
     ui() { tone(A5, { type: 'sine', dur: 0.08, gain: 0.04 }); },
     // The flying fox trolley whirring down the cable.
-    zip() { hiss({ freq: 2200, q: 2.5, dur: 3.4, gain: 0.05 }); tone(240, { type: 'sawtooth', dur: 3.2, gain: 0.018, to: 520 }); },
+    zip() { hiss({ freq: 2200, q: 2.5, dur: 8.2, gain: 0.05 }); tone(220, { type: 'sawtooth', dur: 8, gain: 0.016, to: 560 }); },
     cheer() { tone(D5, { dur: 0.2, gain: 0.06 }); tone(G5, { dur: 0.3, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };

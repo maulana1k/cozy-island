@@ -12,6 +12,7 @@ const ICONS = {
   book: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 12h5"/></svg>',
   sound: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="waves" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>',
+  mouse: '<svg viewBox="0 0 24 24"><rect x="6.5" y="3" width="11" height="18" rx="5.5"/><path d="M12 7v3.5"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   star: '<svg viewBox="0 0 24 24" class="fill"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>',
@@ -85,9 +86,9 @@ export function createHUD(handlers) {
   const right = el('div', 'right');
   const buttons = el('div', 'buttons');
   const mkBtn = (name, title, key) => { const b = el('button', 'glass round'); b.innerHTML = ICONS[name]; b.title = title; if (key) b.append(el('kbd', 'hot', key)); return b; };
-  const journalBtn = mkBtn('book', 'Journal (J)', 'J'), soundBtn = mkBtn('sound', 'Sound (M)', 'M'), menuBtn = mkBtn('pause', 'Menu (Esc)', 'Esc');
+  const journalBtn = mkBtn('book', 'Journal (J)', 'J'), lookBtn = mkBtn('mouse', 'Free look: move the mouse to turn the camera (C)', 'C'), soundBtn = mkBtn('sound', 'Sound (M)', 'M'), menuBtn = mkBtn('pause', 'Menu (Esc)', 'Esc');
   const dot = el('span', 'dot'); journalBtn.append(dot);
-  buttons.append(journalBtn, soundBtn, menuBtn);
+  buttons.append(journalBtn, lookBtn, soundBtn, menuBtn);
   const mapWrap = el('div', 'glass map');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const mapStatic = document.createElement('canvas'); mapStatic.width = mapStatic.height = MAP_SIZE * dpr;
@@ -129,14 +130,15 @@ export function createHUD(handlers) {
   const resume = el('button', 'btn primary', 'Resume');
   const openJournal = el('button', 'btn', 'Open journal');
   const soundRow = el('button', 'btn');
+  const lookRow = el('button', 'btn');
   const timeRow = el('div', 'row');
   timeRow.append(el('span', 'label', 'Time of day'));
   for (const [name, t] of TIMES) { const b = el('button', 'pill', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['Mouse drag', 'Look around'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Run'], ['Space', 'Hop'], ['E', 'Use / say hello'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Sound'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  panel.append(resume, openJournal, soundRow, timeRow, el('h3', null, 'Controls'), controls);
+  panel.append(resume, openJournal, lookRow, soundRow, timeRow, el('h3', null, 'Controls'), controls);
   menu.append(panel);
 
   root.append(left, right, ground, toasts, banner, drawer, start, menu);
@@ -146,6 +148,8 @@ export function createHUD(handlers) {
   soundBtn.addEventListener('click', () => handlers.onToggleSound());
   soundRow.addEventListener('click', () => handlers.onToggleSound());
   journalBtn.addEventListener('click', () => handlers.onToggleJournal());
+  lookBtn.addEventListener('click', () => handlers.onToggleLook());
+  lookRow.addEventListener('click', () => handlers.onToggleLook());
   closeBtn.addEventListener('click', () => handlers.onToggleJournal());
   openJournal.addEventListener('click', () => { handlers.onResume(); if (!hud.journalOpen) handlers.onToggleJournal(); });
   // Buttons must not keep keyboard focus, or Space and Enter would press them again.
@@ -160,6 +164,7 @@ export function createHUD(handlers) {
     openMenu() { hud.menuOpen = true; menu.classList.remove('off'); },
     closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     toggleJournal() { hud.journalOpen = !hud.journalOpen; root.classList.toggle('journal', hud.journalOpen); dot.classList.remove('on'); },
+    setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look (just move the mouse)' : 'Camera: hold and drag'; },
     setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.textContent = on ? 'Sound: on' : 'Sound: off'; },
     setClock(text, phaseText, isNight, dayNumber) {
       const key = `${text}|${dayNumber}`;
@@ -223,5 +228,6 @@ export function createHUD(handlers) {
     },
   };
   hud.setSound(true);
+  hud.setLook(false);
   return hud;
 }

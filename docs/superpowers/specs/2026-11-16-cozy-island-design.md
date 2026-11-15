@@ -77,6 +77,15 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
   knee depth the player is gently slowed and cannot go further. No invisible
   wall that feels like a hard stop.
 
+### Village style (owner, added during the build)
+
+- The village is traditional: wooden plank houses on short stilts with
+  thatched roofs, instead of pastel cottages.
+- A campfire burns in the middle of the village square, with log seats.
+- A small camp of canvas tents stands around a second campfire on the beach.
+- The bell moves to the northern edge of the square. Seats are logs by the
+  two fires plus the lookout bench.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

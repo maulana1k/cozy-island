@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import {
-  COTTAGES, COTTAGE_SIZE, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER,
+  COTTAGES, COTTAGE_SIZE, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 
@@ -21,46 +21,88 @@ function roofGeometry(width, height, depth) {
   return geo;
 }
 
+// A traditional wooden house: plank walls on short stilts under a steep thatched roof.
 function buildCottage(c, mats) {
   const g = new THREE.Group();
-  const { width: W, depth: D } = COTTAGE_SIZE;
-  const wallH = 2.5, front = D / 2;
-  const wallMat = flat(c.wallColor), roofMat = flat(c.roofColor);
+  const { width: W, depth: D, floor: F } = COTTAGE_SIZE;
+  const wallH = 2.3, front = D / 2;
+  const wallMat = flat(c.wallColor), thatch = flat(c.roofColor);
 
-  g.add(box(W + 0.3, 1.0, D + 0.3, mats.stone, 0, -0.3, 0));           // plinth, sunk into the ground
-  g.add(box(W, wallH, D, wallMat, 0, 0.2 + wallH / 2, 0));               // walls
-  const roof = new THREE.Mesh(roofGeometry(W + 0.9, 1.9, D + 0.9), roofMat);
-  roof.position.y = 0.2 + wallH; roof.castShadow = true; roof.receiveShadow = true;
-  g.add(roof);
-  g.add(box(0.6, 1.5, 0.6, mats.stone, W * 0.27, 0.2 + wallH + 1.25, -D * 0.2)); // chimney
-  g.add(box(0.72, 0.14, 0.72, mats.stoneDark, W * 0.27, 0.2 + wallH + 2.05, -D * 0.2));
+  // Stilts and floor
+  for (const sx of [-1, 0, 1]) for (const sz of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, F + 0.9, 7), mats.woodDark);
+    post.position.set(sx * (W / 2 - 0.25), F / 2 - 0.45, sz * (D / 2 - 0.25)); post.castShadow = true;
+    g.add(post);
+  }
+  g.add(box(W + 0.36, 0.16, D + 0.36, mats.woodDark, 0, F - 0.08, 0));
+  // Steps up to the door
+  g.add(box(1.5, 0.14, 0.42, mats.wood, 0, F - 0.2, front + 0.36));
+  g.add(box(1.5, 0.14, 0.42, mats.wood, 0, F - 0.42, front + 0.72));
+
+  // Plank walls with darker seams and corner posts
+  g.add(box(W, wallH, D, wallMat, 0, F + wallH / 2, 0));
+  for (let i = 1; i <= 4; i++) g.add(box(W + 0.03, 0.045, D + 0.03, mats.seam, 0, F + (wallH * i) / 5, 0));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.24, wallH + 0.1, 0.24, mats.woodDark, sx * W / 2, F + wallH / 2, sz * D / 2));
+  g.add(box(W + 0.3, 0.2, D + 0.3, mats.woodDark, 0, F + wallH + 0.02, 0));
+
+  // Thatched roof in two layers, with crossed gable horns
+  const under = new THREE.Mesh(roofGeometry(W + 1.9, 2.5, D + 1.3), mats.thatchDark);
+  under.position.y = F + wallH - 0.12; under.castShadow = true; under.receiveShadow = true;
+  const roof = new THREE.Mesh(roofGeometry(W + 1.5, 2.55, D + 1.7), thatch);
+  roof.position.y = F + wallH + 0.06; roof.castShadow = true; roof.receiveShadow = true;
+  g.add(under, roof);
+  g.add(box(0.2, 0.2, D + 2.0, mats.woodDark, 0, F + wallH + 2.6, 0));
+  for (const sz of [-1, 1]) for (const tilt of [-1, 1]) {
+    const horn = box(0.12, 1.5, 0.12, mats.woodDark, tilt * 0.22, F + wallH + 2.75, sz * (D / 2 + 0.9));
+    horn.rotation.z = -tilt * 0.62;
+    g.add(horn);
+  }
 
   // Doorway: a dark inset with a wooden frame. The door leaf itself is an interactable prop.
-  g.add(box(1.0, 1.8, 0.06, mats.dark, 0, 0.2 + 0.9, front + 0.012));
-  g.add(box(1.24, 0.14, 0.16, mats.woodDark, 0, 0.2 + 1.87, front + 0.04));
-  g.add(box(0.12, 1.8, 0.16, mats.woodDark, -0.56, 0.2 + 0.9, front + 0.04));
-  g.add(box(0.12, 1.8, 0.16, mats.woodDark, 0.56, 0.2 + 0.9, front + 0.04));
-  g.add(box(1.5, 0.16, 0.7, mats.stone, 0, 0.12, front + 0.35));          // doorstep
+  g.add(box(1.0, 1.8, 0.06, mats.dark, 0, F + 0.9, front + 0.012));
+  g.add(box(1.3, 0.16, 0.18, mats.woodDark, 0, F + 1.88, front + 0.05));
+  g.add(box(0.14, 1.8, 0.18, mats.woodDark, -0.57, F + 0.9, front + 0.05));
+  g.add(box(0.14, 1.8, 0.18, mats.woodDark, 0.57, F + 0.9, front + 0.05));
 
+  // Windows with wooden shutters; the panes glow at night.
   const addWindow = (x, y, z, rotY) => {
     const w = new THREE.Group();
-    const frame = box(0.96, 0.96, 0.1, mats.wood);
-    const pane = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.76, 0.12), mats.window);
-    const barV = box(0.06, 0.76, 0.14, mats.wood), barH = box(0.76, 0.06, 0.14, mats.wood);
-    const planter = box(0.9, 0.16, 0.24, mats.woodDark, 0, -0.58, 0.14);
-    const leaves = box(0.8, 0.14, 0.2, mats.leaf, 0, -0.46, 0.14);
-    const bloom = box(0.5, 0.1, 0.16, flat(PALETTE.flowers[(Math.abs(Math.round(x * 3 + z)) % PALETTE.flowers.length)]), 0, -0.37, 0.14);
-    w.add(frame, pane, barV, barH, planter, leaves, bloom);
+    const frame = box(0.9, 0.9, 0.1, mats.woodDark);
+    const pane = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.12), mats.window);
+    const barV = box(0.06, 0.7, 0.14, mats.woodDark), barH = box(0.7, 0.06, 0.14, mats.woodDark);
+    const shutterL = box(0.36, 0.86, 0.06, mats.wood, -0.64, 0, 0.04), shutterR = box(0.36, 0.86, 0.06, mats.wood, 0.64, 0, 0.04);
+    const sill = box(1.0, 0.08, 0.2, mats.woodDark, 0, -0.5, 0.08);
+    w.add(frame, pane, barV, barH, shutterL, shutterR, sill);
     w.position.set(x, y, z); w.rotation.y = rotY;
     g.add(w);
   };
-  addWindow(-1.6, 1.65, front + 0.02, 0);
-  addWindow(1.6, 1.65, front + 0.02, 0);
-  addWindow(W / 2 + 0.02, 1.65, 0, Math.PI / 2);
-  addWindow(-W / 2 - 0.02, 1.65, 0, -Math.PI / 2);
+  addWindow(-1.55, F + 1.3, front + 0.02, 0);
+  addWindow(1.55, F + 1.3, front + 0.02, 0);
+  addWindow(W / 2 + 0.02, F + 1.3, 0, Math.PI / 2);
+  addWindow(-W / 2 - 0.02, F + 1.3, 0, -Math.PI / 2);
 
   g.position.set(c.x, heightAt(c.x, c.z) - 0.05, c.z);
   g.rotation.y = c.rot;
+  return g;
+}
+
+// A canvas ridge tent with an open front.
+function buildTent(t, i, mats) {
+  const g = new THREE.Group();
+  const canvas = flat(PALETTE.tents[i % PALETTE.tents.length], { side: THREE.DoubleSide });
+  const body = new THREE.Mesh(roofGeometry(2.5, 1.75, 2.7), canvas);
+  body.castShadow = true; body.receiveShadow = true;
+  const opening = new THREE.Mesh(roofGeometry(1.5, 1.25, 0.04), mats.tentInside);
+  opening.position.set(0, 0.0, 1.345);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.2, 6), mats.woodDark);
+  pole.rotation.x = Math.PI / 2; pole.position.y = 1.74;
+  const front = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.8, 6), mats.woodDark);
+  front.position.set(0, 0.88, 1.38);
+  const mat = box(1.5, 0.05, 0.9, flat(0xd88f6a), 0, 0.03, 1.9); // a little mat at the entrance
+  mat.castShadow = false;
+  g.add(body, opening, pole, front, mat);
+  g.position.set(t.x, heightAt(t.x, t.z) - 0.03, t.z);
+  g.rotation.y = t.rot;
   return g;
 }
 
@@ -159,7 +201,8 @@ export function createVillage(scene) {
   const mats = {
     stone: flat(PALETTE.stone), stoneDark: flat(PALETTE.stoneDark),
     wood: flat(PALETTE.wood), woodDark: flat(PALETTE.woodDark), woodLight: flat(0xd3a877),
-    leaf: flat(PALETTE.leafA), dark: flat(0x4a3a3a),
+    tentInside: new THREE.MeshBasicMaterial({ color: 0x5a4038 }),
+    leaf: flat(PALETTE.leafA), dark: flat(0x4a3a3a), seam: flat(0x9a7350), thatchDark: flat(PALETTE.thatchDark),
     window: new THREE.MeshStandardMaterial({ color: 0xcfe6ee, roughness: 0.4, emissive: PALETTE.windowGlow, emissiveIntensity: 0 }),
     path: new THREE.MeshStandardMaterial({ color: PALETTE.path, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
   };
@@ -169,6 +212,7 @@ export function createVillage(scene) {
   PATHS.forEach((p, i) => group.add(buildPath(p, i < COTTAGES.length ? 1.3 : 1.7, mats.path)));
   group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
+  TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
   group.add(buildDock(mats));
   const boat = buildBoat(mats);
   group.add(boat);

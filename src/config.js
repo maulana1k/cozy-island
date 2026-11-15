@@ -30,8 +30,11 @@ export const PALETTE = {
   leafB: 0x9bd67a,
   leafC: 0x74c4a0,
   blossom: 0xf7b7cf,
-  walls: [0xfbe9d0, 0xf9d5d3, 0xd9ecf2, 0xfff3c4, 0xe3dcf5, 0xdff0d8],
-  roofs: [0xe8836f, 0x7fa9c9, 0xd9a05b, 0xb886c4, 0x6fb7a3, 0xe07a94],
+  // Traditional wooden houses: plank walls in warm wood tones under thatched roofs.
+  walls: [0xc79d6e, 0xb88a5e, 0xd2ab7c, 0xc29469, 0xad8158, 0xcba373],
+  roofs: [0xdcb970, 0xd3ab62, 0xe2c480, 0xd8b268, 0xcfa65c, 0xe0be78],
+  thatchDark: 0xb88f4c,
+  tents: [0xf3e6c8, 0xe9a27a, 0xe8c66a],
   flowers: [0xff9db5, 0xfff07a, 0xffffff, 0xc9a6ff, 0xffb86b],
   villagers: [0xf6a6b2, 0xa6d8f6, 0xf9dc8b, 0xc3b1f2, 0xa8e3c0, 0xf7b98b],
   player: 0xff8f6b,
@@ -53,3 +56,20 @@ export const PLAYER_RADIUS = 0.35;
 export const PLAYER_START = { x: 10, z: 14 };
 export const MAX_DT = 0.05;
 export const CAMERA = { distance: 7, minDistance: 4, maxDistance: 11, minPitch: 10, maxPitch: 60 }; // degrees
+
+// Interaction
+export const INTERACT_RANGE = 2.2;
+export const INTERACT_CLOSE = 0.8;
+export const INTERACT_CONE = 0.2;
+
+// Villagers
+export const VILLAGER_COUNT = 6;
+export const VILLAGER_SPEED = 1.2;
+export const VILLAGER_RADIUS = 0.35;
+export const VILLAGER_PAUSE = [2, 6];
+export const NUDGE_DISTANCE = 1.2;
+export const NUDGE_TIME = 0.4;
+export const NUDGE_COOLDOWN = 1.5;
+export const BELL_HEAR_RANGE = 25;
+export const BELL_LOOK_TIME = 2;
+export const MIN_DRY_HEIGHT = 0.3;

@@ -49,7 +49,7 @@ const KEYS = [
   [0.25, { top: 0x8fc7f2, horizon: 0xfde8cf, sun: 0xfff1d6, ambient: 0xeaf4ff, fog: 0xe8eef0, sunIntensity: 2.4, ambientIntensity: 0.9 }],
   [0.48, { top: 0x79bdf0, horizon: 0xdff1f7, sun: 0xfffaf0, ambient: 0xf0f8ff, fog: 0xd6ecf4, sunIntensity: 2.8, ambientIntensity: 1.0 }],
   [0.66, { top: 0x8fb8e6, horizon: 0xffdfae, sun: 0xffe4bc, ambient: 0xfff0e0, fog: 0xf8dcb4, sunIntensity: 2.5, ambientIntensity: 0.95 }],
-  [0.80, { top: 0x6a6fb8, horizon: 0xff9d7a, sun: 0xff9966, ambient: 0xe2b6c4, fog: 0xf0a58c, sunIntensity: 1.8, ambientIntensity: 0.75 }],
+  [0.80, { top: 0x6a6fb8, horizon: 0xff9d7a, sun: 0xffb088, ambient: 0xf2cdd0, fog: 0xf0a58c, sunIntensity: 2.0, ambientIntensity: 1.0 }],
   [0.88, { top: 0x3a3f85, horizon: 0xa878a8, sun: 0xb090c0, ambient: 0x8f86c0, fog: 0x6f5f94, sunIntensity: 0.12, ambientIntensity: 0.85 }],
   [0.93, NIGHT],
   [1.00, NIGHT],

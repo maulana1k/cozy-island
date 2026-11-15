@@ -22,8 +22,6 @@ export function createActivities(scene, deps) {
     const a = (deg * Math.PI) / 180, p = { x: VILLAGE_FIRE.x + Math.cos(a) * 2.35, z: VILLAGE_FIRE.z + Math.sin(a) * 2.35 };
     spots.push({ ...p, rot: facingTo(p, VILLAGE_FIRE), pose: 'clap', sitGround: true });
   });
-  // Standing to attention, saluting the flag.
-  for (const p of SALUTE_LINE) spots.push({ ...p, rot: facingTo(p, FLAGPOLE), pose: 'salute' });
   // The cook in the food tent, and two scouts eating at a picnic table.
   const mess = COTTAGES.find((c) => c.type === 'mess');
   const cook = toWorld(mess, -1.55, -0.45);
@@ -35,8 +33,6 @@ export function createActivities(scene, deps) {
   }
   // Lashing a tripod at the pioneering site.
   for (const [dx, dz] of [[-1.25, 0.5], [1.1, 0.9]]) { const p = { x: PIONEER_SITE.x + dx, z: PIONEER_SITE.z + dz }; spots.push({ ...p, rot: facingTo(p, PIONEER_SITE), pose: 'hammer' }); }
-  // Morning exercises on the beach by the camp.
-  for (const k of [0, 1, 2]) { const p = { x: CAMPFIRE.x + 6.5 + k * 1.5, z: CAMPFIRE.z - 5.5 - k * 0.9 }; spots.push({ ...p, rot: facingTo(p, CAMPFIRE) + 0.6, pose: 'jacks' }); }
 
   // On the summit: two signallers sending semaphore down to the camp, a lookout with binoculars,
   // and a scout drawing the map by the fire.

@@ -140,6 +140,8 @@ export function createAudio(makeContext = () => new AudioContext()) {
     ui() { tone(A5, { type: 'sine', dur: 0.08, gain: 0.04 }); },
     // The flying fox trolley whirring down the cable.
     zip() { hiss({ freq: 2200, q: 2.5, dur: 8.2, gain: 0.05 }); tone(220, { type: 'sawtooth', dur: 8, gain: 0.016, to: 560 }); },
+    whistle() { tone(2300, { type: 'sine', dur: 0.16, gain: 0.05 }); tone(2300, { type: 'sine', dur: 0.4, gain: 0.05, delay: 0.22 }); },
+    laugh() { for (let i = 0; i < 5; i++) tone(700 + i * 60 + Math.random() * 80, { type: 'triangle', dur: 0.09, gain: 0.05, delay: i * 0.1, to: 560 }); },
     cheer() { tone(D5, { dur: 0.2, gain: 0.06 }); tone(G5, { dur: 0.3, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };

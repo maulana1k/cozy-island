@@ -46,6 +46,7 @@ const PELVIS_Y = 0.4, NECK_Y = 0.42; // neck is measured from the pelvis
 export function createFigure({
   bodyColor, accent, accentColor = 0xffffff, hairColor = 0x5b4336,
   skinColor = 0xf1c7a0, shortsColor = 0x5f7fa6, backpackColor = null, neckerchief = null, holdFlags = false,
+  coat = null, armband = false, carry = null, scale = 1,
 }) {
   const group = new THREE.Group();
   const inner = new THREE.Group();   // leans and squashes
@@ -79,6 +80,10 @@ export function createFigure({
     shoulder.add(part(new THREE.CapsuleGeometry(0.062, 0.08, 3, 8), shirt, 0, -0.07, 0));
     const elbow = new THREE.Group(); elbow.position.y = -0.14;
     elbow.add(part(new THREE.CapsuleGeometry(0.05, 0.08, 3, 8), skin, 0, -0.065, 0), part(new THREE.SphereGeometry(0.058, 8, 8), skin, 0, -0.15, 0, false));
+    if (armband && side === -1) { // a first-aider's white band with a red cross
+      shoulder.add(part(new THREE.CylinderGeometry(0.078, 0.078, 0.08, 10), mat(0xffffff), 0, -0.07, 0, false),
+        part(new THREE.BoxGeometry(0.012, 0.055, 0.02), mat(0xd9453a), -0.08, -0.07, 0, false), part(new THREE.BoxGeometry(0.012, 0.02, 0.055), mat(0xd9453a), -0.08, -0.07, 0, false));
+    }
     if (holdFlags) { // a signalling flag in each hand
       const stickM = part(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 5), dark, 0, -0.38, 0, false);
       const red = part(new THREE.BoxGeometry(0.32, 0.16, 0.012), mat(0xe8503a), side * 0.17, -0.5, 0), yel = part(new THREE.BoxGeometry(0.32, 0.16, 0.012), mat(0xf2c94c), side * 0.17, -0.34, 0);
@@ -111,6 +116,14 @@ export function createFigure({
     torso.add(part(new THREE.BoxGeometry(0.3, 0.32, 0.16), mat(backpackColor), 0, 0.22, -0.24), part(new THREE.BoxGeometry(0.31, 0.1, 0.17), mat(0xf4e3b5), 0, 0.34, -0.245, false));
   }
 
+  if (coat !== null) { // a long coat over the uniform
+    torso.add(part(new THREE.CapsuleGeometry(0.225, 0.3, 4, 12), mat(coat), 0, 0.13, 0), part(new THREE.BoxGeometry(0.02, 0.5, 0.02), mat(0xd8d2c4), 0, 0.12, 0.226, false));
+  }
+  // Something carried in both arms: a supply crate.
+  let load = null;
+  if (carry !== null) { load = part(new THREE.BoxGeometry(0.42, 0.3, 0.3), mat(carry), 0, 0.2, 0.36); torso.add(load); }
+  group.scale.setScalar(scale);
+
   let phase = 0, lastElapsed = null, gait = 0, run = 0;
   const seed = Math.random() * 10;
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
@@ -118,6 +131,7 @@ export function createFigure({
 
   return {
     group,
+    setCarry(on) { if (load) load.visible = on; },
     // speed (m/s) drives the stride. opts: sitting, sitGround, wobble 0..1, air (-1 falling .. 1 rising,
     // only while airborne), land 0..1 (just landed), roll, pitch, reach 0..1, wave 0..1,
     // pose: 'clap' | 'jacks' | 'salute' | 'stir' | 'eat' | 'hammer'.
@@ -192,6 +206,23 @@ export function createFigure({
         const SIG = [[0.4, 2.4], [1.55, 1.55], [2.4, 0.4], [0.4, 1.55], [1.55, 2.4], [2.4, 2.4], [0.4, 0.4]];
         const [l, r] = SIG[Math.floor(e / 0.95) % SIG.length];
         t.shLz = -l; t.shRz = r; t.shLx = t.shRx = 0; t.elL = t.elR = -0.03; snap = 8;
+      } else if (o.pose === 'carry') {
+        t.shLx = t.shRx = -0.75; t.elL = t.elR = -1.25; t.shLz = 0.1; t.shRz = -0.1; t.lean += 0.02;
+      } else if (o.pose === 'command') {
+        // One arm sweeping and pointing, the other on the hip: giving orders.
+        t.shRx = -1.45 + Math.sin(e * 2.6) * 0.3; t.shRz = 0.25 + Math.sin(e * 1.7) * 0.35; t.elR = -0.2; t.shLz = -0.55; t.shLx = 0.15; t.elL = -1.7; t.lean = -0.03;
+      } else if (o.pose === 'attention') {
+        t.shLx = t.shRx = 0; t.shLz = -0.05; t.shRz = 0.05; t.elL = t.elR = -0.03; t.lean = -0.04;
+      } else if (o.pose === 'explain') {
+        t.shRx = -0.9 + Math.sin(e * 2.2) * 0.25; t.elR = -1.0 + Math.sin(e * 3.1) * 0.3; t.shLx = -0.7 + Math.sin(e * 1.9 + 1) * 0.2; t.elL = -1.1; t.lean = 0.05;
+      } else if (o.pose === 'tug') {
+        // Leaning back on the rope, feet shuffling for grip.
+        t.lean = -0.42 + Math.sin(e * 3.3) * 0.05; t.shLx = t.shRx = -1.15; t.elL = t.elR = -0.45; t.shLz = 0.25; t.shRz = -0.25;
+        t.thL = -0.55 + Math.sin(e * 5) * 0.12; t.thR = -0.2 - Math.sin(e * 5) * 0.12; t.knL = 0.75; t.knR = 0.55; t.py = -0.05;
+      } else if (o.pose === 'bandage') {
+        // Kneeling, both hands busy winding a bandage.
+        t.thL = -1.5; t.knL = 1.6; t.thR = -0.15; t.knR = 1.75; t.py = -0.17; t.lean = 0.3;
+        t.shLx = -1.0 + Math.sin(e * 5) * 0.12; t.shRx = -1.0 - Math.sin(e * 5) * 0.12; t.elL = -0.8 + Math.cos(e * 5) * 0.2; t.elR = -0.8 - Math.cos(e * 5) * 0.2;
       } else if (o.pose === 'hang') {
         // Hanging from the flying fox: arms straight up, knees tucked, swinging a little.
         t.shLx = t.shRx = -3.0; t.shLz = 0.12; t.shRz = -0.12; t.elL = t.elR = -0.08;
@@ -222,6 +253,9 @@ export function createFigure({
           case 'salute': mix('shRx', -0.5); mix('shRz', 1.35); mix('elR', -2.25); break;
           case 'cheer': mix('shRz', 2.6); mix('shLz', -2.6); mix('shRx', 0); mix('shLx', 0); mix('elR', -0.2); mix('elL', -0.2); t.py += Math.abs(osc(4)) * 0.13 * env; break;
           case 'clap': mix('shRx', -1.0); mix('shLx', -1.0); mix('shRz', -0.25 - Math.max(0, osc(8)) * 0.3); mix('shLz', 0.25 + Math.max(0, osc(8)) * 0.3); mix('elR', -1.0); mix('elL', -1.0); break;
+          case 'throw': mix('shRx', u < 0.45 ? 0.9 : -2.6); mix('elR', u < 0.45 ? -1.6 : -0.1); mix('shRz', 0.3); t.lean += (u < 0.45 ? -0.15 : 0.22) * env; break;
+          case 'catch': mix('shRx', -2.3); mix('shLx', -2.3); mix('elR', -0.5); mix('elL', -0.5); mix('shRz', -0.15); mix('shLz', 0.15); break;
+          case 'laugh': mix('shRx', -0.6); mix('shLx', -0.6); mix('elR', -1.7); mix('elL', -1.7); mix('shRz', -0.4); mix('shLz', 0.4); t.py += Math.abs(osc(10)) * 0.05 * env; t.lean += 0.2 * env; break;
           case 'peer': mix('shRx', -1.5); mix('shLx', -1.5); mix('elR', -2.0); mix('elL', -2.0); mix('shRz', -0.3); mix('shLz', 0.3); t.lean += 0.12 * env; break;
           default: mix('shRx', -1.35); mix('elR', -0.25); mix('shRz', 0.1); t.lean += 0.1 * env; // 'reach'
         }

@@ -12,6 +12,7 @@ import { createInput } from './input.js';
 import { createPlayer } from './actors/player.js';
 import { createVillagers } from './actors/villagers.js';
 import { createActivities } from './actors/activities.js';
+import { createCampLife } from './actors/campLife.js';
 import { createAnimals } from './actors/animals.js';
 import { createWildlife } from './actors/wildlife.js';
 import { createFollowCamera } from './camera.js';
@@ -59,6 +60,7 @@ const rig = createFollowCamera(camera);
 const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed });
 const villagers = createVillagers(scene, { ui, audio, player });
 const activities = createActivities(scene, { ui, audio });
+const campLife = createCampLife(scene, { ui, audio, player });
 const animals = createAnimals(scene, { ui, audio, player });
 const wildlife = createWildlife(scene, { ui, audio });
 const zipline = createZipline(scene, { ui, audio, player });
@@ -78,7 +80,7 @@ player.onLand = (surface) => { audio.play(`step:${surface}`); effects.land(surfa
 // Buildings are hollow for the player (walls with a doorway); everyone else treats them as solid.
 const allStatic = getColliders();
 const openStatic = allStatic.filter((c) => !c.building);
-const interactables = [...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...animals.interactables, ...wildlife.interactables];
+const interactables = [...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 const playerXZ = { x: 0, z: 0 };
 
 // A different movement for each kind of thing you do: [gesture, seconds].
@@ -204,12 +206,13 @@ function step() {
   audio.setNight(night);
 
   if (!paused) {
-    const colliders = openStatic.concat(buildings.colliders(), villagers.colliders(), activities.colliders(), wildlife.colliders());
+    const colliders = openStatic.concat(buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
     zipline.update(dt, elapsed, player);
     player.update(dt, input, rig.yaw, colliders, elapsed);
     buildings.update(dt, elapsed, player);
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
+    campLife.update(dt, elapsed);
     animals.update(dt, elapsed, player);
     wildlife.update(dt, elapsed, player);
     pond.update(dt, elapsed, night);

@@ -45,7 +45,7 @@ const PELVIS_Y = 0.4, NECK_Y = 0.42; // neck is measured from the pelvis
 // Origin at the feet, facing +z.
 export function createFigure({
   bodyColor, accent, accentColor = 0xffffff, hairColor = 0x5b4336,
-  skinColor = 0xf1c7a0, shortsColor = 0x5f7fa6, backpackColor = null, neckerchief = null,
+  skinColor = 0xf1c7a0, shortsColor = 0x5f7fa6, backpackColor = null, neckerchief = null, holdFlags = false,
 }) {
   const group = new THREE.Group();
   const inner = new THREE.Group();   // leans and squashes
@@ -79,6 +79,11 @@ export function createFigure({
     shoulder.add(part(new THREE.CapsuleGeometry(0.062, 0.08, 3, 8), shirt, 0, -0.07, 0));
     const elbow = new THREE.Group(); elbow.position.y = -0.14;
     elbow.add(part(new THREE.CapsuleGeometry(0.05, 0.08, 3, 8), skin, 0, -0.065, 0), part(new THREE.SphereGeometry(0.058, 8, 8), skin, 0, -0.15, 0, false));
+    if (holdFlags) { // a signalling flag in each hand
+      const stickM = part(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 5), dark, 0, -0.38, 0, false);
+      const red = part(new THREE.BoxGeometry(0.32, 0.16, 0.012), mat(0xe8503a), side * 0.17, -0.5, 0), yel = part(new THREE.BoxGeometry(0.32, 0.16, 0.012), mat(0xf2c94c), side * 0.17, -0.34, 0);
+      elbow.add(stickM, red, yel);
+    }
     shoulder.add(elbow); torso.add(shoulder);
     return { shoulder, elbow };
   }
@@ -120,14 +125,18 @@ export function createFigure({
       const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, 0.1);
       lastElapsed = elapsed;
       const ease = (k) => 1 - Math.exp(-dt * k);
-      gait += (clamp(speed / 3.0, 0, 1) - gait) * ease(9);
-      run += (clamp((speed - 4) / 2.6, 0, 1) - run) * ease(7);
-      if (speed > 0.05) phase += dt * (3.4 + speed * 1.75);
+      gait += (clamp(speed / 0.7, 0, 1) - gait) * ease(10);
+      run += (clamp((speed - 3.6) / 2.2, 0, 1) - run) * ease(7);
+      // Feet must keep up with the ground: each step covers a set distance, so the legs
+      // turn over exactly as fast as the body is moving. Faster means longer strides.
+      const stepLen = 0.3 + 0.1 * speed;
+      phase += (dt * speed * Math.PI) / stepLen;
       const s = Math.sin(phase), c2 = Math.cos(phase + 0.6);
       const t = { ...pose };
 
       // ---- Walking and running
-      const A = (0.5 + run * 0.5) * gait;
+      // The legs open just wide enough to cover that step (leg length is about 0.37 m).
+      const A = Math.min(1.05, Math.asin(Math.min(0.95, stepLen / 0.74))) * gait;
       t.thL = -s * A - run * 0.12 * gait; t.thR = s * A - run * 0.12 * gait;
       t.knL = (0.12 + (0.7 + run * 0.75) * Math.max(0, c2)) * gait;
       t.knR = (0.12 + (0.7 + run * 0.75) * Math.max(0, -c2)) * gait;
@@ -137,7 +146,7 @@ export function createFigure({
       t.elL = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, -s) * 0.25 * gait;
       t.elR = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, s) * 0.25 * gait;
       t.spreadL = 0; t.spreadR = 0;
-      t.py = -Math.cos(phase * 2) * (0.016 + run * 0.03) * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
+      t.py = -Math.cos(phase * 2) * (0.014 + run * 0.035) * gait - (1 - Math.cos(A)) * 0.3 * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
       t.lean = 0.05 * gait + run * 0.2;
       let snap = 14; // how quickly joints chase their targets
 
@@ -178,14 +187,46 @@ export function createFigure({
       } else if (o.pose === 'eat') {
         const bite = Math.max(0, Math.sin(e * 1.7));
         t.shRx = -0.55 - bite * 0.3; t.elR = -1.1 - bite * 1.0; t.shLx = -0.6; t.elL = -0.9;
+      } else if (o.pose === 'semaphore') {
+        // Arms swing between signal positions, holding each for a moment.
+        const SIG = [[0.4, 2.4], [1.55, 1.55], [2.4, 0.4], [0.4, 1.55], [1.55, 2.4], [2.4, 2.4], [0.4, 0.4]];
+        const [l, r] = SIG[Math.floor(e / 0.95) % SIG.length];
+        t.shLz = -l; t.shRz = r; t.shLx = t.shRx = 0; t.elL = t.elR = -0.03; snap = 8;
+      } else if (o.pose === 'hang') {
+        // Hanging from the flying fox: arms straight up, knees tucked, swinging a little.
+        t.shLx = t.shRx = -3.0; t.shLz = 0.12; t.shRz = -0.12; t.elL = t.elR = -0.08;
+        t.thL = -0.75 + Math.sin(e * 3) * 0.12; t.thR = -0.55 - Math.sin(e * 3) * 0.12; t.knL = 1.2; t.knR = 0.9; t.py = 0; t.lean = -0.12 + Math.sin(e * 2.2) * 0.06;
+      } else if (o.pose === 'binoculars') {
+        t.shLx = t.shRx = -1.5; t.elL = t.elR = -2.0; t.shLz = 0.3; t.shRz = -0.3; t.lean = -0.04;
+      } else if (o.pose === 'write') {
+        t.shRx = -0.9; t.elR = -1.2 + Math.sin(e * 7) * 0.08; t.shRz = -0.25 + Math.sin(e * 5) * 0.06; t.shLx = -0.7; t.elL = -1.1; t.lean = 0.2;
       } else if (o.pose === 'hammer') {
         const hit = Math.sin(e * 4.2);
         t.thL = t.thR = -1.0; t.knL = t.knR = 1.75; t.py = -0.15; t.lean = 0.38;
         t.shRx = -1.0 + hit * 0.5; t.elR = -0.9 - hit * 0.3; t.shLx = -0.8; t.elL = -0.7;
       }
       // ---- Gestures layered on top
-      if (o.reach) { t.shRx = lerp(t.shRx, -1.35, o.reach); t.elR = lerp(t.elR, -0.25, o.reach); t.shRz = lerp(t.shRz, 0.1, o.reach); t.lean += 0.1 * o.reach; }
-      if (o.wave) { t.shRz = lerp(t.shRz, 2.45, o.wave); t.shRx = lerp(t.shRx, 0, o.wave); t.elR = lerp(t.elR, -0.5 + Math.sin(e * 11) * 0.45, o.wave); }
+      // ---- One-off gestures layered on top: a different one for each kind of thing you do
+      if (o.gesture) {
+        const u = clamp(o.gesture.u, 0, 1), env = Math.sin(u * Math.PI), osc = (n) => Math.sin(u * Math.PI * n);
+        const mix = (key, v) => { t[key] = lerp(t[key], v, env); };
+        switch (o.gesture.name) {
+          case 'reachUp': mix('shRx', -2.7); mix('elR', -0.15); mix('shRz', 0.15); t.py += 0.05 * env; t.lean -= 0.06 * env; break;
+          case 'push': mix('shRx', -1.45); mix('shLx', -1.45); mix('elR', -0.2); mix('elL', -0.2); mix('shRz', 0.05); mix('shLz', -0.05); t.lean += 0.28 * env; break;
+          case 'pull': mix('shRx', -2.5 + osc(6) * 0.55); mix('shLx', -2.3 - osc(6) * 0.55); mix('elR', -0.7); mix('elL', -0.7); mix('shRz', 0.1); mix('shLz', -0.1); t.py -= Math.max(0, osc(6)) * 0.05 * env; break;
+          case 'shake': mix('shRx', -1.5); mix('shLx', -1.5); mix('shRz', 0.1 + osc(10) * 0.3); mix('shLz', -0.1 + osc(10) * 0.3); mix('elR', -0.4); mix('elL', -0.4); t.lean += 0.15 * env; break;
+          case 'crouch': mix('thL', -1.25); mix('thR', -1.25); mix('knL', 2.0); mix('knR', 2.0); t.py -= 0.19 * env; t.lean += 0.3 * env; mix('shRx', -1.0); mix('elR', -0.5 + osc(8) * 0.35); mix('shRz', 0.1); break;
+          case 'pat': mix('shRx', -1.25); mix('elR', -0.45 + osc(8) * 0.35); mix('shRz', 0.1); t.lean += 0.18 * env; break;
+          case 'wave': mix('shRz', 2.45); mix('shRx', 0); mix('elR', -0.5 + osc(9) * 0.45); break;
+          case 'shoo': mix('shRz', 1.2 + osc(8) * 0.35); mix('shLz', -1.2 - osc(8) * 0.35); mix('shRx', -0.7); mix('shLx', -0.7); mix('elR', -0.3); mix('elL', -0.3); t.lean += 0.22 * env; break;
+          case 'salute': mix('shRx', -0.5); mix('shRz', 1.35); mix('elR', -2.25); break;
+          case 'cheer': mix('shRz', 2.6); mix('shLz', -2.6); mix('shRx', 0); mix('shLx', 0); mix('elR', -0.2); mix('elL', -0.2); t.py += Math.abs(osc(4)) * 0.13 * env; break;
+          case 'clap': mix('shRx', -1.0); mix('shLx', -1.0); mix('shRz', -0.25 - Math.max(0, osc(8)) * 0.3); mix('shLz', 0.25 + Math.max(0, osc(8)) * 0.3); mix('elR', -1.0); mix('elL', -1.0); break;
+          case 'peer': mix('shRx', -1.5); mix('shLx', -1.5); mix('elR', -2.0); mix('elL', -2.0); mix('shRz', -0.3); mix('shLz', 0.3); t.lean += 0.12 * env; break;
+          default: mix('shRx', -1.35); mix('elR', -0.25); mix('shRz', 0.1); t.lean += 0.1 * env; // 'reach'
+        }
+        snap = 20;
+      }
 
       const k = ease(snap);
       for (const key in pose) pose[key] += (t[key] - pose[key]) * k;

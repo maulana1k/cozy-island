@@ -15,6 +15,7 @@ const HAIR = [0x5b4336, 0x8a5a3c, 0x3d3230, 0xc98f5a, 0xd8d2c8, 0x4a3b36];
 const SKIN = [0xf1c7a0, 0xc98d62, 0xe6b48a, 0x9a6a4a, 0xf3d2b4, 0xd9a273];
 const SHORTS = [0x5f7fa6, 0x8a6a4a, 0x6f8f6a, 0x4f5f7a, 0xa66a5f, 0x7a6fa6];
 const EMOTES = ['heart', 'note', 'surprise'];
+const REACTIONS = ['wave', 'cheer', 'salute', 'clap', 'wave'];
 
 export function createVillagers(scene, deps) {
   const { ui, audio } = deps;
@@ -33,6 +34,8 @@ export function createVillagers(scene, deps) {
   function nudge(v, from) {
     if (!nudgeVillager(v.brain, from)) return;
     v.wobble = 1; v.hop = NUDGE_TIME;
+    // Each scout answers a nudge in their own way, a moment after stumbling.
+    v.react = { name: REACTIONS[Math.floor(Math.random() * REACTIONS.length)], t: -0.45, dur: 1.1 };
     audio.play('squeak');
     const y = heightAt(v.brain.x, v.brain.z);
     ui.emote(new THREE.Vector3(v.brain.x, y + 1.85, v.brain.z), EMOTES[Math.floor(Math.random() * EMOTES.length)]);
@@ -75,7 +78,8 @@ export function createVillagers(scene, deps) {
 
         v.figure.group.position.set(b.x, groundAt(b.x, b.z) + hopY, b.z);
         v.figure.group.rotation.y = v.heading;
-        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble });
+        if (v.react) { v.react.t += dt; if (v.react.t >= v.react.dur) v.react = null; }
+        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
       }
     },
   };

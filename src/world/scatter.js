@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, zoneAt } from '../logic/terrain.js';
-import { getScatter, distanceToPath, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
+import { getScatter, distanceToPath, jungleAt, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
+import { POND } from '../config.js';
 import { createRng } from '../logic/rng.js';
 import { PALETTE, SEED } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 const SHAKE_TIME = 0.8;
-const GRASS_TUFTS = 3600;
+const GRASS_TUFTS = 9500;
+const FERNS = 260;
 
 // A faceted lump, squashed and placed.
 function blob(x, y, z, sx, sy, sz, rot = 0) {
@@ -15,6 +17,42 @@ function blob(x, y, z, sx, sy, sz, rot = 0) {
   g.rotateY(rot); g.scale(sx, sy, sz); g.translate(x, y, z);
   return g;
 }
+// A softer, rounder lump for leaves.
+function leafy(x, y, z, sx, sy, sz, rot = 0) {
+  const g = new THREE.IcosahedronGeometry(1, 1);
+  g.rotateY(rot); g.scale(sx, sy, sz); g.translate(x, y, z);
+  return g;
+}
+
+// A clump of curved ribbons growing from one spot: blades of grass, or fern fronds.
+// Each ribbon bends outward along its length and narrows to a soft tip. Vertex colours
+// run darker at the base to lighter at the tip.
+function ribbonClump({ blades, height, width, spread, droop, rows = 4, shape = 'blade' }) {
+  const pos = [], nor = [], col = [];
+  const frac = (v) => v - Math.floor(v);
+  for (let b = 0; b < blades; b++) {
+    const a = (b / blades) * Math.PI * 2 + frac(b * 0.618) * 1.4;
+    const dx = Math.cos(a), dz = Math.sin(a), px = -dz, pz = dx;
+    const r0 = spread * frac(b * 0.37 + 0.2), hb = height * (0.6 + 0.4 * frac(b * 0.73)), bend = droop * (0.6 + 0.8 * frac(b * 0.29));
+    const pts = [];
+    for (let i = 0; i <= rows; i++) {
+      const t = i / rows, out = r0 + bend * hb * t * t, y = hb * (t - 0.22 * bend * t * t);
+      const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : (1 - t * t * 0.92));
+      pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, 0.58 + 0.42 * t]);
+    }
+    for (let i = 0; i < rows; i++) {
+      const p = pts[i], q = pts[i + 1];
+      const quad = [[p[0], p[1], p[2], p[6]], [p[3], p[4], p[5], p[6]], [q[0], q[1], q[2], q[6]], [p[3], p[4], p[5], p[6]], [q[3], q[4], q[5], q[6]], [q[0], q[1], q[2], q[6]]];
+      for (const [x, y, z, shade] of quad) { pos.push(x, y, z); nor.push(dx * 0.25, 1, dz * 0.25); col.push(shade, shade, shade); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
 function stick(x0, y0, z0, x1, y1, z1, r0, r1) {
   const a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1);
   const len = a.distanceTo(b);
@@ -45,35 +83,43 @@ const TREE_KINDS = [
     canopy: () => { const g = new THREE.ConeGeometry(0.95, 4.2, 6).toNonIndexed(); g.translate(0, 3.1, 0); return g; },
     top: 3.2,
   },
+  { // palm: a leaning trunk with drooping fronds
+    color: 0x7fb257,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0.25, 1.7, 0, 0.24, 0.18), stick(0.25, 1.7, 0, 0.7, 3.3, 0, 0.18, 0.15), stick(0.7, 3.3, 0, 0.95, 4.7, 0, 0.15, 0.12)]),
+    canopy: () => {
+      const fronds = [];
+      for (let i = 0; i < 8; i++) {
+        const g = new THREE.ConeGeometry(0.34, 2.5, 4).toNonIndexed();
+        g.scale(1, 1, 0.22); g.translate(0, 1.25, 0); g.rotateZ(-1.15 - (i % 2) * 0.35); g.rotateY((i / 8) * Math.PI * 2); g.translate(0.95, 4.65, 0);
+        fronds.push(g);
+      }
+      fronds.push(blob(0.95, 4.7, 0, 0.3, 0.3, 0.3));
+      return mergeGeometries(fronds);
+    },
+    top: 4.4,
+  },
+  { // jungle giant: thick trunk, buttress roots and a deep layered crown
+    color: 0x4c8750,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0, 4.4, 0, 0.5, 0.3), stick(0.75, 0, 0.2, 0.15, 1.3, 0, 0.16, 0.1), stick(-0.6, 0, 0.5, -0.1, 1.2, 0, 0.16, 0.1), stick(-0.2, 0, -0.8, 0, 1.2, 0, 0.16, 0.1),
+      stick(0, 3.4, 0, 1.5, 4.8, 0.4, 0.16, 0.09), stick(0, 3.6, 0, -1.4, 4.9, -0.6, 0.16, 0.09)]),
+    canopy: () => mergeGeometries([blob(0, 5.4, 0, 2.4, 1.0, 2.2), blob(1.7, 5.0, 0.6, 1.5, 0.8, 1.4, 0.7), blob(-1.6, 5.1, -0.7, 1.6, 0.8, 1.4, 1.4), blob(0.3, 4.8, -1.7, 1.3, 0.7, 1.2, 2.2), blob(-0.4, 4.9, 1.8, 1.3, 0.7, 1.2, 0.2), blob(0, 6.3, 0, 1.6, 0.8, 1.5, 1)]),
+    top: 5.0,
+  },
+  { // young tree: a slim stem and a small round crown
+    color: 0x8fb866,
+    trunk: () => mergeGeometries([stick(0, 0, 0, 0.05, 1.5, 0, 0.09, 0.06), stick(0.03, 1.0, 0, 0.4, 1.6, 0.1, 0.04, 0.03), stick(0.03, 1.1, 0, -0.35, 1.7, -0.1, 0.04, 0.03)]),
+    canopy: () => mergeGeometries([leafy(0.05, 2.0, 0, 0.75, 0.7, 0.72), leafy(0.5, 1.75, 0.15, 0.48, 0.42, 0.46, 1), leafy(-0.45, 1.85, -0.15, 0.5, 0.44, 0.46, 2)]),
+    top: 1.9,
+  },
 ];
 
-function spikyBush() {
-  const spikes = [];
-  const spike = (tilt, turn, len) => {
-    const g = new THREE.ConeGeometry(0.1, len, 4).toNonIndexed();
-    g.translate(0, len / 2, 0); g.rotateX(tilt); g.rotateY(turn);
-    return g;
-  };
-  spikes.push(spike(0, 0, 0.95));
-  for (let i = 0; i < 6; i++) spikes.push(spike(0.55, (i / 6) * Math.PI * 2, 0.95));
-  for (let i = 0; i < 7; i++) spikes.push(spike(1.05, (i / 7) * Math.PI * 2 + 0.4, 0.8));
-  return mergeGeometries(spikes);
-}
+const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
+// Soft grass: many thin curved blades, most of them short.
+const tuftGeometry = () => ribbonClump({ blades: 11, height: 0.42, width: 0.022, spread: 0.2, droop: 0.9, rows: 3 });
 
-// A tuft of flat grass blades. Normals point up so a tuft is lit like the ground under it.
-function tuftGeometry() {
-  const positions = [], normals = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + (i % 2) * 0.5, r = 0.05 + (i % 3) * 0.05;
-    const bx = Math.cos(a) * r, bz = Math.sin(a) * r, w = 0.045, h = 0.42 + (i % 3) * 0.14;
-    const px = -Math.sin(a) * w, pz = Math.cos(a) * w;
-    positions.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, bx * 2.4, h, bz * 2.4);
-    normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  return g;
+// A rounded leafy bush made of a few lumps.
+function bushGeometry() {
+  return mergeGeometries([leafy(0, 0.42, 0, 0.62, 0.48, 0.58), leafy(0.42, 0.32, 0.12, 0.42, 0.36, 0.4, 1), leafy(-0.4, 0.3, -0.1, 0.44, 0.34, 0.42, 2), leafy(0.05, 0.3, -0.42, 0.38, 0.32, 0.36, 3), leafy(-0.05, 0.62, 0.2, 0.36, 0.3, 0.34, 4)]);
 }
 
 export function createScatter(scene) {
@@ -113,12 +159,12 @@ export function createScatter(scene) {
   dummy.rotation.order = 'XYZ';
 
   // ---- Spiky bushes
-  const bushes = new THREE.InstancedMesh(spikyBush(), flat(0xffffff), data.bushes.length);
+  const bushes = new THREE.InstancedMesh(bushGeometry(), flat(0xffffff), data.bushes.length);
   bushes.castShadow = true; bushes.receiveShadow = true;
   data.bushes.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - 0.05, b.z); dummy.rotation.set(0, b.rot, 0); dummy.scale.setScalar(b.scale * 1.15); dummy.updateMatrix();
     bushes.setMatrixAt(i, dummy.matrix);
-    bushes.setColorAt(i, color.setHex(i % 3 === 0 ? 0x86a377 : 0xa3b98f).offsetHSL(0, 0, Math.sin(i * 2.1) * 0.03));
+    bushes.setColorAt(i, color.setHex(jungleAt(b.x, b.z) > 0.5 ? [0x5f9a4c, 0x4f8a48][i % 2] : [0x93ae6c, 0xa9b874, 0x7f9f60][i % 3]).offsetHSL(0, 0, Math.sin(i * 2.1) * 0.03));
   });
 
   // ---- Rocks
@@ -146,21 +192,22 @@ export function createScatter(scene) {
   // ---- Tall dry grass, swaying in the breeze
   const rng = createRng(SEED + 21);
   const grassTime = { value: 0 };
-  const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true });
   grassMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = grassTime;
     shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
         float swayA = sin(uTime * 1.5 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27);
         float swayB = cos(uTime * 1.1 + instanceMatrix[3].x * 0.21 - instanceMatrix[3].z * 0.18);
-        transformed.x += swayA * 0.14 * position.y;
-        transformed.z += swayB * 0.08 * position.y;
+        transformed.x += swayA * 0.22 * position.y * position.y;
+        transformed.z += swayB * 0.14 * position.y * position.y;
       #endif`);
   };
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
   const grassColors = [0xf0cf72, 0xe3b85a, 0xf6dc8c, 0xd7b257, 0xc9c06a];
+  const lushColors = [0x8fbf5f, 0x7aae52, 0xa6cf6e, 0x6f9f4c, 0xb7d27a];
   while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 12) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.25) continue;
@@ -170,13 +217,32 @@ export function createScatter(scene) {
     // Grass grows in drifts rather than evenly.
     const drift = Math.sin(x * 0.22 + Math.cos(z * 0.19) * 1.7) * Math.cos(z * 0.17 + 1.3);
     if (drift < -0.25 && rng() < 0.8) continue;
+    const pd = Math.hypot(x - POND.x, z - POND.z);
+    if (pd < POND.rw + 1.3) continue; // bare mud at the water's edge
+    const lush = Math.max(jungleAt(x, z), pd < POND.rw + 9 ? 1 : 0);
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0);
-    const s = 0.75 + rng() * 0.9; dummy.scale.set(s, s * (0.8 + rng() * 0.6), s); dummy.updateMatrix();
+    const s = 0.7 + rng() * 0.7; dummy.scale.set(s, s * (lush > 0.5 ? 1.0 + rng() * 0.9 : 0.6 + rng() * 0.8), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
-    grass.setColorAt(placed, color.setHex(grassColors[Math.floor(rng() * grassColors.length)]));
+    grass.setColorAt(placed, color.setHex((lush > 0.5 ? lushColors : grassColors)[Math.floor(rng() * 5)]));
     placed++;
   }
   grass.count = placed;
+
+  // ---- Ferns carpet the jungle floor
+  const ferns = new THREE.InstancedMesh(fernGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true }), FERNS);
+  ferns.receiveShadow = true;
+  let fernCount = 0; guard = 0;
+  while (fernCount < FERNS && guard++ < FERNS * 40) {
+    const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 46, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (jungleAt(x, z) < 0.6 || zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.4) continue;
+    if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < Math.max(c.width, c.depth) / 2 + 1.5) || Math.hypot(x - FIELD.x, z - FIELD.z) < 5.5 || Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 4) continue;
+    dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0); dummy.scale.setScalar(0.6 + rng() * 0.9); dummy.updateMatrix();
+    ferns.setMatrixAt(fernCount, dummy.matrix);
+    ferns.setColorAt(fernCount, color.setHex([0x5f9a4c, 0x76ad55, 0x4f8a48][fernCount % 3]));
+    fernCount++;
+  }
+  ferns.count = fernCount; if (ferns.instanceColor) ferns.instanceColor.needsUpdate = true;
+  scene.add(ferns);
 
   for (const m of [bushes, rocks, heads, grass]) if (m.instanceColor) m.instanceColor.needsUpdate = true;
   scene.add(...kinds.flatMap((k) => [k.trunk, k.canopy]), bushes, rocks, stems, heads, grass);

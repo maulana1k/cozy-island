@@ -25,9 +25,9 @@ test('every building door faces away from its own walls', () => {
 });
 test('counts', () => {
   const s = getScatter();
-  expect(s.trees).toHaveLength(70); expect(s.bushes).toHaveLength(30);
+  expect(s.trees).toHaveLength(264); expect(s.bushes).toHaveLength(30);
   expect(s.flowers).toHaveLength(150); expect(s.rocks).toHaveLength(25);
-  expect(LANTERNS).toHaveLength(8); expect(SEATS).toHaveLength(5); expect(VILLAGER_SPOTS.length).toBeGreaterThanOrEqual(10);
+  expect(LANTERNS).toHaveLength(8); expect(SEATS).toHaveLength(7); expect(VILLAGER_SPOTS.length).toBeGreaterThanOrEqual(10);
 });
 test('scatter is the same every time', () => { expect(getScatter()).toEqual(getScatter()); });
 test('trees are on grass, off paths, clear of cottages', () => {

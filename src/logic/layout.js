@@ -1,7 +1,7 @@
 // Fixed positions of everything on the island. The same every run.
 import { createRng } from './rng.js';
 import { heightAt, zoneAt } from './terrain.js';
-import { SEED, PALETTE, HILL, PLAYER_START } from '../config.js';
+import { SEED, PALETTE, HILL, PLAYER_START, POND } from '../config.js';
 
 const DEG = Math.PI / 180;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -59,7 +59,22 @@ export const BOAT = {
 
 export const CAMPFIRE = { x: Math.cos(128 * DEG) * 53, z: Math.sin(128 * DEG) * 53 };
 export const LOOKOUT = { x: HILL.x, z: HILL.z };
-export const CAMPFIRES = [{ id: 'fire-village', ...VILLAGE_FIRE, lit: true }, { id: 'fire-camp', ...CAMPFIRE, lit: false }];
+// The summit camp on the hill's level top: a signal mast, a third fire, a lean-to shelter,
+// a telescope looking out to sea and a cairn.
+const onSummit = (dx, dz) => ({ x: LOOKOUT.x + dx, z: LOOKOUT.z + dz });
+export const SUMMIT = {
+  fire: onSummit(1.6, 1.8), mast: onSummit(0, -0.8), shelter: { ...onSummit(3.9, -2.2), rot: -1.2 },
+  telescope: onSummit(-1.9, -4.1), cairn: onSummit(1.4, -4.2), signallers: [onSummit(-1.6, 3.4), onSummit(0.3, 4.3)],
+  watcher: onSummit(-3.1, -3.5), mapper: onSummit(3.3, 0.9),
+};
+// The flying fox: a cable from a launch tower on the summit down to a landing frame by the beach,
+// and the trail riders climb back up by.
+export const ZIPLINE = {
+  top: onSummit(-5.35, -2.5), bottom: { x: -46.2, z: -21.6 }, topHeight: 4.4, bottomHeight: 2.7,
+  trail: [{ x: -45.2, z: -20.4 }, { x: -41, z: -16 }, { x: -34, z: -13.5 }, { x: -26, z: -13 }],
+  queue: onSummit(-3.7, -1.0),
+};
+export const CAMPFIRES = [{ id: 'fire-village', ...VILLAGE_FIRE, lit: true }, { id: 'fire-camp', ...CAMPFIRE, lit: false }, { id: 'fire-summit', ...SUMMIT.fire, lit: true }];
 export const CHICKEN_YARD = { x: 25, z: 23, r: 3 };
 // A windmill stands on the north-east meadow, with sheep grazing beside it.
 export const WINDMILL = { x: 30, z: -22 };
@@ -70,7 +85,7 @@ const facing = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
 const around = (c, angleDeg, r) => ({ x: c.x + Math.cos(angleDeg * DEG) * r, z: c.z + Math.sin(angleDeg * DEG) * r });
 
 function seat(id, kind, pos, lookAt) { return { id, kind, x: pos.x, z: pos.z, rot: facing(pos, lookAt) }; }
-const lookoutSeat = { x: LOOKOUT.x - 0.9, z: LOOKOUT.z - 1.1 };
+const lookoutSeat = around(LOOKOUT, 278, 4.7);
 
 // Two logs by the village fire, two by the camp fire, one bench at the lookout facing the sea.
 export const SEATS = [
@@ -79,6 +94,8 @@ export const SEATS = [
   seat('log-0', 'log', around(CAMPFIRE, 200, 2.0), CAMPFIRE),
   seat('log-1', 'log', around(CAMPFIRE, 320, 2.0), CAMPFIRE),
   seat('bench-2', 'bench', lookoutSeat, { x: lookoutSeat.x * 3, z: lookoutSeat.z * 3 }),
+  seat('log-4', 'log', around(SUMMIT.fire, 25, 2.0), SUMMIT.fire),
+  seat('log-5', 'log', around(SUMMIT.fire, 120, 2.0), SUMMIT.fire),
 ];
 
 // Canvas tents: three around the beach camp fire, and the scouts' rows beside the parade ground.
@@ -111,8 +128,13 @@ export const PATHS = [
   }),
   [VILLAGE_CENTER, { x: 24, z: 11 }, { x: 40, z: 15 }, { x: DOCK.x, z: DOCK.z }],
   [VILLAGE_CENTER, PLAYER_START, { x: 3, z: 24 }, { x: -14, z: 35 }, { x: CAMPFIRE.x + 2.6, z: CAMPFIRE.z - 3.2 }],
-  [VILLAGE_CENTER, { x: 1, z: -2 }, { x: -6, z: -11 }, { x: -11, z: -14 }, { x: -15, z: -18.5 }, { x: LOOKOUT.x + 1.2, z: LOOKOUT.z + 1.6 }],
+  // The hill trail winds up the gentler side to the summit.
+  [VILLAGE_CENTER, { x: 1, z: -2 }, { x: -5, z: -8 }, { x: -12, z: -8.5 }, { x: -20, z: -9.5 }, { x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }],
+  // The way back up from the flying fox landing.
+  ZIPLINE.trail,
 ];
+// The last stretch of the hill trail, from where the flying fox trail joins it up to the summit.
+export const HILL_TRAIL_TOP = [{ x: -26, z: -13 }, { x: -27.5, z: -19 }, { x: -23.6, z: -21 }];
 const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1], HILL_PATH = PATHS[COTTAGES.length + 2];
 
 function distanceToSegment(x, z, a, b) {
@@ -152,8 +174,7 @@ export const FENCES = [
   [around(CHICKEN_YARD, 20, 3.6), around(CHICKEN_YARD, 80, 3.6)],
   [around(CHICKEN_YARD, 80, 3.6), around(CHICKEN_YARD, 140, 3.6)],
   [around(CHICKEN_YARD, 320, 3.6), around(CHICKEN_YARD, 20, 3.6)],
-  [around(LOOKOUT, 215, 2.9), around(LOOKOUT, 250, 2.9)],
-  [around(LOOKOUT, 180, 2.9), around(LOOKOUT, 215, 2.9)],
+  ...[224, 246, 268, 290].map((a) => [around(LOOKOUT, a, 6.0), around(LOOKOUT, a + 22, 6.0)]),
 ];
 
 // Standing spots villagers stroll between. The first has open ground all around it.
@@ -194,6 +215,23 @@ export function groundAt(x, z) {
   return h;
 }
 
+// How deep in the jungle a spot is: 0 in and around the camp, 1 well outside it.
+export function jungleAt(x, z) {
+  const d = Math.hypot(x - 10, z - 8), r = Math.hypot(x, z);
+  const t = Math.min(1, Math.max(0, (d - 23) / 6)) * Math.min(1, Math.max(0, (47 - r) / 4));
+  return t * t * (3 - 2 * t);
+}
+
+// What you are standing on, when it is something built: the dock's planks or a tent's groundsheet.
+export function platformAt(x, z) {
+  if (inDock(x, z)) return 'wood';
+  for (const f of FLOORS) {
+    const wx = x - f.c.x, wz = z - f.c.z;
+    if (Math.abs(wx * f.cos - wz * f.sin) < f.c.width / 2 + 0.05 && Math.abs(wx * f.sin + wz * f.cos) < f.c.depth / 2 + 0.2) return 'floor';
+  }
+  return null;
+}
+
 // ---- Scatter ------------------------------------------------------------
 
 let scatterCache = null;
@@ -206,9 +244,11 @@ export function getScatter() {
     ...VILLAGER_SPOTS.map((s) => ({ ...s, r: 2.6 })),
     { ...PLAYER_START, r: 3 }, { ...CAMPFIRE, r: 8.5 }, { ...BELL, r: 2 }, { ...FLAGPOLE, r: 2 }, { ...FIELD, r: 5.5 },
     ...TENTS.map((t) => ({ ...t, r: 3 })),
-    { ...GATE, r: 3.2 }, { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
+    { x: POND.x, z: POND.z, r: POND.rw + 1.4 }, { ...GATE, r: 3.2 },
+    // Nothing may grow under the flying fox cable.
+    ...Array.from({ length: 9 }, (_, k) => ({ x: ZIPLINE.top.x + (ZIPLINE.bottom.x - ZIPLINE.top.x) * (k / 8), z: ZIPLINE.top.z + (ZIPLINE.bottom.z - ZIPLINE.top.z) * (k / 8), r: 3.4 })), { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
     ...SALUTE_LINE.map((p) => ({ ...p, r: 1.6 })), { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
-    { ...LOOKOUT, r: 4.5 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
+    { ...LOOKOUT, r: 8.6 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
   ];
   const clearOf = (p, list, extra = 0) => list.every((o) => dist(p, o) > (o.r || 0) + extra);
   // Bigger buildings need a wider berth.
@@ -226,10 +266,16 @@ export function getScatter() {
     return out;
   }
 
-  const trees = place(70, 'tree',
-    (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 45.5 && distanceToPath(p.x, p.z) > 2.4
-      && clearOfCottages(p, 5.6) && dist(p, VILLAGE_CENTER) > 9 && clearOf(p, keepClear, 0.6) && out.every((o) => dist(p, o) > 2.9),
-    () => ({ scale: 0.85 + rng() * 0.5, rot: rng() * Math.PI * 2, kind: Math.floor(rng() * 3) }));
+  // A few trees stand around the camp; beyond it the island is thick jungle of every size.
+  const CAMP = { x: 10, z: 8 };
+  const treeOk = (gap) => (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 45.5 && distanceToPath(p.x, p.z) > 2.4
+    && clearOfCottages(p, 5.6) && dist(p, VILLAGE_CENTER) > 9 && clearOf(p, keepClear, 0.6) && out.every((o) => dist(p, o) > gap);
+  const campTrees = place(34, 'tree', (p, out) => dist(p, CAMP) <= 28 && treeOk(3.2)(p, out),
+    () => ({ scale: 0.85 + rng() * 0.5, rot: rng() * Math.PI * 2, kind: [0, 1, 2, 5, 5, 1][Math.floor(rng() * 6)] }));
+  const JUNGLE_KINDS = [3, 4, 0, 3, 4, 2, 1, 4, 5, 5];
+  const jungle = place(230, 'jtree', (p, out) => dist(p, CAMP) > 25 && treeOk(1.9)(p, out) && campTrees.every((o) => dist(p, o) > 2.6),
+    () => ({ scale: 0.5 + rng() * rng() * 1.7, rot: rng() * Math.PI * 2, kind: JUNGLE_KINDS[Math.floor(rng() * JUNGLE_KINDS.length)] }));
+  const trees = [...campTrees, ...jungle];
 
   const bushes = place(30, 'bush',
     (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 46.5 && distanceToPath(p.x, p.z) > 1.6
@@ -290,6 +336,9 @@ export function getColliders() {
     ...TENTS.map((t) => ({ x: t.x, z: t.z, hw: 1.25, hd: 1.35, rot: t.rot })),
     { x: BOAT.x, z: BOAT.z, r: 1.2 },
     { x: WINDMILL.x, z: WINDMILL.z, r: 2.4 },
+    { x: ZIPLINE.top.x, z: ZIPLINE.top.z, r: 1.25 }, { x: ZIPLINE.bottom.x - 1.2, z: ZIPLINE.bottom.z, r: 0.5 },
+    { x: SUMMIT.mast.x, z: SUMMIT.mast.z, r: 0.3 }, { x: SUMMIT.telescope.x, z: SUMMIT.telescope.z, r: 0.4 }, { x: SUMMIT.cairn.x, z: SUMMIT.cairn.z, r: 0.6 },
+    { x: SUMMIT.shelter.x, z: SUMMIT.shelter.z, hw: 1.3, hd: 0.5, rot: SUMMIT.shelter.rot },
   ];
   return colliderCache;
 }

@@ -1,7 +1,7 @@
 // Things the player can use with E: lanterns, doors, the bell, seats, trees and campfires.
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
-import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE } from '../logic/layout.js';
+import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE, SUMMIT } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
@@ -150,6 +150,16 @@ export function createProps(scene, deps) {
       }
       pos.needsUpdate = true; clothGeo.computeVertexNormals();
       flag.rotation.y = Math.sin(elapsed * 0.6) * 0.15;
+    });
+  }
+
+  // ---- Telescope on the summit
+  {
+    const p = SUMMIT.telescope, y = heightAt(p.x, p.z);
+    interactables.push({
+      id: 'telescope', kind: 'telescope', position: { x: p.x, z: p.z }, markerY: y + 1.75,
+      prompt: () => 'E — look through telescope',
+      interact() { audio.play('lantern'); ui.emote(new THREE.Vector3(p.x, y + 2.0, p.z), 'star'); },
     });
   }
 

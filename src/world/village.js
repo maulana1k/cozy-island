@@ -198,8 +198,6 @@ export function createVillage(scene) {
   const windmill = buildWindmill(mats);
   group.add(buildField(mats));
   group.add(windmill.g);
-  PATHS.forEach((p, i) => group.add(buildPath(p, i < COTTAGES.length ? 1.3 : 1.7, mats.path)));
-  group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
   TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
   group.add(buildDock(mats));

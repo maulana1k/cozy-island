@@ -1,41 +1,60 @@
 import * as THREE from 'three';
 import { heightAt, zoneAt } from '../logic/terrain.js';
-import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL } from '../config.js';
+import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND } from '../config.js';
+import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
+import { ROCK_HEIGHT } from '../logic/surface.js';
 
 const TERRAIN_SIZE = 170;
-const TERRAIN_SEGMENTS = 136;
+const TERRAIN_SEGMENTS = 250;
+
+const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
 
 function buildTerrain() {
   const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
-  const grass = new THREE.Color(PALETTE.grass), grassDark = new THREE.Color(PALETTE.grassDark);
-  const grassHill = new THREE.Color(PALETTE.grassHill);
-  const sand = new THREE.Color(PALETTE.sand), sandWet = new THREE.Color(PALETTE.sandWet);
+  const C = (hex) => new THREE.Color(hex);
+  const grass = C(PALETTE.grass), grassDark = C(PALETTE.grassDark), grassHill = C(PALETTE.grassHill);
+  const sand = C(PALETTE.sand), sandWet = C(PALETTE.sandWet);
+  const trail = C(0xedd2a0), trailEdge = C(0xc9a26a), soil = C(0xc4914f), meadow = C(0x9cc468), meadowDark = C(0x7fae56);
+  const forest = C(0x86a85a), forestSoil = C(0x8f7a4c), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xb3a8ad);
   const c = new THREE.Color();
+  const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
+  const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = heightAt(x, z);
     pos.setY(i, h);
-    const r = Math.hypot(x, z);
-    if (zoneAt(x, z) === 'grass') {
-      // Patchy greens, lighter up the hill, blending into sand at the rim.
-      const patch = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
-      c.copy(grass).lerp(grassDark, patch * 0.55);
-      const hillT = Math.min(1, Math.max(0, (h - 2) / HILL.height));
-      c.lerp(grassHill, hillT * 0.8);
-      const rim = Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5));
-      c.lerp(sand, rim);
+    const r = Math.hypot(x, z), pd = Math.hypot(x - POND.x, z - POND.z);
+    if (r < GRASS_RADIUS + 1) {
+      // Dry golden grass with darker and barer patches, lighter up the hill.
+      c.copy(grass).lerp(grassDark, blotch(x, z) * 0.55).lerp(soil, smooth((speck(x * 0.35, z * 0.35) - 0.72) / 0.2) * 0.45);
+      c.lerp(grassHill, Math.min(1, Math.max(0, (h - 2) / HILL.height)) * 0.8);
+      // Jungle floor: greener, with dark leaf-litter soil showing through.
+      const j = jungleAt(x, z);
+      if (j > 0) c.lerp(forest, j * 0.85).lerp(forestSoil, j * smooth((speck(x * 0.6, z * 0.6) - 0.55) / 0.3) * 0.6);
+      // Lush meadow round the pond, mud at its edge, a dark bed under the water.
+      c.lerp(meadow, smooth(1 - (pd - POND.rw - 2) / 8)).lerp(meadowDark, smooth(1 - (pd - POND.rw - 2) / 8) * blotch(x * 2, z * 2) * 0.5);
+      c.lerp(mud, smooth(1 - (pd - POND.rw - 0.4) / 1.8)).lerp(mudWet, smooth(1 - (pd - POND.rw + 0.6) / 1.2));
+      if (h < 0 && pd < POND.rw + 1) c.lerp(bed, smooth(-h / 0.3));
+      // Bare rock near the top of the hill.
+      c.lerp(rock, smooth((h - ROCK_HEIGHT) / 1.2) * (0.6 + speck(x, z) * 0.4));
+      // Trodden trails and the parade ground, paler in the middle and darker at the worn edges.
+      const d = Math.min(distanceToPath(x, z) - 0.25, Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) - 4.9);
+      const wob = (speck(x * 1.3, z * 1.3) - 0.5) * 0.5;
+      c.lerp(trailEdge, smooth(1 - (d + wob - 0.55) / 0.7) * 0.9).lerp(trail, smooth(1 - (d + wob - 0.1) / 0.6));
+      c.lerp(sand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
     } else {
-      const wet = Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4));
-      c.copy(sand).lerp(sandWet, wet);
+      c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
+      c.lerp(C(0xfff7dc), smooth((speck(x * 0.5, z * 0.5) - 0.6) / 0.3) * 0.3);
     }
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0 });
+  // Plain painted colour, no close-up texture: it matches the flat, simple look of everything else.
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;

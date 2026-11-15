@@ -124,6 +124,32 @@ designer's call: it gets to "pretty and playable" with the least to go wrong.
 - **Flag:** the purple World Scout flag with a white fleur-de-lis
   (ASSUMPTION: the owner did not say which scout flag).
 
+### Third round of owner feedback
+
+- **Ground:** plain painted colour (a detailed soil texture was tried and
+  dropped at the owner's request because it clashed with the flat look).
+  Trails, meadow, mud, rock and jungle floor are painted into the terrain.
+  Each surface has its own footstep sound and effect: dust, flying grass or
+  leaves, mud splats, ripples, and footprints on sand and mud. Mud and soft
+  sand are slightly slower, trails slightly quicker.
+- **Terrain:** a wadeable pond with reeds, lily pads, ducks, butterflies and
+  fireflies; a knoll under the windmill; rolling ground outside the camp; a
+  bigger hill with ridges, natural benches, a level summit and a steep
+  seaward face.
+- **Summit camp:** signal mast, lean-to, third campfire, cairn, telescope,
+  semaphore signallers, a lookout and a map-maker.
+- **Flying fox:** launch tower on the summit, cable to a landing frame by the
+  beach, four scouts who ride it and climb back up, and the player can ride.
+- **Jungle:** about 230 mixed trees (palms, giants, saplings and the earlier
+  kinds) and ferns outside the camp; softer curved grass and round bushes.
+- **Movement:** stride length is tied to speed so feet no longer slide;
+  walking is 2.6 m/s and running 6.2 m/s. Each kind of interaction has its
+  own gesture, and scouts answer in different ways.
+- **Interface:** white frosted glass throughout; scout rank card with a
+  progress bar, clock chips, ground chip, discovery pop-ups, rank-up banner,
+  and the journal in a side bar (J). Ranks and the journal are still
+  optional: nothing is required.
+
 ### Player
 
 - A simple cute figure seen from behind and slightly above.

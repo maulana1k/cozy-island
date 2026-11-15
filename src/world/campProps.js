@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import {
-  COTTAGES, toWorld, GATE, GATE_POSTS, TOWER, PICNIC_TABLES, PIONEER_SITE, FLAGPOLE, DOCK, CAMPFIRE, VILLAGE_CENTER, FIELD,
+  COTTAGES, toWorld, GATE, GATE_POSTS, TOWER, PICNIC_TABLES, PIONEER_SITE, FLAGPOLE, DOCK, CAMPFIRE, VILLAGE_CENTER, FIELD, SUMMIT, LOOKOUT,
 } from '../logic/layout.js';
 import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
 
@@ -148,6 +148,36 @@ export function createCampProps(scene) {
     const b = at(CAMPFIRE.x + 3.4, CAMPFIRE.z + 1.6, 0.6); backpack(b, 0, 0, 0x4f7fc9); backpack(b, 0.5, 0.15, 0x6f9a5a, 0.5); bucket(b, -0.6, 0.2);
     washing(at(CAMPFIRE.x - 5.5, CAMPFIRE.z - 4.2, 0.9), 2.8);
     firewood(at(CAMPFIRE.x + 1.2, CAMPFIRE.z - 2.6, 0.3));
+  }
+
+  // ---- Summit camp: signal mast, lean-to shelter, cairn, telescope, supplies
+  {
+    const m = at(SUMMIT.mast.x, SUMMIT.mast.z);
+    m.add(cyl(0.07, 0.1, 7.5, BAMBOO, 0, 3.75, 0), stick([-1.3, 6.2, 0], [1.3, 6.2, 0], 0.035, BAMBOO), cyl(0.35, 0.45, 0.3, 0xbdb4bb, 0, 0.12, 0));
+    // Guy lines strung with signal pennants
+    const cols = [0xe8503a, 0xf2b63b, 0x4f7fc9, 0xfaf3e2, 0x3f8f6a];
+    for (const [ex, ez] of [[3.2, 1.6], [-3.0, 2.2], [0.4, -3.4]]) {
+      m.add(stick([0, 7.2, 0], [ex, 0.1, ez], 0.012, ROPE));
+      for (let k = 1; k < 7; k++) { const t = k / 7.5; const p = new THREE.Mesh(roofGeometry(0.3, 0.36, 0.02), shared(cols[k % 5])); p.rotation.z = Math.PI; p.rotation.y = Math.atan2(ex, ez) + Math.PI / 2; p.position.set(ex * t, 7.2 - 7.1 * t - 0.03, ez * t); m.add(p); }
+    }
+    const big = new THREE.Mesh(roofGeometry(0.7, 1.3, 0.02), shared(0x6a3f9c)); big.rotation.z = -Math.PI / 2; big.position.set(0.1, 7.1, 0); m.add(big);
+
+    const s = at(SUMMIT.shelter.x, SUMMIT.shelter.z, SUMMIT.shelter.rot); // lean-to: a tarp sloping from a ridge pole to the ground
+    s.add(stick([-1.4, 0, 0.5], [-1.4, 1.7, 0.5], 0.05, BAMBOO), stick([1.4, 0, 0.5], [1.4, 1.7, 0.5], 0.05, BAMBOO), stick([-1.6, 1.7, 0.5], [1.6, 1.7, 0.5], 0.045, BAMBOO));
+    const tarp = box(3.0, 0.04, 2.3, 0x7f9a66, 0, 0.87, -0.42); tarp.rotation.x = -0.83; s.add(tarp);
+    s.add(box(0.8, 0.07, 1.7, 0x8fa0a8, -0.6, 0.06, 0.1), box(0.74, 0.1, 1.1, 0xe8503a, -0.6, 0.14, 0.3), box(0.8, 0.07, 1.7, 0x8fa0a8, 0.55, 0.06, 0.1), box(0.74, 0.1, 1.1, 0x4f7fc9, 0.55, 0.14, 0.3));
+    backpack(s, 1.2, 0.9, 0xf2b63b, 0.4);
+
+    const c = at(SUMMIT.cairn.x, SUMMIT.cairn.z); // a cairn of stacked stones
+    [[0.55, 0.2], [0.45, 0.55], [0.34, 0.86], [0.24, 1.1], [0.15, 1.28]].forEach(([r, y], k) => { const st = ball(r, k % 2 ? 0xa198a6 : 0xbdb4bb, (k % 2) * 0.05, y, 0); st.scale.y = 0.6; st.rotation.y = k; c.add(st); });
+
+    const t = at(SUMMIT.telescope.x, SUMMIT.telescope.z, Math.atan2(SUMMIT.telescope.x - LOOKOUT.x, SUMMIT.telescope.z - LOOKOUT.z));
+    for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; t.add(stick([Math.cos(a) * 0.45, 0, Math.sin(a) * 0.45], [0, 1.05, 0], 0.025, DARK)); }
+    const tube = cyl(0.07, 0.1, 0.95, 0xd9a05b, 0, 1.12, 0.1, 10); tube.rotation.x = Math.PI / 2 - 0.12; t.add(tube, cyl(0.105, 0.105, 0.06, 0xe9c46a, 0, 1.17, 0.56, 10).rotateX(Math.PI / 2));
+
+    const g = at(SUMMIT.fire.x + 2.6, SUMMIT.fire.z + 2.2, 0.5); crates(g, 2); firewood(at(SUMMIT.fire.x - 2.4, SUMMIT.fire.z + 1.6, 1.1));
+    const tbl = at(SUMMIT.mapper.x + 0.9, SUMMIT.mapper.z + 0.4, 0.3); tbl.add(box(0.7, 0.4, 0.5, 0xc79a62, 0, 0.2, 0), box(0.6, 0.02, 0.42, 0xf5ecd6, 0, 0.42, 0), box(0.2, 0.02, 0.14, 0x9fc98a, -0.1, 0.435, 0.05));
+    bucket(at(SUMMIT.mast.x + 1.1, SUMMIT.mast.z - 1.2), 0, 0, 0x4f7fc9);
   }
 
   // ---- Bits and pieces round the parade ground and the farm

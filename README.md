@@ -25,7 +25,8 @@ Then open the address it prints (normally http://localhost:5173).
 | Space | Hop |
 | E | Use the thing in front of you |
 | M | Mute or unmute |
-| Esc | Menu and journal |
+| J | Open or close the journal side bar |
+| Esc | Pause menu |
 | Drag the mouse | Turn the camera |
 | Scroll | Zoom |
 
@@ -33,7 +34,8 @@ Then open the address it prints (normally http://localhost:5173).
 
 Light the lanterns and campfires, open doors, ring the bell, sit on a log, shake a tree,
 shoo the chickens, pet the cat and the sheep, visit the windmill, and bump into a villager.
-Press Esc for the menu, which has a journal of things to find.
+Climb the hill to the summit camp and ride the flying fox down to the beach.
+Press J for the journal of things to find.
 
 ## Notes
 

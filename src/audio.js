@@ -123,6 +123,24 @@ export function createAudio(makeContext = () => new AudioContext()) {
     purr() { for (let i = 0; i < 9; i++) tone(92, { type: 'triangle', dur: 0.07, gain: 0.09, delay: i * 0.075 }); tone(A5, { type: 'sine', dur: 0.4, gain: 0.03, delay: 0.1 }); },
     baa() { tone(340, { type: 'sawtooth', dur: 0.5, gain: 0.035, to: 300 }); tone(345, { type: 'triangle', dur: 0.5, gain: 0.06, to: 296 }); },
     step() { hiss({ type: 'lowpass', freq: 650, dur: 0.06, gain: 0.035 }); },
+    // Footsteps sound different on each kind of ground.
+    'step:dirt'() { hiss({ type: 'lowpass', freq: 700, dur: 0.06, gain: 0.04 }); },
+    'step:grass'() { hiss({ freq: 3400, q: 0.5, dur: 0.09, gain: 0.03 }); },
+    'step:meadow'() { hiss({ freq: 2800, q: 0.5, dur: 0.12, gain: 0.034 }); },
+    'step:forest'() { hiss({ freq: 4200, q: 0.7, dur: 0.07, gain: 0.03 }); hiss({ freq: 1600, q: 0.6, dur: 0.1, gain: 0.02, delay: 0.02 }); },
+    'step:sand'() { hiss({ freq: 1700, q: 0.3, dur: 0.14, gain: 0.03 }); },
+    'step:mud'() { tone(150, { type: 'sine', dur: 0.13, gain: 0.07, to: 80 }); hiss({ type: 'lowpass', freq: 420, dur: 0.12, gain: 0.05, delay: 0.03 }); },
+    'step:wood'() { tone(190 + Math.random() * 40, { type: 'triangle', dur: 0.09, gain: 0.07, to: 130 }); hiss({ type: 'lowpass', freq: 900, dur: 0.04, gain: 0.03 }); },
+    'step:floor'() { hiss({ type: 'lowpass', freq: 500, dur: 0.05, gain: 0.03 }); },
+    'step:rock'() { hiss({ freq: 2600, q: 1.5, dur: 0.04, gain: 0.04 }); },
+    'step:water'() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); tone(420, { type: 'sine', dur: 0.12, gain: 0.03, to: 700 }); },
+    // Interface sounds
+    discover() { [E5, G5, C5 * 2].forEach((f, i) => tone(f, { dur: 0.5, gain: 0.08, delay: i * 0.09 })); },
+    rank() { [C5, E5, G5, C5 * 2, E5 * 2].forEach((f, i) => tone(f, { dur: 0.7, gain: 0.09, delay: i * 0.11 })); tone(C5 / 2, { type: 'sine', dur: 1.2, gain: 0.07 }); },
+    ui() { tone(A5, { type: 'sine', dur: 0.08, gain: 0.04 }); },
+    // The flying fox trolley whirring down the cable.
+    zip() { hiss({ freq: 2200, q: 2.5, dur: 3.4, gain: 0.05 }); tone(240, { type: 'sawtooth', dur: 3.2, gain: 0.018, to: 520 }); },
+    cheer() { tone(D5, { dur: 0.2, gain: 0.06 }); tone(G5, { dur: 0.3, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };
 

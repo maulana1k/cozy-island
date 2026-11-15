@@ -7,8 +7,15 @@ export const ISLAND_RADIUS = 60;
 export const GRASS_RADIUS = 48;
 export const SEA_FLOOR_RADIUS = 75;
 export const GRASS_HEIGHT = 1.2;
-export const HILL = { x: -18, z: -22, radius: 22, height: 8 };
+// A big hill with a level summit, a lower shoulder beside it, and a steep seaward face.
+export const HILL = { x: -18, z: -22, radius: 30, height: 13, plateau: 6.5 };
+export const SHOULDER = { x: -37, z: -3, radius: 12, height: 4.5 };
 export const MAX_WADE_DEPTH = 0.45;
+// A shallow pond you can wade right across, and a knoll the windmill stands on.
+export const POND = { x: -26, z: 12, rw: 6, bank: 4, depth: 0.4 };
+export const KNOLL = { x: 30, z: -22, r: 11, height: 1.4 };
+// The camp itself stays level; the land rolls gently further out.
+export const CAMP_FLAT = { x: 10, z: 8, inner: 20, outer: 34 };
 export const MIN_WADE_SPEED = 0.35;
 
 export const PALETTE = {
@@ -49,8 +56,8 @@ export const DAY_LENGTH = 480;
 export const START_TIME = 0.64;
 
 // Player and camera
-export const WALK_SPEED = 3.5;
-export const RUN_SPEED = 7;
+export const WALK_SPEED = 2.6;
+export const RUN_SPEED = 6.2;
 export const HOP_VELOCITY = 5;
 export const GRAVITY = 15;
 export const PLAYER_RADIUS = 0.35;

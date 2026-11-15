@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-const HINT_TEXT = 'WASD move · Shift run · Space hop · E interact · M mute · Esc menu';
+const HINT_KEYS = [['WASD', 'move'], ['Shift', 'run'], ['Space', 'hop'], ['E', 'use'], ['J', 'journal'], ['Esc', 'pause']];
 
 function drawIcon(ctx, icon) {
   ctx.save();
@@ -50,7 +50,7 @@ function makeIconTexture(icon) {
 export function createUI(scene) {
   const hintEl = document.getElementById('hint');
   const promptEl = document.getElementById('prompt');
-  hintEl.textContent = HINT_TEXT;
+  hintEl.innerHTML = HINT_KEYS.map(([k, v]) => `<span><kbd>${k}</kbd>${v}</span>`).join('');
   let hintTimer = null, currentPrompt = null;
 
   const textures = {};
@@ -76,7 +76,12 @@ export function createUI(scene) {
     setPrompt(text) {
       if (text === currentPrompt) return;
       currentPrompt = text;
-      if (text) { promptEl.textContent = text; promptEl.style.opacity = '1'; }
+      if (text) {
+        // "E — ring bell" becomes a key cap followed by what it does.
+        const [key, ...rest] = text.split(' — ');
+        promptEl.innerHTML = `<kbd>${key}</kbd><span>${rest.join(' — ')}</span>`;
+        promptEl.style.opacity = '1';
+      }
       else promptEl.style.opacity = '0';
     },
     setMarker(x, y, z) {

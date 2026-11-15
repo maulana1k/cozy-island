@@ -15,8 +15,8 @@ export const PALETTE = {
   grass: 0x9fd68a,
   grassDark: 0x86c878,
   grassHill: 0xb7e09a,
-  sand: 0xf4e3b5,
-  sandWet: 0xe2cf9c,
+  sand: 0xfaf0d4,
+  sandWet: 0xeedfb8,
   path: 0xdcc39a,
   water: 0x6fcfd0,
   waterDeep: 0x3fa7b8,
@@ -43,3 +43,13 @@ export const PALETTE = {
 // Day cycle. Time of day is a fraction in [0, 1), 0 = midnight.
 export const DAY_LENGTH = 480;
 export const START_TIME = 0.69;
+
+// Player and camera
+export const WALK_SPEED = 3.5;
+export const RUN_SPEED = 7;
+export const HOP_VELOCITY = 4.5;
+export const GRAVITY = 14;
+export const PLAYER_RADIUS = 0.35;
+export const PLAYER_START = { x: 10, z: 14 };
+export const MAX_DT = 0.05;
+export const CAMERA = { distance: 7, minDistance: 4, maxDistance: 11, minPitch: 10, maxPitch: 60 }; // degrees

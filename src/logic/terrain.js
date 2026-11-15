@@ -57,10 +57,10 @@ export function wadeSpeedFactor(h) {
   return 1 - (1 - MIN_WADE_SPEED) * t;
 }
 
-const shallowEnough = (x, z) => heightAt(x, z) >= -MAX_WADE_DEPTH;
-
 // Stops a move that would go past knee depth, sliding along the shore where possible.
-export function constrainToShore(prev, next) {
+// `groundAt` defaults to the bare terrain; the world passes one that also knows about the dock.
+export function constrainToShore(prev, next, groundAt = heightAt) {
+  const shallowEnough = (x, z) => groundAt(x, z) >= -MAX_WADE_DEPTH;
   if (shallowEnough(next.x, next.z)) return next;
   if (shallowEnough(next.x, prev.z)) return { x: next.x, z: prev.z };
   if (shallowEnough(prev.x, next.z)) return { x: prev.x, z: next.z };

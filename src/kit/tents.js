@@ -3,7 +3,9 @@
 // Every builder returns a THREE.Group, origin on the ground at the tent's centre, the door facing +z, units
 // in metres (scout 1.05 m). Options (all optional): { color, accent, scale, open } (`open` shows the door
 // rolled up; utilityTent also takes `cross` for a first-aid panel, groupShelter `backWall`).
-// userData: { size: [x, y, z] metres before `scale`, tris, door: '+z' }.
+// userData: { size: [x, y, z] metres before `scale`, tris, door: '+z' }; tents with a door opening also carry
+// doorRing ([x, y, z] points of the opening) and footprint ([x, z] outline) so a game can hang its own fabric door.
+// `hollow` (with `open`) leaves the doorway empty (just the rolled bundle) so the game can show the interior and fit a panel.
 // Preview: kit.html?kit=tents&fn=domeTent  (also tentLineup, tentLineupOpen, domeTentOpen, tunnelTentOpen, utilityTentAid).
 //
 // Cost: each tent is ONE mesh with ONE shared material; colour lives in vertex colours (fly, darker seam
@@ -182,7 +184,7 @@ export function tunnelTent(o = {}) {
 // flap, two roof vents have hoods, every hoop has a raised sleeve, reflective tab and pegged guylines.
 // The front is the door (grey inner, `open` rolls the door panel up) under a porch awning on two poles.
 export function familyTunnelTent(o = {}) {
-  const color = o.color ?? TENT_COLORS.forest, accent = o.accent ?? autoAccent(color), open = !!o.open;
+  const color = o.color ?? TENT_COLORS.forest, accent = o.accent ?? autoAccent(color), open = !!o.open, hollow = !!o.hollow;
   const seamC = dark(color, 0.36), accSeam = dark(accent, 0.3), SKIRT = 0x2f3236, gap = 0.08, d = 0.05;
   const keys = [
     { z: -3.7, W: 1.1, H: 1.45 }, { z: -2.75, W: 1.8, H: 1.95, hoop: 1 }, { z: -1.25, W: 2.15, H: 2.35, hoop: 1 },
@@ -221,8 +223,8 @@ export function familyTunnelTent(o = {}) {
   b.fan(centre(first.z), ringAt(first.z), color);
   const fr = ringAt(last.z), fc = centre(last.z), fz = last.z;
   if (open) {
-    b.fan(fc, fr, INNER);
-    b.fan([fc[0], fc[1] - 0.1, fz + 0.012], [1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1] - 0.1, fz + 0.012]; }), GLASS); // the dark doorway
+    if (!hollow) b.fan(fc, fr, INNER);
+    if (!hollow) b.fan([fc[0], fc[1] - 0.1, fz + 0.012], [1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1] - 0.1, fz + 0.012]; }), GLASS); // the dark doorway
     b.tube([2, 3, 4, 5, 6, 7].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.84)); return [p[0], p[1], fz + 0.05]; }), 0.05, accent, 4); // the rolled-up door
     for (const x of [-0.6, 0.6]) b.quad([x - 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.45, fz + 0.06], [x - 0.02, fc[1] + 0.45, fz + 0.06], ZIP); // its ties
   } else {
@@ -250,6 +252,13 @@ export function familyTunnelTent(o = {}) {
     b.tri(base(-1, -1, 0.025), base(-1, 1, 0.1), base(-1, 1, 0.0), accSeam); b.tri(base(1, -1, 0.025), base(1, 1, 0.1), base(1, 1, 0.0), accSeam);
   };
   vent(-2.0, 1.25); vent(-0.5, PI - 1.25);
+  // the grey inner tent: a pale lining just inside the fly, so a rolled-up door shows a bright interior, not a dark hollow
+  if (hollow) {
+    const lz = keys.map((k) => k.z).filter((z) => z > first.z + 0.01 && z < last.z - 0.01);
+    const rows = [first.z + 0.03, ...lz, last.z - 0.03], inn = (z, t) => { const p = sec(z, t); return [p[0] * 0.965, gap + (p[1] - gap) * 0.965, z]; };
+    b.grid(th, rows, (t, z) => inn(z, t), () => 0xb4b2a8);
+    b.fan([0, gap + (env(first.z).H - gap) * 0.38, first.z + 0.03], th.map((t) => inn(first.z + 0.03, t)), 0xb4b2a8);
+  }
   // groundsheet edge
   b.band([...keys.map((k) => [k.W * 0.96, k.z]), ...keys.slice().reverse().map((k) => [-k.W * 0.96, k.z])], 0, gap + 0.05, TUB);
   // porch awning on two poles, with a valance
@@ -270,7 +279,10 @@ export function familyTunnelTent(o = {}) {
   // reflective tabs at each hoop, and the brand patch
   for (const k of hoops) for (const sx of [1, -1]) { const t = sx > 0 ? 0.3 : PI - 0.3; b.patch(sec(k.z + 0.12, t), outN(k.z, t), 0.07, 0.22, REFL); }
   b.patch(sec(-0.5, PI - 0.7), outN(-0.5, PI - 0.7), 0.6, 0.18, LOGO);
-  return finish(b, 'familyTunnelTent', [4.8, 2.85, 7.4], o.scale);
+  const g = finish(b, 'familyTunnelTent', [4.8, 2.85, 7.4], o.scale);
+  g.userData.doorRing = fr.map((p) => [p[0], p[1], fz]);
+  g.userData.footprint = [...keys.map((k) => [k.W * 0.96, k.z]), [xf, zf], [-xf, zf], ...keys.slice().reverse().map((k) => [-k.W * 0.96, k.z])];
+  return g;
 }
 
 // ==== 2. Dome tent: two crossing poles, fly stops short of the ground ====================================
@@ -318,7 +330,7 @@ export function domeTent(o = {}) {
 
 // ==== 4. Geodesic leader tent: three poles cross at the top, a belt in two arcs round the shoulder =========
 export function geodesicTent(o = {}) {
-  const color = o.color ?? TENT_COLORS.slate, accent = o.accent ?? autoAccent(color), open = !!o.open;
+  const color = o.color ?? TENT_COLORS.slate, accent = o.accent ?? autoAccent(color), open = !!o.open, hollow = !!o.hollow;
   const Rc = 1.55, zs = 1.1, H = 2.0, gap = 0.16, ts = [0, 0.36, 0.7, 1], dl = 0.03;
   const seam = dark(color, 0.38), skirtSeam = dark(accent, 0.3), lightC = pale(color, 0.1);
   const b = new Mesher();
@@ -345,14 +357,19 @@ export function geodesicTent(o = {}) {
   if (open) {
     const ring = [[-0.5, 0.2], [-0.5, 0.9]]; for (let q = 1; q < 8; q++) { const t = PI - (q / 8) * PI; ring.push([0.5 * Math.cos(t), 0.9 + 0.3 * Math.sin(t)]); }
     ring.push([0.5, 0.9], [0.5, 0.2]);
-    b.fan([0, 0.7, frontZ(0.7) + 0.015], ring.map(([x, y]) => [x, y, frontZ(y) + 0.015]), GLASS);
+    if (!hollow) b.fan([0, 0.7, frontZ(0.7) + 0.015], ring.map(([x, y]) => [x, y, frontZ(y) + 0.015]), GLASS);
     b.tube([[-0.36, 0.86, 1.0 + 0.85 * 0.75 - 0.02], [0, 0.88, 1.0 + 0.85 * 0.75 - 0.02], [0.36, 0.86, 1.0 + 0.85 * 0.75 - 0.02]], 0.05, accent, 5);
   }
   // guylines and tabs
   for (let k = 0; k < 6; k++) { const p = out(S(k, ts[1]), 0.016), ph = (k * PI) / 3; b.guy(p, [Math.cos(ph), Math.sin(ph) * zs], 1.3, 0.1); }
   b.patch([0, 1.5, frontZ(1.5)], [0, 0.3, 1], 0.5, 0.14, LOGO);
   { const p = mix(S(4, 0.2 * 0 + ts[1]), S(5, ts[1]), 0.5); b.patch(out(p, 0), nrm([p[0], 0.4, p[2]]), 0.22, 0.05, REFL); }
-  return finish(b, 'geodesicTent', [3.1, 2.0, 2.95 + 0.0 + 0.0], o.scale);
+  const g = finish(b, 'geodesicTent', [3.1, 2.0, 2.95 + 0.0 + 0.0], o.scale);
+  { const q = Math.sqrt(1 - 0.75 * 0.75), zr = 1.0 + 0.85 * 0.75; // the porch hood stops short here and leaves a doorway
+    g.userData.doorRing = Array.from({ length: 13 }, (_, i) => { const be = (i / 12) * PI; return [0.62 * q * Math.cos(be), gap + 0.85 * q * Math.sin(be), zr]; }); }
+  const hx = Array.from({ length: 6 }, (_, k) => [V(k, 0)[0] * 0.98, V(k, 0)[2] * 0.98]);
+  g.userData.footprint = [hx[0], hx[1], [0.55, 1.85], [-0.55, 1.85], hx[2], hx[3], hx[4], hx[5]];
+  return g;
 }
 
 // ==== 5. Group shelter: an open event canopy, peaked roof with a valance, optional back wall ============
@@ -390,7 +407,7 @@ export function groupShelter(o = {}) {
 
 // ==== 6. Utility tent: tall cabin, near-vertical walls, roll-up door, optional first-aid cross ============
 export function utilityTent(o = {}) {
-  const color = o.color ?? TENT_COLORS.mustard, accent = o.accent ?? autoAccent(color), open = !!o.open, aid = !!o.cross;
+  const color = o.color ?? TENT_COLORS.mustard, accent = o.accent ?? autoAccent(color), open = !!o.open, aid = !!o.cross, hollow = !!o.hollow;
   const hw = 1.2, ew = 1.13, y0 = 0.12, ye = 1.75, yr = 2.2, hd = 1.2, seam = dark(color, 0.36), roofC = dark(color, 0.08), b = new Mesher();
   const wx = (y) => lerp(hw, ew, (y - y0) / (ye - y0));
   // side walls: skirt, window cell
@@ -407,7 +424,7 @@ export function utilityTent(o = {}) {
     b.tri(P(-ew, ye), P(-dx, ye), P(0, yr), color); b.tri(P(-dx, ye), P(dx, ye), P(0, yr), color); b.tri(P(dx, ye), P(ew, ye), P(0, yr), color);
     if (sz > 0) {
       b.quad(P(-dx, dy1), P(dx, dy1), P(dx, ye), P(-dx, ye), color);
-      b.quad(P(-dx, y0), P(dx, y0), P(dx, dy1), P(-dx, dy1), open ? GLASS : accent);
+      if (!hollow) b.quad(P(-dx, y0), P(dx, y0), P(dx, dy1), P(-dx, dy1), open ? GLASS : accent);
     } else {
       b.quad(P(-dx, y0), P(dx, y0), P(dx, ye), P(-dx, ye), color);
     }
@@ -441,7 +458,9 @@ export function utilityTent(o = {}) {
     cp([-0.84, 1.0, hd], [0, 0, 1]); cp([0.84, 1.0, hd], [0, 0, 1]);
     for (const sx of [-1, 1]) cp([sx * 0.615, 1.96, 0], nrm([sx * 0.48, 1.23, 0]));
   }
-  return finish(b, 'utilityTent', [2.4, 2.2, 2.4], o.scale);
+  const g = finish(b, 'utilityTent', [2.4, 2.2, 2.4], o.scale);
+  g.userData.doorRing = [[-dx, y0, hd + 0.014], [dx, y0, hd + 0.014], [dx, dy1, hd + 0.014], [-dx, dy1, hd + 0.014]];
+  return g;
 }
 
 // ==== Preview helpers ====================================================================================

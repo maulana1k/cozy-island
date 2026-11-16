@@ -67,13 +67,13 @@ export function createBuildings(scene, deps) {
     const solid = (mesh, hw, hd) => { g.add(mesh); wall(mesh.position.x, mesh.position.z, hw, hd); return mesh; };
 
     // ---- Shell: groundsheet, then either a modern tent (one vertex-coloured mesh) or canvas walls with a pitched roof
-    const sheet = box(W - 0.02, SKIRT, D - 0.02, new THREE.MeshStandardMaterial({ color: st.floor, roughness: 1, map: texture('fabric', Math.round(W / 1.2), Math.round(D / 1.2)) }), 0, 0.06 - SKIRT / 2, 0); sheet.castShadow = false; g.add(sheet);
     const hh = H + SKIRT, hy = (H - SKIRT) / 2;
     const dw = door3 ? door3.w : 0, dh = door3 ? door3.h : 0, doorZ = door3 ? door3.z : front;
     const sideW = (W - dw) / 2;
     let tentGroup = null;
     if (T) {
-      tentGroup = T.make({ ...T.o, ...(tentColor ? { color: tentColor, open: index % 2 === 0 } : {}) });
+      // A tent with a door is built hollow (rolled bundle only): the fabric panel below closes it, and open you see the real interior.
+      tentGroup = T.make({ ...T.o, ...(tentColor ? { color: tentColor } : {}), ...(T.door ? { open: true, hollow: true } : {}) });
       tentGroup.scale.set(...T.s);
       const mesh = tentGroup.children[0];
       mesh.material = sliced(0xffffff, { vertexColors: true, roughness: 0.85, emissive: 0xffb86b, emissiveIntensity: 0 }); // the kit's own look, now sliceable
@@ -96,21 +96,51 @@ export function createBuildings(scene, deps) {
     g.add(use(stick([0, H + st.roofH * (W + over) / W - 0.06, -front - over / 2 - 0.1], [0, H + st.roofH * (W + over) / W - 0.06, front + over / 2 + 0.1], 0.045, 0), pole));
     }
 
-    // ---- Door flap: hinged at one side, swings outward
+    // The groundsheet follows the tent's own outline when it has one (no platform sticking out past the fabric).
+    {
+      const fp = tentGroup && tentGroup.userData.footprint;
+      let sheet;
+      if (fp) {
+        const shape = new THREE.Shape(fp.map(([x, z]) => new THREE.Vector2(x * T.s[0], -z * T.s[2])));
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: SKIRT, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2); geo.translate(0, 0.06 - SKIRT, 0); // shape y is -z; the extrusion rises from the sunken bottom to 6 cm
+        sheet = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: st.floor, roughness: 1, map: texture('fabric', 0.83, 0.83) }));
+        sheet.receiveShadow = true;
+      } else {
+        sheet = box(W - 0.02, SKIRT, D - 0.02, new THREE.MeshStandardMaterial({ color: st.floor, roughness: 1, map: texture('fabric', Math.round(W / 1.2), Math.round(D / 1.2)) }), 0, 0.06 - SKIRT / 2, 0);
+      }
+      sheet.castShadow = false; g.add(sheet);
+    }
+
+    // ---- Door: a swinging canvas flap on the old buildings; on the modern tents a fabric panel that rolls up into the bundle at the top
     // (an open shelter has no door: its hinge stays unhung and nothing can be opened)
     const hinge = new THREE.Group(); hinge.position.set(-dw / 2, 0, doorZ + 0.06);
     const doorColor = new THREE.Color(st.canvas).multiplyScalar(0.9);
     const doorMat = sliced(T ? (T.o.accent ?? tentAccent(tentColor ?? T.o.color ?? 0x4a6a8a)) : doorColor, { map: T ? null : texture('fabric', 1, 1), emissive: 0xffe9a8, emissiveIntensity: 0 }); // its own material: only this flap shimmers
     const door = { open: false, angle: 0, speed: 0 };
     let doorSpot = null;
-    if (dw) {
+    let panel = null;
+    if (dw && T && tentGroup.userData.doorRing) {
+      // The panel is the shape of the doorway, hung from its top edge, with a zip line round the edge and down the middle.
+      const ring = tentGroup.userData.doorRing.map(([x, y, z]) => [x * T.s[0], y * T.s[1], z * T.s[2]]);
+      const top = Math.max(...ring.map((r) => r[1])), z0 = ring[0][2] + 0.03;
+      const geo = new THREE.ShapeGeometry(new THREE.Shape(ring.map(([x, y]) => new THREE.Vector2(x * 0.985, y - top))));
+      panel = new THREE.Mesh(geo, doorMat); panel.material.side = THREE.DoubleSide; panel.position.set(0, top, z0); panel.castShadow = true;
+      const zipMat = new THREE.LineBasicMaterial({ color: 0x1b1d20, clippingPlanes: [plane] });
+      const edge = ring.map(([x, y]) => new THREE.Vector3(x * 0.95, (y - top) * 0.985, 0.012));
+      const low = Math.min(...ring.map((r) => r[1]));
+      panel.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([...edge.slice(1, -1)]), zipMat), new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, low - top + 0.05, 0.013), new THREE.Vector3(0, -0.05, 0.013)]), zipMat));
+      g.add(panel);
+    } else if (dw) {
       hinge.add(use(box(dw - 0.04, dh - 0.04, 0.045, 0, dw / 2, dh / 2, 0), doorMat));
       hinge.add(use(box(dw - 0.04, 0.12, 0.06, 0, dw / 2, dh * 0.55, 0), trim));
       g.add(hinge);
+    }
+    if (dw) {
       doorSpot = toWorld(c, 0, T ? Math.min(front + 0.35, doorZ + 0.9) : front + 0.35);
       interactables.push({
         id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + (T ? Math.max(1.6, dh + 0.5) : 2.25),
-        prompt: () => (door.open ? 'E — close flap' : 'E — open flap'),
+        prompt: () => (T ? (door.open ? 'E — close door' : 'E — open door') : (door.open ? 'E — close flap' : 'E — open flap')),
         interact() { door.open = !door.open; audio.play('door'); },
       });
     }
@@ -163,7 +193,10 @@ export function createBuildings(scene, deps) {
         }
       });
       g.add(crate(0, -front + 0.45, 0.45), box(0.16, 0.24, 0.16, shared(0xffe2a0), 0, 0.65, -front + 0.45), box(0.2, 0.04, 0.2, 0x5b4636, 0, 0.79, -front + 0.45));
-      g.add(box(0.34, 0.42, 0.22, 0x6f9a5a, -W / 2 + 0.5, 0.27, front - 0.5, 0.4), box(0.34, 0.42, 0.22, 0xd9634a, W / 2 - 0.5, 0.27, front - 0.55, -0.3), box(0.34, 0.42, 0.22, 0x4f7fc9, W / 2 - 0.95, 0.27, front - 0.4, 0.5));
+      { // kit by the door (inside the tent's own outline: the big patrol tent's door is further in)
+        const kx = c.type === 'patrol' ? 1.5 : W / 2 - 0.5, kz = c.type === 'patrol' ? 1.7 : front - 0.5;
+        g.add(box(0.34, 0.42, 0.22, 0x6f9a5a, -kx, 0.27, kz, 0.4), box(0.34, 0.42, 0.22, 0xd9634a, kx, 0.27, kz - 0.05, -0.3), box(0.34, 0.42, 0.22, 0x4f7fc9, kx - 0.45, 0.27, kz + 0.1, 0.5));
+      }
       // The patrol's pennant on a pole beside the door.
       g.add(cyl(0.035, 0.04, 2.9, BAMBOO, W / 2 + 0.55, 1.45, front + 0.5));
       const pen = new THREE.Mesh(roofGeometry(0.5, 0.8, 0.02), shared(st.trim)); pen.rotation.z = -Math.PI / 2; pen.position.set(W / 2 + 0.6, 2.6, front + 0.5); pen.castShadow = true; g.add(pen);
@@ -205,10 +238,10 @@ export function createBuildings(scene, deps) {
     }
 
     // Everything but the door flap stands still, so weld it: one mesh per material.
-    g.remove(hinge); mergeStatic(g); if (dw) g.add(hinge);
+    g.remove(hinge); if (panel) g.remove(panel); mergeStatic(g); if (dw) g.add(hinge); if (panel) g.add(panel); // the door moves: it stays out of the weld
     if (tentGroup) g.add(tentGroup); // after the weld: it keeps its vertex colours and its own sliceable material
     scene.add(g);
-    return { state, c, g, plane, hinge, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, tentFabric: !!T, canvas: T ? tentGroup.children[0].material : canvas, roofMat: T ? { emissiveIntensity: 0 } : roofMat, groundY, openTop, W, D, inside: false };
+    return { state, c, g, plane, hinge, panel, panelOpen: 0, nightGlow: 0, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, tentFabric: !!T, canvas: T ? tentGroup.children[0].material : canvas, roofMat: T ? { emissiveIntensity: 0 } : roofMat, groundY, openTop, W, D, inside: false };
   });
 
   const out = [];
@@ -222,7 +255,7 @@ export function createBuildings(scene, deps) {
       return out;
     },
     // Canvas lit from inside: only a faint warm glow in the evening (before lights out at 21:36), dark after.
-    setNight(f, t = 0.8) { const awake = t >= 0.7 && t < 0.9 ? Math.min(1, (0.9 - t) / 0.02) : 0, k = f * awake; for (const b of buildings) { b.canvas.emissiveIntensity = k * (b.tentFabric ? 0.05 : 0.07); b.roofMat.emissiveIntensity = k * 0.04; } },
+    setNight(f, t = 0.8) { const awake = t >= 0.7 && t < 0.9 ? Math.min(1, (0.9 - t) / 0.02) : 0, k = f * awake; for (const b of buildings) { b.nightGlow = k * (b.tentFabric ? 0.05 : 0.07); if (!b.tentFabric) b.canvas.emissiveIntensity = b.nightGlow; b.roofMat.emissiveIntensity = k * 0.04; } },
     update(dt, elapsed, player) {
       this.inside = null;
       for (const b of buildings) {
@@ -246,8 +279,13 @@ export function createBuildings(scene, deps) {
         const dx = b.doorSpot ? player.position.x - b.doorSpot.x : 99, dz = b.doorSpot ? player.position.z - b.doorSpot.z : 99;
         const want = !b.door.open && !b.inside && dx * dx + dz * dz < 16 ? 1 : 0;
         b.shimmer += (want - b.shimmer) * (1 - Math.exp(-dt * 6));
-        b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28));
-        b.hinge.rotation.y = b.door.angle + (b.door.open ? Math.sin(elapsed * 1.3 + b.c.x) * 0.03 : 0);
+        b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28)) * (b.panel ? 0.3 : 1); // a dark tent fabric needs a lighter hint than canvas
+        if (b.panel) {
+          // The panel shrinks up into its bundle as the door opens (it never swings out), and an open door lets a little daylight glow in.
+          const amt = Math.min(1, Math.max(0, -b.door.angle / 1.9));
+          b.panel.scale.y = Math.max(0.06, 1 - 0.94 * amt); b.panel.visible = b.panel.scale.y > 0.07;
+          b.canvas.emissiveIntensity = b.nightGlow + amt * 0.07;
+        } else b.hinge.rotation.y = b.door.angle + (b.door.open ? Math.sin(elapsed * 1.3 + b.c.x) * 0.03 : 0);
         if (b.smoke) for (const p of b.smoke) {
           const u = p.userData, t = (elapsed * 0.2 + u.offset) % 1;
           p.position.set(u.x + Math.sin(t * 5 + u.offset * 9) * 0.35 * t + t * 0.7, u.y + t * 3, u.z);

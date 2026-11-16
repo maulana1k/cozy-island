@@ -88,7 +88,7 @@ export function oddsAt(hour, previous) {
 }
 
 // ---- Particle shaders -----------------------------------------------------------------------------
-const RAIN_N = 2600, WIND_N = 170, WIND_SEGS = 12, MIST_N = 52;
+const RAIN_N = 1900, SPLASH_N = 150, WIND_N = 170, WIND_SEGS = 12, MIST_N = 52;
 
 function seeded(n, rng, width = 4) {
   const a = new Float32Array(n * width);
@@ -102,37 +102,89 @@ function instanced(geo, n, attrs) {
   return m;
 }
 
-function buildRain(rng) {
+function buildRain() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 1, 0]), 3));
   geo.setIndex([0, 1, 2, 2, 1, 3]);
-  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3(0, -16, 0) }, uColor: { value: new THREE.Color(0xc9d8ea) }, uAlpha: { value: 0.5 } };
+  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3(0, -6.5, 0) }, uWindDir: { value: new THREE.Vector2(1, 0) }, uGust: { value: 0 }, uColor: { value: new THREE.Color(0xc9d8ea) }, uAlpha: { value: 0.5 } };
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
-      attribute vec4 aSeed; uniform float uTime, uAmt; uniform vec3 uCenter, uVel; varying float vA;
+      // aSeed: where the drop lives (xyz) and the rain amount it needs (w).
+      // aSeed2: its own speed (x), size (y), wobble rate (z) and phase (w), so no two drops fall alike.
+      attribute vec4 aSeed; attribute vec4 aSeed2;
+      uniform float uTime, uAmt, uGust; uniform vec3 uCenter, uVel; uniform vec2 uWindDir; varying float vA; varying float vU;
       void main() {
         const vec3 BOX = vec3(34.0, 20.0, 34.0);
-        if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
-        vec3 vel = uVel * (0.85 + 0.3 * fract(aSeed.x * 57.3 + aSeed.z * 13.1));
+        if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; vU = 0.0; return; }
+        vec3 vel = uVel * (0.55 + 0.9 * aSeed2.x);
         vec3 rel = mod(aSeed.xyz * BOX + vel * uTime - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
-        vec3 head = uCenter + rel, tail = head - vel * 0.05;
+        vec3 wp = uCenter + rel;
+        // Each drop wanders a little on its own, and gusts sweep across the field as waves.
+        float ph = aSeed2.w * 6.2832, fq = 0.8 + aSeed2.z * 2.2;
+        vec3 wob = vec3(sin(uTime * fq + ph), 0.0, cos(uTime * fq * 0.83 + ph * 1.7)) * (0.12 + 0.3 * aSeed2.z);
+        float g = sin(uTime * 0.7 + dot(wp.xz, uWindDir) * 0.09) + 0.6 * sin(uTime * 1.7 + wp.x * 0.21 - wp.z * 0.17);
+        vec3 push = vec3(uWindDir.x, 0.0, uWindDir.y) * (g * 0.5 + 0.3) * uGust;
+        vec3 head = wp + wob + push * 1.4;
+        float len = 0.03 + 0.035 * aSeed2.y;
+        vec3 tail = head - (vel + push * 1.6 + wob * 1.5) * len;
         vec4 a = viewMatrix * vec4(head, 1.0), b = viewMatrix * vec4(tail, 1.0);
         vec3 side = normalize(cross(b.xyz - a.xyz, a.xyz) + 1e-5);
         float dist = length(a.xyz);
-        vec4 v = mix(a, b, position.y); v.xyz += side * position.x * 0.015 * (1.0 + dist * 0.035);
+        vec4 v = mix(a, b, position.y); v.xyz += side * position.x * (0.008 + 0.012 * aSeed2.y) * (1.0 + dist * 0.035);
         gl_Position = projectionMatrix * v;
         float edge = (1.0 - smoothstep(0.7, 1.0, abs(rel.y) / 10.0)) * (1.0 - smoothstep(0.7, 1.0, length(rel.xz) / 17.0));
-        vA = edge * smoothstep(0.8, 2.5, dist) * (1.0 - position.y * 0.65);
+        float bright = 0.35 + 0.65 * fract(sin(aSeed2.x * 91.7 + aSeed2.w * 37.1) * 4375.5);
+        vA = edge * bright * smoothstep(0.8, 2.5, dist) * (1.0 - position.y * 0.7);
+        vU = position.x;
       }`,
     fragmentShader: /* glsl */`
-      uniform vec3 uColor; uniform float uAlpha; varying float vA;
-      void main() { gl_FragColor = vec4(uColor, vA * uAlpha);
+      uniform vec3 uColor; uniform float uAlpha; varying float vA; varying float vU;
+      void main() { gl_FragColor = vec4(uColor, vA * uAlpha * (1.0 - smoothstep(0.15, 0.5, abs(vU))));
         #include <colorspace_fragment>
       }`,
   });
-  const m = instanced(geo, RAIN_N, [['aSeed', seeded(RAIN_N, rng), 4]]);
+  const m = instanced(geo, RAIN_N, [['aSeed', seeded(RAIN_N, createRng(SEED + 131)), 4], ['aSeed2', seeded(RAIN_N, createRng(SEED + 137)), 4]]);
   m.material = mat; m.renderOrder = 5; m.name = 'rain';
+  return { mesh: m, uniforms };
+}
+
+// Drops landing: little rings that open and fade on the ground around the player, one instanced mesh.
+// Each slot repeats on its own beat and picks a new spot every time round.
+function buildSplashes() {
+  const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
+  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBase: { value: 0 }, uColor: { value: new THREE.Color(0xdfe9f4) } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: /* glsl */`
+      attribute vec4 aSeed; uniform float uTime, uAmt, uBase; uniform vec3 uCenter; varying vec2 vUv; varying float vA; varying float vAge;
+      float h(float n) { return fract(sin(n) * 43758.5453); }
+      void main() {
+        float period = 0.45 + aSeed.z * 0.6;
+        float c = uTime / period + aSeed.w * 7.0, k = floor(c);
+        vAge = c - k;
+        vec2 spot = vec2(h(aSeed.x * 91.0 + k * 1.31 + aSeed.y), h(aSeed.y * 57.0 + k * 2.17 + aSeed.x)) - 0.5;
+        const float R = 15.0;
+        vec2 xz = uCenter.xz + spot * 2.0 * R;
+        float r = (0.05 + vAge * (0.16 + 0.12 * aSeed.z)) ;
+        vec3 world = vec3(xz.x + position.x * r * 2.0, uBase + 0.07, xz.y + position.z * r * 2.0);
+        vUv = uv;
+        vec4 mv = viewMatrix * vec4(world, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float rank = fract(aSeed.x * 41.7 + aSeed.y * 13.3);
+        vA = step(rank, uAmt) * (1.0 - smoothstep(0.55, 1.0, length(spot) * 2.0)) * smoothstep(1.0, 4.0, length(mv.xyz));
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uColor; varying vec2 vUv; varying float vA; varying float vAge;
+      void main() {
+        float d = length(vUv * 2.0 - 1.0);
+        float ring = smoothstep(0.62, 0.86, d) * (1.0 - smoothstep(0.9, 1.0, d));
+        gl_FragColor = vec4(uColor, ring * vA * (1.0 - vAge) * (1.0 - vAge) * 0.55);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const m = instanced(geo, SPLASH_N, [['aSeed', seeded(SPLASH_N, createRng(SEED + 149)), 4]]);
+  m.material = mat; m.renderOrder = 4; m.name = 'rainSplashes';
   return { mesh: m, uniforms };
 }
 
@@ -216,10 +268,10 @@ function buildMist(rng) {
 
 // ---- The weather ----------------------------------------------------------------------------------
 // params: URLSearchParams, for ?weather=rain|wind|fog|sun (forced: it never changes).
-export function createWeather(scene, params) {
+export function createWeather(scene, params, audio) {
   const rng = createRng(SEED + 97);
-  const rain = buildRain(rng), streaks = buildWindStreaks(rng), mist = buildMist(rng);
-  scene.add(rain.mesh, streaks.mesh, mist.mesh);
+  const rain = buildRain(), splash = buildSplashes(), streaks = buildWindStreaks(rng), mist = buildMist(rng);
+  scene.add(rain.mesh, splash.mesh, streaks.mesh, mist.mesh);
 
   const cur = { wind: 0, rain: 0, fog: 0, cloud: 0, cold: 0 };
   const from = { ...cur }, to = { ...cur };
@@ -228,8 +280,10 @@ export function createWeather(scene, params) {
     wind: 0, windX: 1, windZ: 0, rain: 0, fog: 0, cloud: 0, wet: 0, cold: 0,
     nextKind: 'sun', hoursLeft: 0, blend: 1, blendTime: 1,
     label: LABEL.sun,
+    flash: 0, flashClock: -1, strike,
     setKind, update,
   };
+  let thunderIn = -1;
   let windAngle = 0.6, windClock = 0, clock = 0, baseY = 0, lastT = -1, hasBase = false;
 
   // Starts the blend toward `kind`; with `instant`, jumps straight there (the debug override).
@@ -250,6 +304,13 @@ export function createWeather(scene, params) {
   const alias = { sun: 'sun', sunny: 'sun', clear: 'sun', wind: 'wind', windy: 'wind', rain: 'rain', rainy: 'rain', fog: 'fog', foggy: 'fog' };
   if (forced && alias[forced]) { w.forced = true; setKind(alias[forced], 12, true); w.hoursLeft = 1e9; }
   else { setKind('sun', 12, true); w.hoursLeft = 2 + rng() * 2; }
+
+  // Lightning: a flash now (one to three quick flickers), the rumble a few seconds later like real distance.
+  function strike(delay = 2.5 + Math.random() * 3.5, strength = 0.5 + Math.random() * 0.5) {
+    w.flashClock = 0; w.flashPeak = 0.6 + 0.4 * strength; w.flashThird = Math.random() < 0.4;
+    try { audio && audio.thunder && audio.thunder(delay, strength); } catch { /* sound is optional */ }
+  }
+  const thunderDebug = !!(params && params.has('thunder'));
 
   function choose(hour) {
     const odds = oddsAt(hour, w.kind);
@@ -299,10 +360,29 @@ export function createWeather(scene, params) {
       const u = rain.uniforms;
       u.uTime.value = clock % 3600; u.uAmt.value = Math.min(1, w.rain * 1.05);
       u.uCenter.value.set(gx, baseY + 3, gz);
-      u.uVel.value.set(w.windX * (1 + w.wind * 9), -16, w.windZ * (1 + w.wind * 9));
+      u.uVel.value.set(w.windX * (0.5 + w.wind * 3.5), -6.5, w.windZ * (0.5 + w.wind * 3.5));
+      u.uWindDir.value.set(w.windX, w.windZ); u.uGust.value = 0.5 + w.wind * 2.2;
       u.uColor.value.setRGB(0.62 * dark + 0.04, 0.72 * dark + 0.05, 0.86 * dark + 0.08);
-      u.uAlpha.value = 0.55;
+      u.uAlpha.value = 0.6;
+      const sp = splash.uniforms;
+      sp.uTime.value = clock % 3600; sp.uAmt.value = Math.min(1, w.rain * 1.05);
+      sp.uCenter.value.set(fx, 0, fz); sp.uBase.value = fy;
+      sp.uColor.value.copy(u.uColor.value);
     }
+    splash.mesh.visible = rainOn;
+    // Thunder only in real rain; heavier rain brings it sooner. ?thunder=1 forces the first one soon.
+    if (w.kind === 'rain' && w.rain > 0.6) {
+      if (thunderIn < 0) thunderIn = thunderDebug ? 3 : 12 + Math.random() * 25;
+      thunderIn -= dt;
+      if (thunderIn <= 0) { strike(thunderDebug ? 3 : undefined); thunderIn = (25 + Math.random() * 45) * (1.3 - 0.3 * w.rain); }
+    } else thunderIn = -1;
+    if (w.flashClock >= 0) {
+      const s = (w.flashClock += dt), p = w.flashPeak || 1;
+      const pulse = (a, b, h) => (s > a && s < b ? h * (1 - (s - a) / (b - a)) : 0);
+      w.flash = Math.max(pulse(0, 0.12, p), pulse(0.17, 0.3, p * 0.65), w.flashThird ? pulse(0.4, 0.5, p * 0.4) : 0);
+      if (s > 0.7) { w.flashClock = -1; w.flash = 0; }
+    }
+
     const gale = Math.max(0, (w.wind - 0.45) / 0.55);
     streaks.mesh.visible = gale > 0.01;
     if (streaks.mesh.visible) {

@@ -184,10 +184,12 @@ export function createSky(scene, renderer) {
         tone(dome.material.uniforms.uTop.value, grey, 1 - 0.55 * wx.rain - 0.12 * wx.fog);
         tone(dome.material.uniforms.uHorizon.value, grey, 1 - 0.35 * wx.rain);
         tone(fogColor, Math.min(1, grey + wx.fog * 0.3), 1 - 0.3 * wx.rain - 0.04 * wx.fog);
+        const fl = wx.flash || 0; // lightning: the whole sky blinks pale for a moment
+        if (fl > 0) { tmp.setRGB(0.82, 0.88, 1); dome.material.uniforms.uTop.value.lerp(tmp, fl * 0.5); dome.material.uniforms.uHorizon.value.lerp(tmp, fl * 0.55); fogColor.lerp(tmp, fl * 0.5); }
         dome.material.uniforms.uFog.value.copy(fogColor); scene.fog.color.copy(fogColor); if (scene.background) scene.background.copy(fogColor);
         sunLight.intensity *= 1 - 0.78 * gloom; sunLight.shadow.intensity *= 1 - 0.8 * gloom;
         tone(sunLight.color, chill * 0.6, 1); tone(ambient.color, chill * 0.55, 1);
-        ambient.intensity *= 1 - 0.2 * gloom + 0.12 * wx.rain; // the sky light stays up a little, so rain is dim, not black
+        ambient.intensity *= 1 - 0.2 * gloom + 0.12 * wx.rain; ambient.intensity += fl * 1.1; // the sky light stays up a little, so rain is dim, not black
         sunDisc.material.opacity *= 1 - 0.95 * Math.min(1, wx.cloud * 1.2); moonDisc.material.opacity *= 1 - 0.8 * wx.cloud; stars.material.opacity *= 1 - wx.cloud;
         const cm = clouds.children[0].children[0].material;
         cm.color.setRGB(1, 1, 1).lerp(tmp.setRGB(0.36, 0.4, 0.46), wx.rain * 0.9 + wx.cloud * 0.1);

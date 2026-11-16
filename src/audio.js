@@ -6,6 +6,7 @@ const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.0;
 export function createAudio(makeContext = () => new AudioContext()) {
   let ctx = null, master = null, noise = null, cricketTimer = null;
   let tried = false, night = 0, fireLevel = 0, fireGain = null, seaGain = null;
+  let rainLevel = 0, rainIndoor = false, rainGain = null, rainOut = 0;
   const api = {
     muted: false,
     started: false,
@@ -43,6 +44,17 @@ export function createAudio(makeContext = () => new AudioContext()) {
     // How close the sea is, 0 to 1: the waves are loud on the beach and all but gone in the middle of camp.
     setSea(level) {
       try { if (seaGain) seaGain.gain.setTargetAtTime(0.12 + level * 0.88, ctx.currentTime, 0.6); } catch { /* audio is optional */ }
+    },
+    // Rain 0..1 (from the weather blend); indoors it is muffled by the walls. Fades smoothly, follows mute through master.
+    setRain(level, indoor = false) {
+      rainLevel = Math.min(1, Math.max(0, level || 0)); rainIndoor = !!indoor;
+      rainOut = rainLevel * (rainIndoor ? 0.3 : 1);
+      try { if (rainGain) rainGain.gain.setTargetAtTime(rainOut * rainOut * 0.5 + rainOut * 0.5 * 0.5, ctx.currentTime, 0.7); } catch { /* audio is optional */ }
+    },
+    // A distant rumble `delay` s from now (the flash comes first); strength 0..1. Gentle on purpose.
+    thunder(delay = 3, strength = 0.7) {
+      if (!api.started || !ctx) return;
+      try { rumble(delay, strength); } catch { /* audio is optional */ }
     },
     play(name) {
       if (!api.started || !ctx) return;
@@ -96,6 +108,29 @@ export function createAudio(makeContext = () => new AudioContext()) {
       } catch { /* audio is optional */ }
     }, 70);
 
+    // Rain: a soft bed of band-shaped noise, a low hush under it, and a thin patter of tiny drop ticks on top.
+    rainGain = ctx.createGain(); rainGain.gain.value = 0; rainGain.connect(master);
+    const bed = noiseSource(true), bedBand = ctx.createBiquadFilter(); bedBand.type = 'bandpass'; bedBand.frequency.value = 1500; bedBand.Q.value = 0.35;
+    const bedLow = ctx.createBiquadFilter(); bedLow.type = 'lowpass'; bedLow.frequency.value = 4200;
+    const bedGain = ctx.createGain(); bedGain.gain.value = 0.16;
+    bed.connect(bedBand).connect(bedLow).connect(bedGain).connect(rainGain); bed.start(0, 0.4);
+    const hush = noiseSource(true), hushLp = ctx.createBiquadFilter(); hushLp.type = 'lowpass'; hushLp.frequency.value = 380;
+    const hushGain = ctx.createGain(); hushGain.gain.value = 0.18;
+    hush.connect(hushLp).connect(hushGain).connect(rainGain); hush.start(0, 1.3);
+    const patter = noiseSource(true), patHp = ctx.createBiquadFilter(); patHp.type = 'highpass'; patHp.frequency.value = 5200;
+    const patGain = ctx.createGain(); patGain.gain.value = 0.035;
+    const patLfo = ctx.createOscillator(); patLfo.frequency.value = 0.23; const patLfoG = ctx.createGain(); patLfoG.gain.value = 0.015;
+    patLfo.connect(patLfoG).connect(patGain.gain);
+    patter.connect(patHp).connect(patGain).connect(rainGain); patter.start(0, 0.9); patLfo.start();
+    rainGain.gain.value = rainOut * rainOut * 0.5 + rainOut * 0.25;
+    setInterval(() => {
+      if (!ctx || rainOut < 0.05) return;
+      try {
+        const n = 1 + (Math.random() * 3 * rainOut) | 0;
+        for (let i = 0; i < n; i++) hiss({ type: 'bandpass', freq: 4200 + Math.random() * 4500, q: 4, dur: 0.008 + Math.random() * 0.012, gain: (0.01 + Math.random() * 0.02) * rainOut, delay: Math.random() * 0.06 });
+      } catch { /* audio is optional */ }
+    }, 70);
+
     // Crickets come out at night.
     cricketTimer = setInterval(() => {
       if (!ctx || night < 0.5 || Math.random() > 0.3) return;
@@ -130,6 +165,26 @@ export function createAudio(makeContext = () => new AudioContext()) {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f).connect(g).connect(master);
     src.start(t, Math.random() * 1.5); src.stop(t + dur + 0.05);
+  }
+
+  // Thunder: low-passed noise that swells slowly and rolls away; now and then a soft crack comes first.
+  function rumble(delay, strength) {
+    const k = Math.min(1, Math.max(0.15, strength)) * (rainIndoor ? 0.45 : 1);
+    const t0 = ctx.currentTime + Math.max(0, delay);
+    const crack = Math.random() < 0.55;
+    if (crack) hiss({ type: 'bandpass', freq: 900 + Math.random() * 700, q: 0.7, dur: 0.22, gain: 0.05 * k, delay: Math.max(0, delay) });
+    const lead = crack ? 0.35 + Math.random() * 0.3 : 0, rise = 1.2 + Math.random() * 1.2, roll = 4.5 + Math.random() * 4;
+    const src = noiseSource(true), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+    const f0 = 170 + Math.random() * 90;
+    lp.frequency.setValueAtTime(f0, t0 + lead); lp.frequency.exponentialRampToValueAtTime(65, t0 + lead + rise + roll);
+    const g = ctx.createGain(), peak = 0.7 * k, a = t0 + lead;
+    g.gain.setValueAtTime(0.0001, a);
+    g.gain.linearRampToValueAtTime(peak, a + rise);
+    g.gain.linearRampToValueAtTime(peak * 0.55, a + rise + roll * 0.3);
+    g.gain.linearRampToValueAtTime(peak * (0.75 + Math.random() * 0.2), a + rise + roll * 0.42); // a second roll
+    g.gain.exponentialRampToValueAtTime(0.0001, a + rise + roll);
+    src.connect(lp).connect(g).connect(master);
+    src.start(a, Math.random() * 1.5); src.stop(a + rise + roll + 0.1);
   }
 
   const SOUNDS = {

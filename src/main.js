@@ -79,7 +79,7 @@ const ui = createUI(scene);
 const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
-const weather = createWeather(scene, params); // random weather; ?weather=rain|wind|fog|sun forces one
+const weather = createWeather(scene, params, audio); // random weather; ?weather=rain|wind|fog|sun forces one
 const village = createVillage(scene);
 const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(bed) });
 const campProps = createCampProps(scene);
@@ -645,6 +645,7 @@ function step() {
   // Fog thickens among the big trees, and the sea is loud only near the shore.
   const wn = wildness(player.position.x, player.position.z);
   scene.fog.density = sky.fogDensity * (1 + wn * 1.6);
+  audio.setRain(weather.rain, !!buildings.inside);
   audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.

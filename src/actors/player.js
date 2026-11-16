@@ -108,15 +108,15 @@ export function createPlayer(scene, opts = {}) {
         // Speed builds up and bleeds off instead of switching on and off.
         const dvx = tx - vel.x, dvz = tz - vel.z, dv = Math.hypot(dvx, dvz);
         const rate = (airborne ? AIR_ACCEL : wantsMove ? ACCEL : BRAKE) * dt;
-        if (dv <= rate) { vel.x = tx; vel.z = tz; } else { vel.x += (dvx / dv) * rate; vel.z += (dvz / dv) * rate; }
-
-        if (Math.hypot(vel.x, vel.z) > 0.01) {
         const was = Math.hypot(vel.x, vel.z);
-          const prev = { x: position.x, z: position.z };
+        if (dv <= rate) { vel.x = tx; vel.z = tz; } else { vel.x += (dvx / dv) * rate; vel.z += (dvz / dv) * rate; }
         // Setting off, the pace builds over the first two or three steps (gently to a walk, then on to a run);
         // the direction still follows the keys at once.
         const now = Math.hypot(vel.x, vel.z), cap = was + (airborne ? AIR_ACCEL : was < WALK_SPEED ? SET_OFF : RUN_UP) * dt;
         if (now > cap && now > 1e-6) { vel.x *= cap / now; vel.z *= cap / now; }
+
+        if (Math.hypot(vel.x, vel.z) > 0.01) {
+          const prev = { x: position.x, z: position.z };
           // In short hops (at most 12 cm), so a run on a long frame cannot carry you clean through a fence or a post.
           const n = Math.max(1, Math.ceil((Math.hypot(vel.x, vel.z) * dt) / 0.12));
           let next = prev;
@@ -126,21 +126,21 @@ export function createPlayer(scene, opts = {}) {
           // Whatever a wall took away is gone from the speed too, so you slide along it.
           const before = Math.hypot(vel.x, vel.z);
           if (dt > 0) { vel.x = (next.x - prev.x) / dt; vel.z = (next.z - prev.z) / dt; }
+          // Walking into someone you just come to a stop against them (and slip round them), never a bounce.
+          const intoPerson = colliders.some((c) => c.person && c.r > 0 && Math.hypot(c.x - next.x, c.z - next.z) < c.r + PLAYER_RADIUS + 0.04);
           // Running flat out into something: bounce off with a silly recoil.
           if (before > 3.5 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture && !intoPerson) {
             vel.x = -Math.sin(heading) * 1.6; vel.z = -Math.cos(heading) * 1.6;
-          // Walking into someone you just come to a stop against them (and slip round them), never a bounce.
-          const intoPerson = colliders.some((c) => c.person && c.r > 0 && Math.hypot(c.x - next.x, c.z - next.z) < c.r + PLAYER_RADIUS + 0.04);
             gesture = { name: 'bonk', t: 0, dur: 0.7 }; if (player.onOops) player.onOops('bonk');
           }
           sinceStep += Math.hypot(next.x - prev.x, next.z - prev.z);
-        }
-        const speed = Math.hypot(vel.x, vel.z);
-        // One footfall each time a foot touches down in the animation (a long way without one, say after a
         } else if (!airborne) {
           // Standing still, someone walking into you eases you aside rather than walking through you.
           const next = resolveCollisions(position, PLAYER_RADIUS, colliders);
           if (Math.hypot(next.x - position.x, next.z - position.z) < 0.2) { position.x = next.x; position.z = next.z; }
+        }
+        const speed = Math.hypot(vel.x, vel.z);
+        // One footfall each time a foot touches down in the animation (a long way without one, say after a
         // pose that held the legs, counts too).
         const stride = Math.max(0.2, figure.stepLength(speed));
         const fell = figure.steps !== lastSteps; lastSteps = figure.steps;

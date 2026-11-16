@@ -29,7 +29,14 @@ const ICONS = {
   moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>',
 };
 
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+// Custom drawn icons for things no emoji shows well, named '@name' in ITEMS.
+const ITEM_ICONS = { bottle: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='25' y='4' width='14' height='8' rx='2' fill='#3f6f4a'/><rect x='27' y='11' width='10' height='6' fill='#b9c4c9'/><path d='M22 20 Q22 16 27 16 H37 Q42 16 42 20 V56 Q42 60 38 60 H26 Q22 60 22 56 Z' fill='#cfe6f2' stroke='#5b8fb0' stroke-width='2.5'/><path d='M24.5 32 H39.5 V55 Q39.5 57.5 37 57.5 H27 Q24.5 57.5 24.5 55 Z' fill='#5fb3e3'/><rect x='22' y='38' width='20' height='9' fill='#4f7a46'/><rect x='27' y='21' width='3' height='9' rx='1.5' fill='#ffffff' opacity='.8'/></svg>`) };
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag); if (cls) e.className = cls;
+  if (typeof text === 'string' && text[0] === '@' && ITEM_ICONS[text.slice(1)]) { const i = document.createElement('img'); i.src = ITEM_ICONS[text.slice(1)]; i.alt = ''; i.style.cssText = 'width:1.15em;height:1.15em;vertical-align:-0.15em'; e.append(i); }
+  else if (text !== undefined) e.textContent = text;
+  return e;
+};
 const icon = (name, cls = 'ico') => { const s = el('span', cls); s.innerHTML = ICONS[name]; return s; };
 
 // ---- The paper map ---------------------------------------------------------------

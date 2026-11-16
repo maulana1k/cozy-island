@@ -494,6 +494,22 @@ export function createFigure({
   const ANK = 0.051 * P.limb, HEEL = 0.075 * P.limb, TOE = 0.145 * P.limb; // ankle above the sole; heel and toe either side
   const legK = (LL * scale) / KID_LEG, sqK = Math.sqrt(legK);              // this person's legs against a scout's
   const HANG_DROP = P === KID ? 0.31 - KID.pelvisY : 0;                    // keeps the hands on the flying-fox bar
+  // ---- Sitting cross-legged on the ground: the seat of the shorts resting on it, thighs out and forward
+  // almost flat with the knees down, shins crossed in front (the left one on top), each shoe on its outer
+  // edge. Worked out once, in the hips' frame, as a hip rotation, a knee bend and an ankle angle: no plain
+  // pitch-and-spread of the thigh can do it (the knee would fold the shin straight down into the ground).
+  // `sitK` eases into and out of it over SIT_T, and the body is lowered or raised with it.
+  const SIT_T = 0.4, SIT_H = 0.125; // pelvis bone above the ground when sat on it (own units)
+  const crossLeg = (side, top) => {
+    const hipY = SIT_H - 0.04, kneeY = 0.058 * P.limb, out = 0.5;
+    const d1 = new THREE.Vector3(side * Math.sin(out), 0, Math.cos(out)).multiplyScalar(Math.sqrt(TH * TH - (hipY - kneeY) ** 2)).setY(kneeY - hipY).normalize();
+    const d2 = new THREE.Vector3(-side * 0.93, top ? 0.13 : 0.06, top ? -0.18 : -0.42).normalize();
+    const along = d2.dot(d1), p = d2.clone().addScaledVector(d1, -along), across = p.length(); p.divideScalar(across);
+    const Y = d1.clone().negate(), Z = p.clone().negate(), X = new THREE.Vector3().crossVectors(Y, Z);
+    return { q: new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z)), k: Math.atan2(across, along), f: 0.25 };
+  };
+  const CROSS = [crossLeg(-1, true), crossLeg(1, false)], sitQ = new THREE.Quaternion(), sitE = new THREE.Euler();
+  let sitK = 0;
   let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, locoLegs = 1, locoArms = 1;
   let steps = 0, bounce = 0, fly = 0, hurry = 1, gD = null; // footfalls so far; the running bounce of the hips (own units); the stride catching up with the body
   // The walking hips follow the planted leg's height; where one leg hands over to the next (a corner in that
@@ -671,7 +687,7 @@ export function createFigure({
   return {
     group,
     // How far to lower the figure so it sits on the ground, or on a seat of a given height.
-    sitDrop: (PELVIS_Y - 0.15) * scale,
+    sitDrop: (PELVIS_Y - SIT_H) * scale,
     seatLift: (top) => top + 0.07 - PELVIS_Y * scale,
     setCarry(on) { if (load) load.visible = on; },
     setTorch(on) { torchProp.visible = on; },
@@ -694,6 +710,9 @@ export function createFigure({
       if (isFar && (frameCount + slot) % 30 !== 0) return;
       if (far && (frameCount + slot) % 3 !== 0) return;
       const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, isFar ? 1 : 0.1); // far-off people move in big, rare steps
+      // Getting down onto the ground and back up: eased over SIT_T (already sat, the first time we are seen).
+      sitK = lastElapsed === null ? (o.sitGround ? 1 : 0) : clamp(sitK + (o.sitGround ? dt : -dt) / SIT_T, 0, 1);
+      const sitS = smooth(sitK);
       lastElapsed = elapsed;
       // Standing about with nothing to do, people fidget: look round, stretch, scratch, tap a foot, yawn when it is late.
       if (!self && !far) {
@@ -908,7 +927,7 @@ export function createFigure({
       const lean = 0.012 + run * 0.09 * smooth(G.vk / 3.9) + accLean + crouch * 0.06 + land * 0.04;
       const hz = hW * Math.tan(lean); // the leaned body carries the hips, and so the feet, this far forward
       hzL = hz;
-      const planted = groundUnder && !far && !o.sitting && !o.sitGround && !inAir && o.pose !== 'hang' && o.pose !== 'sleep';
+      const planted = groundUnder && !far && !o.sitting && !o.sitGround && sitK === 0 && !inAir && o.pose !== 'hang' && o.pose !== 'sleep';
       if (planted) {
         gX = group.position.x; gZ = group.position.z; gCos = Math.cos(group.rotation.y); gSin = Math.sin(group.rotation.y); gSink = o.sink || 0;
         if (springY === null) legs[0].g0 = legs[1].g0 = legs[0].gd = legs[1].gd = group.position.y - gSink;
@@ -1109,10 +1128,13 @@ export function createFigure({
         }
         t.spreadL = t.spreadR = 0; t.py = 0; snap = 16;
       }
-      if (o.sitting || o.sitGround) {
-        t.thL = t.thR = -1.5; t.knL = t.knR = o.sitGround ? 1.9 : 1.35;
-        t.spreadL = o.sitGround ? -0.5 : 0; t.spreadR = o.sitGround ? 0.5 : 0;
+      if (o.sitting) {
+        t.thL = t.thR = -1.5; t.knL = t.knR = 1.35; t.spreadL = t.spreadR = 0;
         t.shLx = t.shRx = -0.35; t.elL = t.elR = -0.5; t.shLz = -0.15; t.shRz = 0.15; t.py = 0; t.lean = 0; t.trunk = 0.05;
+      } else if (o.sitGround) {
+        // The legs are crossed below (these leg angles are only the way down); hands resting in the lap.
+        t.thL = t.thR = -1.1; t.knL = t.knR = 1.7; t.spreadL = -0.45; t.spreadR = 0.45;
+        t.shLx = t.shRx = -0.6; t.elL = t.elR = -0.85; t.shLz = 0.1; t.shRz = -0.1; t.py = 0; t.lean = 0; t.trunk = 0.04;
       }
 
       // ---- Activities
@@ -1202,6 +1224,8 @@ export function createFigure({
       }
       // Holding a torch out in front, the beam swinging a little with each step.
       if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 - (t.lean + t.trunk) * 0.6 + Math.sin(phase * Math.PI * 4) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
+      // Sat on the ground, leaning in (to write, to eat) bends the back over the lap: the hips stay put.
+      if (o.sitGround) { t.trunk += t.lean; t.lean = 0; }
       // ---- Gestures layered on top
       // ---- One-off gestures layered on top: a different one for each kind of thing you do
       if (o.gesture) {
@@ -1285,6 +1309,22 @@ export function createFigure({
       legL.hip.rotation.set(pose.thL, 0, pose.spreadL - rollP); legR.hip.rotation.set(pose.thR, 0, pose.spreadR - rollP);
       legL.knee.rotation.x = pose.knL; legR.knee.rotation.x = pose.knR;
       legL.foot.rotation.x = pose.fL; legR.foot.rotation.x = pose.fR;
+      if (sitK > 0) { // sitting on the ground (or getting there): the crossed legs own the hips, knees and ankles
+        // Halfway, the feet are under the body in a squat as deep as the hips are low (so they stay on the
+        // ground); from there the legs fold into the cross (going down) or out of it (getting up).
+        const wSq = sitK < 1 ? smooth(sitK / 0.35) : 0, wX = smooth((sitK - 0.35) / 0.65);
+        const hipH = lerp(PELVIS_Y, SIT_H, sitS) - 0.04, th = -Math.acos(clamp((hipH - ANK) / LL, 0, 1));
+        for (let i = 0; i < 2; i++) {
+          const G = i === 0 ? legL : legR, C = CROSS[i];
+          if (wSq > 0) {
+            sitQ.setFromEuler(sitE.set(th, 0, (i === 0 ? -0.25 : 0.25) * (1 - wX)));
+            G.hip.quaternion.slerp(sitQ, wSq); // (the quaternion follows the rotation set just above)
+            G.knee.rotation.x = lerp(G.knee.rotation.x, -2 * th, wSq); G.foot.rotation.x = lerp(G.foot.rotation.x, th, wSq);
+          }
+          G.hip.quaternion.slerp(C.q, wX);
+          G.knee.rotation.x = lerp(G.knee.rotation.x, C.k, wX); G.foot.rotation.x = lerp(G.foot.rotation.x, C.f, wX);
+        }
+      }
 
       // ---- Signs of life
       // Blinking: every few seconds, quick. Eyes shut when asleep or mid-yawn.
@@ -1414,7 +1454,8 @@ export function createFigure({
           if (pen > -Infinity && legsIK) liftT = lerp(liftT, Math.max(0, liftT), fly);
         }
         if (dt > 0) { critStep(footLift, liftV, liftT, LIFT_W, dt); footLift = cdX; liftV = cdV; }
-        inner.position.set(0, base + footLift / scale, 0);
+        // Sat on the ground the caller has already lowered us by sitDrop; ease the body down (or up) to it.
+        inner.position.set(0, base + footLift / scale + (PELVIS_Y - SIT_H) * ((o.sitGround ? 1 : 0) - sitS), 0);
       }
     },
   };

@@ -5,6 +5,7 @@ import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE, SUMMIT } from '..
 import { PALETTE } from '../config.js';
 import { mergeStatic } from './build.js';
 import { WIND } from './weather.js';
+import { createFlames } from './flames.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -36,18 +37,18 @@ export function createProps(scene, deps) {
 
   // ---- Small particles: falling leaves, fruit, sparks ----------------------
   const particles = [];
-  const leafGeo = new THREE.PlaneGeometry(0.16, 0.1), fruitGeo = new THREE.IcosahedronGeometry(0.11, 1), sparkGeo = new THREE.OctahedronGeometry(0.04, 0);
+  const leafGeo = new THREE.PlaneGeometry(0.16, 0.1), fruitGeo = new THREE.IcosahedronGeometry(0.11, 1), sparkGeo = new THREE.OctahedronGeometry(0.022, 0);
   function spawn(geo, material, pos, vel, life, opts = {}) {
     const m = new THREE.Mesh(geo, material.clone());
     m.material.transparent = true;
     if (opts.steam) m.material.color.lerp(STEAM, opts.steam);
     m.position.copy(pos);
     scene.add(m);
-    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1 });
+    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1, flick: material === sparkMat ? 1 : 0 });
   }
   const leafMat = new THREE.MeshStandardMaterial({ color: PALETTE.leafB, side: THREE.DoubleSide, roughness: 1 });
   const fruitMat = flat(0xff8a5c);
-  const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffc46b, fog: false });
+  const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffb040, fog: false, blending: THREE.AdditiveBlending, depthWrite: false }); // small, bright, additive embers
   const smokeGeo = new THREE.IcosahedronGeometry(0.32, 1);
   const smokeMat = new THREE.MeshLambertMaterial({ color: 0xd9d6d0, depthWrite: false });
   const fires = [];
@@ -234,8 +235,8 @@ export function createProps(scene, deps) {
   }
 
   // ---- Campfires -----------------------------------------------------------
-  const flameOuter = new THREE.MeshBasicMaterial({ color: PALETTE.fire, fog: false });
-  const flameInner = new THREE.MeshBasicMaterial({ color: 0xffe08a, fog: false });
+  const coalMat = new THREE.MeshBasicMaterial({ color: 0x3a0e04, fog: false }); // cloned per fire: glows and pulses with it
+  const COAL_DIM = new THREE.Color(0x3a0e04), COAL_HOT = new THREE.Color(0xe0501a);
   const logMat = { a: flat(0x7a563c), b: flat(0x8f6a4a), c: flat(0x6b4a34) }; // shared, so each fire's logs weld into a few draws
   for (const f of CAMPFIRES) {
     const y = heightAt(f.x, f.z);
@@ -253,13 +254,10 @@ export function createProps(scene, deps) {
       g.add(log);
     }
     const flames = new THREE.Group();
-    const cones = [
-      mesh(new THREE.ConeGeometry(0.34, 0.95, 7), flameOuter, 0, 0.62, 0, false),
-      mesh(new THREE.ConeGeometry(0.2, 0.62, 6), flameInner, 0.04, 0.5, 0.03, false),
-      mesh(new THREE.ConeGeometry(0.18, 0.55, 6), flameOuter, -0.2, 0.42, 0.12, false),
-      mesh(new THREE.ConeGeometry(0.16, 0.5, 6), flameOuter, 0.18, 0.4, -0.14, false),
-    ];
-    flames.add(...cones);
+    const flameMesh = createFlames(big ? 1.6 : 1);
+    flames.add(flameMesh);
+    const coals = mesh(new THREE.IcosahedronGeometry(big ? 0.34 : 0.3, 1), coalMat.clone(), 0, 0.1, 0, false);
+    coals.scale.y = 0.35;
     g.add(flames);
     const light = new THREE.PointLight(PALETTE.fire, 0, 16, 1.4);
     light.position.y = 1.0;
@@ -271,7 +269,7 @@ export function createProps(scene, deps) {
         log.rotation.set(Math.sin(a) * -0.5, 0, Math.cos(a) * 0.5); g.add(log);
       }
       for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.4, log = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 6), logMat.c, Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5); log.rotation.set(Math.PI / 2, 0, a); g.add(log); }
-      flames.scale.setScalar(1.25); flames.position.y = 0.25;
+      flames.position.y = 0.25;
       g.scale.setScalar(1.9);
       light.distance = 20; light.position.y = 1.3; // also the reach of its shadow cube, redrawn every picture: keep it close
       // The bonfire throws real shadows, radially away from itself. Its cube map is not redrawn every
@@ -289,7 +287,7 @@ export function createProps(scene, deps) {
     }
     g.position.set(f.x, y - 0.02, f.z);
     // The ring of stones and the logs never move: weld them (the flames and the light stay apart).
-    g.remove(flames, light); mergeStatic(g); g.add(flames, light);
+    g.remove(flames, light); mergeStatic(g); g.add(flames, light, coals);
     group.add(g);
 
     // The big camp bonfire keeps camp hours: it burns from 18:00 until 06:00 on its own and nobody can
@@ -316,16 +314,21 @@ export function createProps(scene, deps) {
         shadowWas = on;
       }
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
-      flames.visible = fire.level > 0.02;
+      const near = Math.hypot(player.position.x - f.x, player.position.z - f.z) < 135; // far fires draw and shade nothing
+      flames.visible = coals.visible = near && fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
       fire.boost = Math.max(0, fire.boost - dt / 9); // fresh wood makes it roar for a while
       // Rain slowly drowns a fire (about 70 s to burn low) and it recovers in about 30 s once the rain stops.
       const soak = wx.rain > 0.25 ? wx.rain : 0;
       fire.damp += soak > fire.damp ? Math.min(soak - fire.damp, dt / 70) : -Math.min(fire.damp, dt / 30);
       const dampK = 1 - 0.6 * fire.damp * (1 - Math.min(1, fire.boost)); // fresh wood fights the rain
-      const fs = (big ? 1.25 : 1) * (1 + fire.boost * 0.45) * dampK;
-      flames.scale.set(fs * fire.level * (1 + flick * 0.5), fs * fire.level * (1 + flick), fs * fire.level * (1 - flick * 0.5));
-      cones.forEach((c, i) => { c.rotation.y = elapsed * (1 + i * 0.4); c.position.y = [0.62, 0.5, 0.42, 0.4][i] + Math.sin(elapsed * (9 + i * 3) + i) * 0.04; });
+      const fs = (1 + fire.boost * 0.45) * dampK;
+      if (flames.visible) {
+        flames.scale.setScalar(fs * fire.level);
+        const u = flameMesh.material.uniforms, soaked = 1 - 0.4 * fire.damp * (1 - Math.min(1, fire.boost));
+        u.uTime.value = elapsed + f.x * 3.1; u.uBright.value = Math.min(1.4, fire.level * (1 + fire.boost * 0.35) * soaked * (1 + flick * 0.35));
+        coals.material.color.lerpColors(COAL_DIM, COAL_HOT, fire.level * (0.55 + 0.3 * Math.sin(elapsed * 0.9 + f.z) + 0.15 * Math.sin(elapsed * 2.7)) * soaked);
+      }
       light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1) * (1 + fire.boost * 0.5) * (1 - 0.55 * fire.damp * (1 - Math.min(1, fire.boost)));
       fire.sparkTimer -= dt;
       if (fire.lit && fire.sparkTimer <= 0) {
@@ -425,7 +428,7 @@ export function createProps(scene, deps) {
         if (p.m.position.y < p.floor) { p.m.position.y = p.floor; p.vel.set(0, 0, 0); p.gravity = 0; p.spin = 0; p.flutter = 0; }
         p.m.rotation.x += p.spin * dt; p.m.rotation.z += p.spin * 0.7 * dt;
         const t = p.age / p.life;
-        p.m.material.opacity = p.alpha * (t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)) * (p.grow ? Math.min(1, t * 6) : 1);
+        p.m.material.opacity = p.alpha * (p.flick ? 0.55 + 0.45 * Math.sin(p.age * 38 + i * 5.7) : 1) * (t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)) * (p.grow ? Math.min(1, t * 6) : 1);
         if (p.grow) p.m.scale.setScalar(1 + p.grow * t);
         if (t >= 1) { scene.remove(p.m); p.m.material.dispose(); particles.splice(i, 1); }
       }

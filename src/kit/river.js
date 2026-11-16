@@ -7,15 +7,15 @@ import { box, cyl, ball, stick, flat, mergeStatic } from '../world/build.js';
 // ---- small shared helpers -----------------------------------------------------------------
 const matCache = new Map();
 // One plain flat-shaded material per colour (and per variant), shared by everything in this file.
-const mat = (color, key = '', extra = {}) => {
+export const mat = (color, key = '', extra = {}) => {
   const k = `${color}:${key}`;
   if (!matCache.has(k)) matCache.set(k, flat(color, extra));
   return matCache.get(k);
 };
-const hash = (n) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
-const rngFrom = (seed) => { let s = seed >>> 0 || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
+export const hash = (n) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+export const rngFrom = (seed) => { let s = seed >>> 0 || 1; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; };
 // Pushes every point of a rounded shape in or out a little so no two rocks match.
-function lump(geo, amount, seed) {
+export function lump(geo, amount, seed) {
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -62,15 +62,18 @@ const FALL_FRAG = /* glsl */`
     #include <colorspace_fragment>
   }`;
 
-export function buildWaterfall(height = 12, width = 4) {
+// Options: `wall: false` leaves out the free-standing rock wall, lip and foot boulders, for a fall set
+// into rock that is already there; `profile(y)` gives how far forward (+z) the water is at height y
+// (so it can hug a stepped face), and `rows` how finely the sheets bend to follow it.
+export function buildWaterfall(height = 12, width = 4, { wall = true, profile = null, rows: rowCount = 24 } = {}) {
   const H = height, W = width;
   const group = new THREE.Group();
-  const foot = 0.25 + 0.09 * H;                       // how far forward (+z) the water lands
+  const foot = profile ? profile(0) : 0.25 + 0.09 * H; // how far forward (+z) the water lands
   // Water leaves the lip going outward, then falls: z grows quickly at first, then eases.
-  const zAt = (y) => 0.15 + (foot - 0.15) * Math.pow(1 - y / H, 0.8);
+  const zAt = profile || ((y) => 0.15 + (foot - 0.15) * Math.pow(1 - y / H, 0.8));
 
   // A thin four-sided slab of water running from the lip (y = H) to the foot (y = 0).
-  function slab(cx, w0, w1, th0, th1, dz, seed, kindFace, kindSide, rows = 24) {
+  function slab(cx, w0, w1, th0, th1, dz, seed, kindFace, kindSide, rows = rowCount) {
     const pos = [], uv = [], kind = [], sd = [], idx = [];
     const corners = [[-1, 1], [1, 1], [1, -1], [-1, -1]]; // front-left, front-right, back-right, back-left
     for (let f = 0; f < 4; f++) {
@@ -98,12 +101,13 @@ export function buildWaterfall(height = 12, width = 4) {
   for (const k of [-1, 0, 1]) slabs.push(slab(k * W / 3, W / 3 - 0.3, (W / 3 - 0.3) * 1.2, 0.45, 0.22, k === 0 ? 0.08 : 0, k + 2, 0, 2));
   // A few loose streaks in front of the sheets.
   const r = rngFrom(11);
-  for (let i = 0; i < 7; i++) slabs.push(slab((r() - 0.5) * W * 0.9, 0.1 + r() * 0.06, 0.15 + r() * 0.06, 0.08, 0.08, 0.1 + r() * 0.08, 7 + i * 1.7, 1, 1, 20));
+  for (let i = 0; i < 7; i++) slabs.push(slab((r() - 0.5) * W * 0.9, 0.1 + r() * 0.06, 0.15 + r() * 0.06, 0.08, 0.08, 0.1 + r() * 0.08, 7 + i * 1.7, 1, 1, Math.round(rowCount * 0.85)));
   const fallMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uHeight: { value: H } }, vertexShader: FALL_VERT, fragmentShader: FALL_FRAG, side: THREE.DoubleSide });
   const water = new THREE.Mesh(mergeGeometries(slabs), fallMat); // the falling water: 1 draw call
   group.add(water);
 
   // ---- The cliff the water pours over: rounded grey boulders, mossy on top (2 draw calls once welded).
+  if (wall) {
   const rocks = new THREE.Group();
   const rockM = mat(0x9a9298), mossM = mat(0x6fa05a);
   const rr = rngFrom(5);
@@ -130,6 +134,7 @@ export function buildWaterfall(height = 12, width = 4) {
   for (const s of [-1, 1]) for (let i = 0; i < 3; i++) chunk(s * (W / 2 + 0.8 + i * 0.9 + rr() * 0.4), 0.2, 0.9 + i * 0.7, 0.5 + rr() * 0.3, 1, 0.8, 1);
   mergeStatic(rocks);
   group.add(rocks);
+  }
 
   // ---- Froth: white blobs that heave where the water hits the pool.
   const fz = foot + 0.2;
@@ -324,15 +329,31 @@ export function buildLilyPatch() {
 }
 
 // =============================================================================================
+// WATER SURFACE (shared by the streaks and the foam: the sea's swell, so they ride on it)
+// =============================================================================================
+// The same three slow waves as the water plane's vertex shader in src/world/island.js (keep in step).
+export const WAVE_GLSL = /* glsl */`
+  float waterWave(vec2 p, float t) {
+    return sin(p.x * 0.085 + p.y * 0.03 + t * 0.42) * 0.085 + sin(p.y * 0.07 - p.x * 0.025 - t * 0.34) * 0.075
+         + sin((p.x * 0.6 + p.y * 0.8) * 0.17 + t * 0.58) * 0.035;
+  }`;
+export const waterWave = (x, z, t) => Math.sin(x * 0.085 + z * 0.03 + t * 0.42) * 0.085 + Math.sin(z * 0.07 - x * 0.025 - t * 0.34) * 0.075 + Math.sin((x * 0.6 + z * 0.8) * 0.17 + t * 0.58) * 0.035;
+
+// =============================================================================================
 // FLOWING STREAKS (a thin mesh on the water that shows which way the river runs)
 // =============================================================================================
+// `points` run from the head to the mouth; a point with `w` (half width) sets the ribbon's width there
+// (a little narrower than the water, so the streaks fade out before the bank), else `width` is used.
+// The ribbon follows the swell in its vertex shader and hovers 3.5 cm above the water plane, so it
+// never flickers against it; it fades in at the head, out toward the sea, and at both banks.
 export function buildFlowStreaks(points, width) {
-  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(p.x, 0, p.z)));
-  const len = curve.getLength(), N = Math.max(8, Math.ceil(len / 0.8));
+  // Centre line through (x, half width, z): one smooth curve carries the width along with the bend.
+  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(p.x, p.w !== undefined ? p.w * 0.94 : width / 2, p.z)), false, 'centripetal');
+  const len = curve.getLength(), N = Math.max(8, Math.ceil(len / 0.7));
   const pos = [], uv = [], idx = [];
   for (let i = 0; i <= N; i++) {
-    const t = i / N, c = curve.getPointAt(t), tan = curve.getTangentAt(t), nx = -tan.z, nz = tan.x;
-    pos.push(c.x + nx * width / 2, 0.02, c.z + nz * width / 2, c.x - nx * width / 2, 0.02, c.z - nz * width / 2);
+    const t = i / N, c = curve.getPointAt(t), tan = curve.getTangentAt(t), l = Math.hypot(tan.x, tan.z) || 1, nx = -tan.z / l, nz = tan.x / l;
+    pos.push(c.x + nx * c.y, 0, c.z + nz * c.y, c.x - nx * c.y, 0, c.z - nz * c.y);
     uv.push(0, t * len, 1, t * len); // across the river, and metres along it (downstream = increasing)
     if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   }
@@ -341,25 +362,28 @@ export function buildFlowStreaks(points, width) {
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   const m = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, side: THREE.DoubleSide, uniforms: { uTime: { value: 0 } },
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float uTime; varying vec2 vUv;
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, uniforms: { uTime: { value: 0 }, uLen: { value: len } },
+    vertexShader: `uniform float uTime; varying vec2 vUv; ${WAVE_GLSL}
+      void main() { vUv = uv; vec3 p = position; p.y = waterWave(p.xz, uTime) + 0.035; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+    fragmentShader: `uniform float uTime; uniform float uLen; varying vec2 vUv;
       float hash(float n) { return fract(sin(n * 127.1) * 43758.5453); }
       void main() {
-        float u = vUv.x + 0.03 * sin(vUv.y * 0.7 + floor(vUv.x * 9.0) * 2.0);    // lanes wobble a little
-        float lane = floor(u * 9.0), h = hash(lane * 3.7 + 1.3), lx = fract(u * 9.0);
-        float line = smoothstep(0.4, 0.2, abs(lx - 0.5));                          // a thin streak in the middle of each lane
-        float period = 2.4 + h * 2.0, f = fract(vUv.y / period - uTime * (0.6 + h * 0.5) / period + h);  // slides downstream
-        float dash = smoothstep(0.0, 0.1, f) * smoothstep(0.55, 0.3, f);
-        float bank = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);   // fade near both banks
-        float a = line * dash * bank * 0.6;
+        float u = vUv.x + 0.012 * sin(vUv.y * 0.35 + floor(vUv.x * 18.0) * 2.0);   // lanes wobble a little
+        float lane = floor(u * 18.0), h = hash(lane * 3.7 + 1.3), lx = fract(u * 18.0);
+        float line = smoothstep(0.2, 0.08, abs(lx - 0.5)) * step(0.35, hash(lane * 7.1 + 4.0));   // a thin streak in some lanes
+        float period = 5.0 + h * 5.0, f = fract(vUv.y / period - uTime * (0.7 + h * 0.5) / period + h);  // slides downstream
+        float dash = smoothstep(0.0, 0.12, f) * smoothstep(0.5, 0.3, f);
+        float bank = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);   // fade near both banks
+        float ends = smoothstep(0.0, 6.0, vUv.y) * (1.0 - smoothstep(uLen - 14.0, uLen - 1.0, vUv.y)); // in at the lake, out toward the sea
+        float a = line * dash * bank * ends * 0.45;
         if (a < 0.02) discard;
         gl_FragColor = vec4(0.95, 0.98, 1.0, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
   });
-  const mesh = new THREE.Mesh(geo, m); mesh.renderOrder = 1; mesh.frustumCulled = false;
+  m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2;
+  const mesh = new THREE.Mesh(geo, m); mesh.renderOrder = 2; mesh.frustumCulled = false;
   const group = new THREE.Group(); group.add(mesh);
   return { group, update(dt, elapsed) { m.uniforms.uTime.value = elapsed; } };
 }

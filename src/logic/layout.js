@@ -74,11 +74,11 @@ const DOCK_ANGLE = 18 * DEG;
 export const DOCK = {
   x: Math.cos(DOCK_ANGLE) * 56.2, z: Math.sin(DOCK_ANGLE) * 56.2,
   rot: Math.atan2(Math.cos(DOCK_ANGLE), Math.sin(DOCK_ANGLE)),
-  length: 10, width: 2.4, top: 0.62,
+  length: 20, width: 3.6, top: 0.62, // the harbour pier (models in src/world/areas/harbour.js)
 };
 const dockDir = { x: Math.sin(DOCK.rot), z: Math.cos(DOCK.rot) };
 export const BOAT = {
-  x: DOCK.x + dockDir.x * 6.5 + dockDir.z * 2.6, z: DOCK.z + dockDir.z * 6.5 - dockDir.x * 2.6, rot: DOCK.rot + 0.12,
+  x: DOCK.x + dockDir.x * 6.5 + dockDir.z * 3.3, z: DOCK.z + dockDir.z * 6.5 - dockDir.x * 3.3, rot: DOCK.rot + 0.12,
 };
 
 export const CAMPFIRE = { x: Math.cos(128 * DEG) * 53, z: Math.sin(128 * DEG) * 53 };

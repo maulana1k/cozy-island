@@ -242,7 +242,7 @@ export function buildStiltHouse(variant = 0) {
   g.position.set(-cx, 0, -cz);
 
   // Floors (planks) with two bearers under each, and stilts round the edge of each floor.
-  const seen = new Set();
+  const seen = new Set(), stilts = [];
   for (const r of rects) {
     const w = r.x1 - r.x0, d = r.z1 - r.z0, mx = (r.x0 + r.x1) / 2, mz = (r.z0 + r.z1) / 2;
     g.add(planks(w, 0.14, d, MID, mx, FT - 0.07, mz));
@@ -251,7 +251,7 @@ export function buildStiltHouse(variant = 0) {
     if (w > 4.2) xs.splice(1, 0, mx); if (d > 4.2) zs.splice(1, 0, mz);
     for (const x of xs) for (const z of zs) {
       const edge = x === xs[0] || x === xs[xs.length - 1] || z === zs[0] || z === zs[zs.length - 1], key = x.toFixed(1) + ',' + z.toFixed(1);
-      if (!edge || seen.has(key)) continue; seen.add(key);
+      if (!edge || seen.has(key)) continue; seen.add(key); stilts.push({ x: x - cx, z: z - cz });
       g.add(pole(0.09, 0.115, FT + 0.05, DK, x, FT / 2 - 0.1, z, 6)); // a short round stilt, a little wider at the foot
     }
   }
@@ -265,8 +265,8 @@ export function buildStiltHouse(variant = 0) {
   g.add(rb(1.12, 1.82, 0.07, DK, V.doorX, FT + 0.91, hd + 0.015), rb(0.9, 1.68, 0.07, V.door, V.doorX, FT + 0.84, hd + 0.05), rb(1.35, 0.09, 0.34, DK, V.doorX, FT + 1.95, hd + 0.15));
   // Windows: front, sides and back; lamps sit at each for night glow.
   const wy = FT + 1.25;
-  for (const x of V.windows) { windowAt(g, x, wy, hd, 0, V.shutter, 1); lamps.push({ x, y: wy, z: hd + 0.2 }); }
-  for (const [s, z, o] of V.side) { windowAt(g, s * hw, wy, z, s * Math.PI / 2, V.shutter, o); lamps.push({ x: s * (hw + 0.2), y: wy, z }); }
+  for (const x of V.windows) { windowAt(g, x, wy, hd, 0, V.shutter, 1); lamps.push({ x, y: wy, z: hd + 0.2, window: true, nx: 0, nz: 1 }); }
+  for (const [s, z, o] of V.side) { windowAt(g, s * hw, wy, z, s * Math.PI / 2, V.shutter, o); lamps.push({ x: s * (hw + 0.2), y: wy, z, window: true, nx: s, nz: 0 }); }
   windowAt(g, V.back[0], wy, -hd, Math.PI, V.shutter, variant % 2 ? 0 : 2); // one window at the back so the rear is not a blank wall
   // Decks: rails with roof posts, and steps.
   const front = V.decks.find((d) => d.rails.includes('f')) || rects[0];
@@ -306,7 +306,10 @@ export function buildStiltHouse(variant = 0) {
     lantern(g, 0.0, beamY, beamY - 0.35, 2.2, 0xe8503a); lamps.push({ x: 0, y: beamY - 0.35, z: 2.2 });
   }
   mergeStatic(root);
-  return result(root, { colliders: [{ x: 0, z: 0, hw: totW / 2, hd: totD / 2, rot: 0 }], lamps: lamps.map((l) => ({ x: l.x - cx, y: l.y, z: l.z - cz })) });
+  // `stilts` and `stepFeet` (local, on the ground) let a caller standing the house on a slope lengthen the
+  // stilts and build up the ground under the steps; `floor` is the deck height.
+  return result(root, { colliders: [{ x: 0, z: 0, hw: totW / 2, hd: totD / 2, rot: 0 }], lamps: lamps.map((l) => ({ ...l, x: l.x - cx, z: l.z - cz })), // window lamps carry window: true and the wall's outward normal (nx, nz)
+    stilts, stepFeet: V.steps.map(([sx, sz]) => ({ x: sx - cx, z: sz + 0.85 - cz, w: 1.2 })), floor: FT });
 }
 export const buildStiltHouse1 = () => buildStiltHouse(1);
 export const buildStiltHouse2 = () => buildStiltHouse(2);
@@ -349,7 +352,8 @@ export function buildMeetingHall() {
   for (const [x, z] of [[-1.95, 1.2], [1.95, 1.2], [-1.95, -1.4], [1.95, -1.4]]) { lantern(g, x, TOP - 0.3, TOP - 0.85, z); lamps.push({ x, y: TOP - 0.85, z }); }
   mergeStatic(root);
   const cols = [{ x: 0, z: 0, hw: W / 2, hd: D / 2, rot: 0 }]; // the raised floor is solid to walk into from the steps only (ASSUMPTION)
-  return result(root, { colliders: cols, lamps });
+  const stilts = []; for (const x of [-4.2, -2.1, 0, 2.1, 4.2]) for (const z of [-2.75, 2.75]) stilts.push({ x, z });
+  return result(root, { colliders: cols, lamps, stilts, stepFeet: [{ x: 0, z: D / 2 + 0.45, w: 3.4 }], floor: FT });
 }
 
 // ---- Market stalls -------------------------------------------------------------------------
@@ -435,30 +439,63 @@ export function buildWell() {
 }
 
 // ---- Shade tree ------------------------------------------------------------------------------------------
-// A broad old banyan: thick leaning trunk, spreading branches, a wide flat-topped canopy of leaf clumps,
-// hanging prop roots and a ring bench round the trunk.
+// ONE big old banyan: a thick trunk flaring into buttress roots, five heavy limbs spreading almost level,
+// a broad canopy in three tiers (wide and low at the rim, a crown on top), curtains of thin aerial roots
+// hanging from the limbs (a few have reached the ground and thickened into props), and a ring bench round
+// the trunk. About 15 m across and 10 m tall. Bench seat top is y = 0.47 at radius 2.65 (BENCH below).
+export const SHADE_TREE_BENCH = { r: 2.65, top: 0.47 };
+// A tapered limb from a (thick end, radius r0) to b (thin end, radius r1), with a knuckle at the thick end.
+function limb(g, a, b, r0, r1, c, seg = 7) {
+  const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), len = va.distanceTo(vb);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, len, seg, 1, true), atlas() || c);
+  m.position.copy(va).add(vb).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.sub(va).normalize());
+  g.add(paint(m, c), bl(r0 * 1.02, c, a[0], a[1], a[2], 0));
+}
 export function buildShadeTree() {
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g); const lamps = [];
-  const BARK = 0x7a5a42, BARK_L = 0x8f6c50;
-  g.add(sc(bl(1.6, BARK, 0, 0.35, 0, 1), 1, 0.5, 1), cy(0.85, 1.25, 3.2, BARK, 0, 1.6, 0, 8), at(cy(0.55, 0.8, 3.0, BARK_L, 0.7, 3.6, 0.2, 7), 0, 0, -0.18), at(cy(0.5, 0.7, 2.8, BARK_L, -0.6, 3.5, -0.3, 7), 0, 0, 0.2));
-  const lobes = [[0, 6.2, 0, 3.3, LEAF], [4.6, 5.3, 1.6, 3.0, LEAF_D], [-4.6, 5.5, 1.2, 3.1, LEAF], [1.8, 5.3, -4.6, 3.0, LEAF_D], [-3.0, 5.4, -4.2, 2.9, LEAF], [6.2, 4.9, -2.4, 2.4, LEAF], [-6.4, 5.0, -1.6, 2.4, LEAF_D], [0.8, 5.0, 5.2, 2.7, LEAF], [-3.3, 4.8, 4.2, 2.5, LEAF_D], [3.6, 5.0, 4.4, 2.5, LEAF_L], [3.4, 6.7, -1.6, 2.3, LEAF_L], [-2.2, 6.9, 1.8, 2.2, LEAF_L], [-2.4, 6.6, -1.8, 2.1, LEAF]];
-  for (const [x, y, z, r, c] of lobes) g.add(sc(bl(r * 1.15, c, x, y - 0.9, z, 1), 1, 0.62, 1));
-  for (const [x, y, z] of lobes.slice(0, 10)) g.add(sk([0, 3.4, 0], [x * 0.85, y - 1.0, z * 0.85], 0.28, BARK, 5)); // branches out to each clump
-  const cols = [{ x: 0, z: 0, r: 1.3 }];
-  // Prop roots: pairs of crooked sticks, so they read as roots and not as poles. Some reach the ground, some still hang.
-  for (let k = 0; k < 11; k++) {
-    const a = k * 0.58 + 0.3, r = 2.8 + (k % 4) * 0.9, x = Math.cos(a) * r, z = Math.sin(a) * r, y0 = 4.5, bend = 0.35 * (k % 2 ? 1 : -1);
-    const mx = x + Math.sin(a) * bend, mz = z - Math.cos(a) * bend;
-    if (k % 3 !== 2) { g.add(sk([x * 0.92, y0, z * 0.92], [mx, 2.2, mz], 0.2, BARK_L, 5), sk([mx, 2.2, mz], [x, 0, z], 0.26, BARK_L, 5)); cols.push({ x, z, r: 0.25 }); }
-    else g.add(sk([x * 0.92, y0, z * 0.92], [mx, 2.0 + (k % 5) * 0.3, mz], 0.07, BARK_L, 4));
+  const BARK = 0x7a5a42, BARK_L = 0x8f6c50, BARK_D = 0x664a36, ROOT = 0x9a7a5c;
+  const CAN_D = 0x4a8444, CAN = 0x5f9e4e, CAN_L = 0x7cb85a, CAN_T = 0x93c766;
+  // Trunk: two fused stems for a gnarled outline, on a low swelling of roots.
+  g.add(sc(bl(1.75, BARK_D, 0, 0.05, 0, 1), 1, 0.3, 1), cy(1.0, 1.4, 4.6, BARK, 0, 2.3, 0, 10), cy(0.72, 1.05, 4.2, BARK_L, 0.42, 2.2, -0.3, 8), cy(0.6, 0.9, 3.6, BARK_D, -0.45, 1.9, 0.35, 8));
+  // Buttress roots: six leaning fins round the foot of the trunk.
+  for (let k = 0; k < 6; k++) {
+    const fin = new THREE.Group(); fin.rotation.y = k * (Math.PI / 3) + 0.25; g.add(fin);
+    const len = 2.3 + (k % 3) * 0.3;
+    fin.add(at(rb(0.55, len, 0.34, k % 2 ? BARK : BARK_D, 1.2 + (k % 2) * 0.1, 0.85, 0), 0, 0, 0.62));
   }
-  // Ring bench round the trunk, open at the front (+z).
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2; if (Math.abs(Math.sin(a - Math.PI / 2)) < 0.3 && Math.cos(a - Math.PI / 2) > 0) continue;
-    const R = 2.1, x = Math.cos(a) * R, z = Math.sin(a) * R, ry = -a - Math.PI / 2;
-    g.add(rb(1.28, 0.08, 0.5, LT, x, 0.46, z).rotateY(ry), rb(0.9, 0.42, 0.28, DK, x, 0.21, z).rotateY(ry));
+  // Five heavy limbs leaving the trunk at about 4 m, nearly level, each forking once at the rim.
+  const tips = [];
+  for (let k = 0; k < 5; k++) {
+    const a = k * (Math.PI * 2 / 5) + 0.35 + (k % 2) * 0.12, r = 4.6 + (k % 3) * 0.5, y0 = 3.7 + (k % 2) * 0.4, y1 = 5.5 + (k % 3) * 0.25;
+    const ca = Math.cos(a), sa = Math.sin(a), mid = [ca * r, y1, sa * r];
+    limb(g, [ca * 0.5, y0, sa * 0.5], mid, 0.55, 0.36, k % 2 ? BARK : BARK_L);
+    for (const s of [-1, 1]) { const b = a + s * 0.38; tips.push([Math.cos(b) * (r + 2.0), y1 + 0.75, Math.sin(b) * (r + 2.0)]); limb(g, mid, tips[tips.length - 1], 0.34, 0.16, BARK, 6); }
   }
-  g.add(sk([2.6, 5.2, 1.6], [2.6, 3.7, 1.6], 0.012, ROPE, 4), cy(0.1, 0.1, 0.22, RED, 2.6, 3.55, 1.6, 6), cy(0.04, 0.12, 0.04, DK, 2.6, 3.7, 1.6, 6)); lamps.push({ x: 2.6, y: 3.55, z: 1.6 });
+  limb(g, [0, 4.2, 0], [0.4, 7.4, -0.3], 0.7, 0.3, BARK); // the leader, up into the crown
+  // Canopy: a wide low rim of dark leaf over the limb tips, a fuller middle tier and a lighter crown.
+  for (let k = 0; k < 10; k++) { const [x, y, z] = tips[k]; g.add(sc(bl(2.55 + (k % 3) * 0.2, k % 2 ? CAN_D : CAN, x * 0.95, y + 0.55, z * 0.95, 1), 1.1, 0.42, 1.1)); }
+  for (let k = 0; k < 6; k++) { const a = k * (Math.PI / 3) + 0.6, r = 3.6; g.add(sc(bl(2.9, k % 2 ? CAN : CAN_L, Math.cos(a) * r, 7.6 + (k % 2) * 0.3, Math.sin(a) * r, 1), 1.1, 0.48, 1.1)); }
+  g.add(sc(bl(3.1, CAN_L, 0.3, 8.7, -0.2, 1), 1.15, 0.5, 1.15), sc(bl(2.0, CAN_T, -0.6, 9.5, 0.7, 1), 1.1, 0.55, 1.1), sc(bl(1.7, CAN_T, 1.4, 9.2, -1.2, 1), 1.1, 0.5, 1.1));
+  // Aerial roots: thin strands hanging in curtains from the limbs; three have reached the ground as props.
+  const cols = [{ x: 0, z: 0, r: 2.0 }];
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  for (let k = 0; k < 30; k++) {
+    const a = rnd() * Math.PI * 2, r = 3.7 + rnd() * 3.3, x = Math.cos(a) * r, z = Math.sin(a) * r, top = 5.6 + rnd() * 0.4, end = 2.3 + rnd() * 2.0, wob = (rnd() - 0.5) * 0.3;
+    g.add(sk([x, top, z], [x + wob, (top + end) / 2, z - wob], 0.04, ROOT, 4), sk([x + wob, (top + end) / 2, z - wob], [x + wob * 0.5, end, z - wob * 1.4], 0.03, ROOT, 4));
+  }
+  for (const [a, r] of [[1.2, 5.6], [3.5, 6.1], [5.3, 5.2]]) {
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    limb(g, [x * 0.97, 5.7, z * 0.97], [x + 0.1, 2.6, z - 0.1], 0.13, 0.17, BARK_L, 6); limb(g, [x + 0.1, 2.6, z - 0.1], [x, -0.05, z], 0.17, 0.24, BARK_L, 6);
+    g.add(sc(bl(0.35, BARK_D, x, 0.02, z, 0), 1, 0.4, 1)); cols.push({ x, z, r: 0.28 });
+  }
+  // Ring bench round the trunk: twelve plank seats on chunky legs.
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2, R = SHADE_TREE_BENCH.r, x = Math.cos(a) * R, z = Math.sin(a) * R, ry = -a + Math.PI / 2;
+    g.add(rb(1.42, 0.08, 0.5, LT, x, 0.43, z).rotateY(ry), rb(0.16, 0.39, 0.36, DK, x, 0.195, z).rotateY(ry));
+  }
+  // A red paper lantern hung from the first limb.
+  const la = 0.35, lx = Math.cos(la) * 3.2, lz = Math.sin(la) * 3.2;
+  g.add(sk([lx, 4.9, lz], [lx, 3.75, lz], 0.012, ROPE, 4), cy(0.13, 0.13, 0.3, RED, lx, 3.55, lz, 6), cy(0.05, 0.15, 0.05, DK, lx, 3.73, lz, 6)); lamps.push({ x: lx, y: 3.55, z: lz });
   mergeStatic(root);
   return result(root, { colliders: cols, lamps });
 }
@@ -484,7 +521,7 @@ export function buildWashingLine() {
 // ---- Jetty -------------------------------------------------------------------------------------------------------
 // A low fishing jetty running along +z from the shore (-z) out to the water (+z): planks across stringers, on
 // round posts. Deck top is y = 0.5. The last posts are tall for tying boats and carry a rope rail.
-export function buildJetty(length = 9) {
+export function buildJetty(length = 9, piles = 0) { // `piles`: extra pile length below the deck, for a jetty set high over deep water
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g); const lamps = [];
   const hw = 1.0, L = length, z0 = -L / 2, z1 = L / 2, tones = [MID, LT, 0xa87d54];
   const n = Math.floor(L / 0.3);
@@ -494,7 +531,7 @@ export function buildJetty(length = 9) {
   const last = posts[posts.length - 1];
   for (const z of posts) {
     g.add(rb(2.5, 0.13, 0.16, DK, 0, 0.27, z));
-    for (const s of [-1, 1]) g.add(cy(0.085, 0.1, 1.5 + (z > last - 3.9 ? 0.4 : 0.0), DK, s * 1.12, 0.65 + (z > last - 3.9 ? 0.2 : 0.0) - 0.0 - 0.0, z, 6));
+    for (const s of [-1, 1]) g.add(cy(0.085, 0.1, 1.5 + piles + (z > last - 3.9 ? 0.4 : 0.0), DK, s * 1.12, 0.65 - piles / 2 + (z > last - 3.9 ? 0.2 : 0.0), z, 6));
   }
   // posts near the end are tall: a rope rail between them, and caps
   const tall = posts.filter((z) => z > last - 3.9);
@@ -576,6 +613,18 @@ export function buildRowBoat(color = 0x4f7fc9) {
     update(dt, t) { bob.position.y = Math.sin(t * 1.3) * 0.035; bob.rotation.z = Math.sin(t * 1.0 + 1) * 0.025; bob.rotation.x = Math.sin(t * 0.8 + 2) * 0.02; } };
 }
 export const buildRowBoatRed = () => buildRowBoat(0xe8503a);
+
+// ---- Footings ------------------------------------------------------------------------------------------------------------
+// What a building standing on a slope needs underneath: longer stilts and a stone footing under the steps.
+// posts: [{x, z, y0, y1}] round posts from y0 up to y1; pads: [{x, z, y0, y1, w, d, ry}] flat stone blocks. World or
+// local coordinates, as the caller likes: the group is returned at the origin.
+export function buildFootings(posts = [], pads = []) {
+  const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
+  for (const p of posts) { const h = p.y1 - p.y0; if (h > 0.02) g.add(pole(0.1, 0.125, h, DK, p.x, (p.y0 + p.y1) / 2, p.z, 6)); }
+  for (const p of pads) { const h = p.y1 - p.y0; if (h > 0.02) g.add(rb(p.w, h, p.d, 0xa8a0a8, p.x, (p.y0 + p.y1) / 2, p.z).rotateY(p.ry || 0)); }
+  mergeStatic(root);
+  return result(root);
+}
 
 // ---- Fence and lamp ----------------------------------------------------------------------------------------------------
 // A low bamboo fence along +x: upright canes of slightly different heights tied to two rails, with thicker posts at the ends.

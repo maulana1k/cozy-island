@@ -139,7 +139,7 @@ export function buildPaddy(width = 10, depth = 8) {
 // A vegetable plot: raised soil rows with cabbages, lettuces and carrot tops, bean poles and a watering can.
 export function buildVegPlot(width = 6, depth = 4) {
   const L = [], rand = rng(23);
-  L.push(box(width, 0.02, depth, C.dirt, 0, 0.01, 0));                                             // trodden bare earth floor
+  L.push(box(width, 0.5, depth, C.dirt, 0, -0.24, 0));                                              // trodden bare earth floor, a slab that reaches down into sloping ground
   // Low wooden boards round the edge.
   for (const sz of [-1, 1]) L.push(box(width, 0.14, 0.06, C.wood, 0, 0.07, sz * (depth / 2 - 0.03)));
   for (const sx of [-1, 1]) L.push(box(0.06, 0.14, depth - 0.12, C.wood, sx * (width / 2 - 0.03), 0.07, 0));
@@ -186,7 +186,7 @@ export function buildVegPlot(width = 6, depth = 4) {
 // A goat pen: a square rail fence with a gate gap on +z, a lean-to shelter, a feed trough.
 export function buildGoatPen(size = 6) {
   const L = [], colliders = [], h = size / 2, gap = 0.7, rand = rng(5);
-  const post = (x, z, ht = 1.1) => L.push(cyl(0.065, 0.075, ht, C.woodDark, x, ht / 2, z, 7), sph(0.075, C.woodDark, x, ht, z, 1, 0.7, 1, 0, 0, 0, 7, 4));
+  const post = (x, z, ht = 1.1) => L.push(cyl(0.065, 0.075, ht + 0.4, C.woodDark, x, ht / 2 - 0.2, z, 7), sph(0.075, C.woodDark, x, ht, z, 1, 0.7, 1, 0, 0, 0, 7, 4));
   const rails = (x0, z0, x1, z1) => { // two rails between two points, split into pieces between posts
     const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 1.5)), ang = Math.atan2(-(z1 - z0), x1 - x0);
     for (let i = 0; i < n; i++) {
@@ -226,7 +226,7 @@ export function buildGoatPen(size = 6) {
 // A hay shelter: a thatched roof on four posts, stacked bales, and tools leaning against the posts.
 export function buildHayShelter() {
   const L = [], colliders = [], w = 3.2, d = 2.4, hx = w / 2 - 0.1, hz = d / 2 - 0.1;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { L.push(cyl(0.07, 0.085, 2.0, C.woodDark, sx * hx, 1.0, sz * hz, 7)); colliders.push({ x: sx * hx, z: sz * hz, r: 0.13 }); }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { L.push(cyl(0.07, 0.085, 2.5, C.woodDark, sx * hx, 0.75, sz * hz, 7)); colliders.push({ x: sx * hx, z: sz * hz, r: 0.13 }); }
   for (const sz of [-1, 1]) L.push(box(w + 0.1, 0.12, 0.12, C.wood, 0, 1.97, sz * hz));
   for (const sx of [-1, 1]) L.push(box(0.12, 0.12, d + 0.1, C.wood, sx * hx, 1.97, 0));
   // Thick thatched roof with a ridge, hanging past the posts.
@@ -259,7 +259,7 @@ export function buildHayShelter() {
 export function buildScarecrow() {
   const L = [], colliders = [{ x: 0, z: 0, r: 0.3 }];
   const teal = 0x4aa6a3, pants = 0x5b78c9, boot = 0x6a4631, pump = C.orange, pumpDark = 0xe97a22, strawHat = 0xe9c868;
-  L.push(cyl(0.05, 0.06, 1.9, C.wood, 0, 0.95, -0.05, 7), sph(0.3, 0xa07650, 0, 0.04, -0.05, 1, 0.3, 1, 0, 0, 0, 8, 5));
+  L.push(cyl(0.05, 0.06, 2.3, C.wood, 0, 0.75, -0.05, 7), sph(0.3, 0xa07650, 0, 0.04, -0.05, 1, 0.3, 1, 0, 0, 0, 8, 5));
   L.push(seg([-0.78, 1.43, -0.05], [0.78, 1.43, -0.05], 0.035, 0.035, C.wood, 6));            // cross bar the arms hang on
   L.push(sph(0.3, teal, 0, 1.2, 0, 0.9, 1.1, 0.75, 0, 0, 0, 12, 9));                          // stuffed shirt
   for (const [x, y, c, s] of [[0.1, 1.27, 0xf4c84a, 1], [-0.12, 1.1, 0xe35d4f, 0.9]]) L.push(box(0.13 * s, 0.13 * s, 0.04, c, x, y, 0.2 * 1.02, 0.2));
@@ -295,7 +295,7 @@ export function buildScarecrow() {
 // A buffalo wallow: a muddy pool with a rim of churned earth, hoof prints and reeds.
 export function buildWallow(radius = 3) {
   const L = [], rand = rng(37);
-  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.02, 32), C.dirt, 0, 0.01, 0));      // trampled dry earth round it
+  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.6, 32), C.dirt, 0, -0.29, 0));      // trampled dry earth round it, a plug that reaches down into sloping ground
   L.push(sheet(new THREE.CylinderGeometry(radius * 0.88, radius * 0.88, 0.05, 28), new THREE.MeshStandardMaterial({ color: 0x74523a, roughness: 0.3 }), 0, 0.035, 0));
   L.push(...lumpRing(radius * 0.97, Math.round(radius * 8), radius * 0.16, [0x9a7a55, 0x8a6a48, 0xa8865e], 0.07, rand));
   L.push(...lumpRing(radius * 1.12, Math.round(radius * 5), radius * 0.1, [0x9a7a55, 0xb08a5e], 0.04, rand, 0.15));
@@ -369,7 +369,7 @@ export const buildPapayaTree = () => buildOrchardTree(2);
 // A duck pond: round, with a bed, still water, a bank of lumpy earth and stones, lily pads, pink lotus flowers and reeds.
 export function buildDuckPond(radius = 3.5) {
   const L = [], rand = rng(53);
-  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.03, 36), C.grass, 0, 0.015, 0));      // grassy fringe
+  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.6, 36), C.grass, 0, -0.285, 0));      // grassy fringe, a plug that reaches down into sloping ground
   L.push(M(new THREE.CylinderGeometry(radius * 0.97, radius * 0.97, 0.03, 32), 0x4e8f95, 0, 0.03, 0));       // pond bed
   L.push(...lumpRing(radius * 1.0, Math.round(radius * 8), radius * 0.12, [0x9c7b56, 0x8b6c4b, 0xa98a62], 0.08, rand));
   for (let i = 0; i < Math.round(radius * 3); i++) { const a = rand() * Math.PI * 2, r = radius * (0.98 + rand() * 0.1); L.push(sph(0.14 + rand() * 0.1, C.stone, Math.cos(a) * r, 0.1, Math.sin(a) * r, 1, 0.7, 1, 0, 0, 0, 7, 5)); }
@@ -415,10 +415,18 @@ export function buildGoat(color = 0xeadcc0) {
   const jaw = pivot(0, 0.2, 0.225, part([sph(0.04, light, 0, -0.014, 0.04, 1, 0.6, 1.6, 0, 0, 0, 8, 5), seg([0, -0.025, 0.07], [0, -0.14, 0.055], 0.022, 0.005, horn, 5)]));
   head.add(earL, earR, jaw);
   const tail = pivot(0, 0.6, -0.3, part([seg([0, 0, 0], [0, 0.12, -0.06], 0.03, 0.014, fur, 6), sph(0.02, dark, 0, 0.125, -0.065, 1, 1, 1, 0, 0, 0, 5, 4)]));
-  // Legs hang from the hip pivot. Hind legs have a slight bend at the hock; every leg ends in a dark hoof.
-  const leg = (x, z, hind) => pivot(x, 0.44, z, part(hind
-    ? [sph(0.06, fur, 0, -0.03, 0, 1, 1.3, 1.1, 0, 0, 0, 8, 6), seg([0, -0.02, 0], [0, -0.2, 0.03], 0.048, 0.03, fur, 7), seg([0, -0.2, 0.03], [0, -0.37, -0.005], 0.03, 0.024, dark, 7), seg([0, -0.37, -0.005], [0, -0.435, -0.005], 0.03, 0.034, hoof, 6)]
-    : [sph(0.05, fur, 0, -0.03, 0, 1, 1.3, 1.1, 0, 0, 0, 8, 6), seg([0, -0.02, 0], [0, -0.37, 0], 0.04, 0.026, dark, 7), seg([0, -0.37, 0], [0, -0.435, 0], 0.028, 0.033, hoof, 6)]));
+  // Legs hang from the hip pivot and bend at a knee (a hock on the hind legs): the upper leg is one mesh, the
+  // lower leg and dark hoof another on a knee pivot, so a stepping foot folds up instead of swinging stiff.
+  const leg = (x, z, hind) => {
+    const upper = hind
+      ? [sph(0.06, fur, 0, -0.03, 0, 1, 1.3, 1.1, 0, 0, 0, 8, 6), seg([0, -0.02, 0], [0, -0.2, 0.03], 0.048, 0.03, fur, 7)]
+      : [sph(0.05, fur, 0, -0.03, 0, 1, 1.3, 1.1, 0, 0, 0, 8, 6), seg([0, -0.02, 0], [0, -0.2, 0], 0.04, 0.03, dark, 7), sph(0.03, dark, 0, -0.2, 0, 1, 1, 1, 0, 0, 0, 7, 5)];
+    const lower = hind
+      ? [sph(0.03, dark, 0, 0, 0, 1, 1, 1, 0, 0, 0, 7, 5), seg([0, 0, 0], [0, -0.17, -0.035], 0.03, 0.024, dark, 7), seg([0, -0.17, -0.035], [0, -0.235, -0.035], 0.03, 0.034, hoof, 6)]
+      : [seg([0, 0, 0], [0, -0.17, 0], 0.03, 0.026, dark, 7), seg([0, -0.17, 0], [0, -0.235, 0], 0.028, 0.033, hoof, 6)];
+    const g = pivot(x, 0.44, z, part(upper)), knee = pivot(0, -0.2, hind ? 0.03 : 0, part(lower)); g.add(knee); g.knee = knee;
+    return g;
+  };
   const FL = leg(-0.1, 0.2, false), FR = leg(0.1, 0.2, false), BL = leg(-0.1, -0.2, true), BR = leg(0.1, -0.2, true);
   rig.add(body, head, tail, FL, FR, BL, BR);
 
@@ -430,18 +438,24 @@ export function buildGoat(color = 0xeadcc0) {
     S.walk += ((moving ? 1 : 0) - S.walk) * k; S.graze += ((mode === 'graze' ? 1 : 0) - S.graze) * k; S.butt += ((mode === 'butt' ? 1 : 0) - S.butt) * k;
     if (moving) S.phase += dt * Math.PI * 2 * gaitRate(speed, LEG, A);
     const p = S.phase, t = elapsed;
-    // Legs in diagonal pairs: front-left with back-right, then front-right with back-left. A foot lifts as it swings forward.
-    const swing = (leg, ph) => { leg.rotation.x = Math.sin(ph) * A * S.walk; leg.position.y = 0.44 + Math.max(0, -Math.cos(ph)) * 0.035 * S.walk; };
+    // Legs in diagonal pairs: front-left with back-right, then front-right with back-left. A swinging foot folds up at the knee.
+    const swing = (leg, ph) => {
+      const fwd = Math.max(0, -Math.cos(ph)); // 0..1 while the foot is carried forward
+      leg.rotation.x = Math.sin(ph) * A * S.walk; leg.position.y = 0.44 + fwd * 0.02 * S.walk; leg.knee.rotation.x = (fwd ** 0.7) * 1.0 * S.walk;
+    };
     swing(FL, p); swing(BR, p); swing(FR, p + Math.PI); swing(BL, p + Math.PI);
     // Butt: a repeating 2.6 s cycle of rearing back, a short lunge, then settling.
     const u = (t % 2.6) / 2.6;
     let rear = 0, lunge = 0;
     if (u < 0.45) rear = smooth(u / 0.45); else if (u < 0.6) { rear = 1 - smooth((u - 0.45) / 0.15); lunge = smooth((u - 0.45) / 0.15); } else { lunge = 1 - smooth((u - 0.6) / 0.3); }
     const bw = S.butt, pitchRig = (-0.38 * rear + 0.16 * lunge) * bw;
-    rig.rotation.x = pitchRig; rig.position.y = 0.2 * Math.abs(Math.sin(pitchRig)) + Math.abs(Math.cos(p * 2)) * 0.012 * S.walk;
+    // Grazing: the whole front dips (legs stay upright), the neck stretches down and forward so the muzzle meets the grass.
+    const dip = 0.22 * S.graze;
+    rig.rotation.x = pitchRig + dip; rig.position.y = 0.2 * Math.abs(Math.sin(pitchRig)) + Math.abs(Math.cos(p * 2)) * 0.012 * S.walk;
     rig.position.z = (-0.12 * rear + 0.28 * lunge) * bw; rig.rotation.z = Math.sin(p) * 0.03 * S.walk;
-    for (const f of [FL, FR]) f.rotation.x += (-0.9 * rear + 0.35 * lunge) * bw;
-    for (const b of [BL, BR]) b.rotation.x += 0.15 * rear * bw;
+    for (const f of [FL, FR]) { f.rotation.x += (-0.9 * rear + 0.35 * lunge) * bw - dip; f.position.y += 0.2 * Math.sin(dip); }
+    for (const b of [BL, BR]) { b.rotation.x += 0.15 * rear * bw - dip; b.position.y -= 0.2 * Math.sin(dip); }
+    head.position.set(0, 0.52 - 0.14 * S.graze, 0.27 + 0.06 * S.graze);
     // Head: down to nibble when grazing (with small dips), tucked toward the ground when butting, bobbing when walking.
     const nibble = Math.sin(t * 3.1) * 0.07 + Math.max(0, Math.sin(t * 0.5) * 3 - 2) * -0.4;
     const target = 2.0 * S.graze + nibble * S.graze + (0.9 * lunge + 0.3 * rear) * bw + Math.sin(p * 2) * 0.05 * S.walk + Math.sin(t * 0.7) * 0.03;
@@ -500,7 +514,7 @@ export function buildBuffalo() {
     S.walk += ((moving ? 1 : 0) - S.walk) * k; S.sink += ((mode === 'wallow' ? 1 : 0) - S.sink) * k * 0.6;
     if (moving) S.phase += dt * Math.PI * 2 * gaitRate(speed, LEG, A);
     const p = S.phase, t = elapsed, sk = smooth(S.sink);
-    const swing = (leg, ph) => { leg.rotation.x = Math.sin(ph) * A * S.walk; leg.position.y = 0.63 + Math.max(0, -Math.cos(ph)) * 0.05 * S.walk; };
+    const swing = (leg, ph) => { leg.rotation.x = Math.sin(ph) * A * S.walk; leg.position.y = 0.63 + Math.max(0, -Math.cos(ph)) * 0.09 * S.walk; };
     swing(FL, p); swing(BR, p); swing(FR, p + Math.PI); swing(BL, p + Math.PI);
     // Wallowing: the body sinks until only the back shows, the head lifts clear, and slow breaths swell the ribs.
     const breath = Math.sin(t * 1.2);

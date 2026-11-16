@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE, SUMMIT } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
+import { mergeStatic } from './build.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -51,6 +52,7 @@ export function createProps(scene, deps) {
     g.add(mesh(new THREE.BoxGeometry(0.28, 0.04, 0.28), woodDark, 0.4, 1.46, 0));
     g.position.set(l.x, y, l.z);
     g.rotation.y = (l.x * 1.7 + l.z) % 6.28;
+    mergeStatic(g); // post, arm, cap and base weld into one draw; the glass keeps its own (glowing) material
     group.add(g);
     const lantern = { on: false, glow: 0, flicker: 1, pos: new THREE.Vector3(0.4, 1.6, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y).add(g.position) };
     lantern.set = (on) => { lantern.on = on; };
@@ -215,6 +217,7 @@ export function createProps(scene, deps) {
   // ---- Campfires -----------------------------------------------------------
   const flameOuter = new THREE.MeshBasicMaterial({ color: PALETTE.fire, fog: false });
   const flameInner = new THREE.MeshBasicMaterial({ color: 0xffe08a, fog: false });
+  const logMat = { a: flat(0x7a563c), b: flat(0x8f6a4a), c: flat(0x6b4a34) }; // shared, so each fire's logs weld into a few draws
   for (const f of CAMPFIRES) {
     const y = heightAt(f.x, f.z);
     const big = f.id === 'fire-village'; // the main campfire is a proper bonfire
@@ -226,7 +229,7 @@ export function createProps(scene, deps) {
       g.add(rock);
     }
     for (let i = 0; i < 3; i++) {
-      const log = mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.95, 6), flat(0x7a563c), 0, 0.22, 0);
+      const log = mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.95, 6), logMat.a, 0, 0.22, 0);
       log.rotation.set(0, (i / 3) * Math.PI, Math.PI / 2 - 0.5);
       g.add(log);
     }
@@ -245,15 +248,17 @@ export function createProps(scene, deps) {
     if (big) {
       // A tall stack of split logs leaning together, with more laid round the base.
       for (let i = 0; i < 9; i++) {
-        const a = (i / 9) * Math.PI * 2, log = mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.25, 6), flat(i % 2 ? 0x7a563c : 0x8f6a4a), Math.cos(a) * 0.3, 0.52, Math.sin(a) * 0.3);
+        const a = (i / 9) * Math.PI * 2, log = mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.25, 6), i % 2 ? logMat.a : logMat.b, Math.cos(a) * 0.3, 0.52, Math.sin(a) * 0.3);
         log.rotation.set(Math.sin(a) * -0.5, 0, Math.cos(a) * 0.5); g.add(log);
       }
-      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.4, log = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 6), flat(0x6b4a34), Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5); log.rotation.set(Math.PI / 2, 0, a); g.add(log); }
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.4, log = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 6), logMat.c, Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5); log.rotation.set(Math.PI / 2, 0, a); g.add(log); }
       flames.scale.setScalar(1.25); flames.position.y = 0.25;
       g.scale.setScalar(1.9);
       light.distance = 34; light.position.y = 1.3;
     }
     g.position.set(f.x, y - 0.02, f.z);
+    // The ring of stones and the logs never move: weld them (the flames and the light stay apart).
+    g.remove(flames, light); mergeStatic(g); g.add(flames, light);
     group.add(g);
 
     const fire = { lit: f.lit, level: f.lit ? 1 : 0, sparkTimer: 0, boost: 0 };

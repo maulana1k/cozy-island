@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { createRng } from '../logic/rng.js';
 import { POND, SEED } from '../config.js';
-import { ball, cyl, shared } from './build.js';
+import { ball, cyl, shared, mergeStatic } from './build.js';
 
 export function createPond(scene) {
   const rng = createRng(SEED + 41);
@@ -40,12 +40,14 @@ export function createPond(scene) {
     pad.position.set(POND.x + Math.cos(a) * r, 0.03, POND.z + Math.sin(a) * r); pad.rotation.y = rng() * 6;
     pad.userData.phase = rng() * 6; pads.push(pad); g.add(pad);
   }
-  // Flat stepping stones across one side
+  // Flat stepping stones across one side (welded into one draw)
+  const stones = new THREE.Group(); g.add(stones);
   for (let i = 0; i < 6; i++) {
     const a = 2.5, d = -POND.rw + 1 + i * 1.75, off = (i % 2 ? 0.35 : -0.3);
     const x = POND.x + Math.cos(a) * d - Math.sin(a) * off, z = POND.z + Math.sin(a) * d + Math.cos(a) * off;
-    const st = cyl(0.42 + rng() * 0.12, 0.5, 0.5, 0xb3a8ad, x, Math.max(heightAt(x, z), -0.1) - 0.12, z, 7); st.rotation.y = rng() * 3; g.add(st);
+    const st = cyl(0.42 + rng() * 0.12, 0.5, 0.5, 0xb3a8ad, x, Math.max(heightAt(x, z), -0.1) - 0.12, z, 7); st.rotation.y = rng() * 3; stones.add(st);
   }
+  mergeStatic(stones);
 
   // Two ducks paddle about
   const ducks = [0, 1].map((i) => {
@@ -76,7 +78,11 @@ export function createPond(scene) {
   flies.frustumCulled = false; g.add(flies);
 
   return {
-    update(dt, elapsed, night) {
+    // `viewer` (optional): where the player is. From far off the little life (pads, ducks, butterflies) is not drawn.
+    update(dt, elapsed, night, viewer) {
+      const near = !viewer || (viewer.x - POND.x) ** 2 + (viewer.z - POND.z) ** 2 < 70 * 70;
+      for (const p of pads) p.visible = near;
+      for (const k of ducks) k.d.visible = near;
       for (const p of pads) { p.position.y = 0.03 + Math.sin(elapsed * 1.1 + p.userData.phase) * 0.012; p.rotation.y += dt * 0.03 * Math.sin(p.userData.phase); }
       for (const k of ducks) {
         const a = elapsed * k.speed + k.phase;
@@ -86,7 +92,7 @@ export function createPond(scene) {
       const day = 1 - night;
       for (const f of flutter) {
         const e = elapsed * 0.5 + f.phase;
-        f.b.visible = day > 0.05; f.m.opacity = day;
+        f.b.visible = near && day > 0.05; f.m.opacity = day;
         f.b.position.set(f.cx + Math.sin(e) * 3 + Math.sin(e * 2.3) * 1.2, heightAt(f.cx, f.cz) + 1.0 + Math.sin(e * 1.7) * 0.5 + Math.abs(Math.sin(elapsed * 9 + f.i)) * 0.12, f.cz + Math.cos(e * 0.8) * 3);
         f.b.rotation.y = e * 1.3;
         const flap = Math.sin(elapsed * 16 + f.i * 2) * 1.0;

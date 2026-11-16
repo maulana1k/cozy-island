@@ -319,7 +319,8 @@ const FILMS = {
   intro: () => { const back = Math.atan2(-player.position.z, -player.position.x); return [
     { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 104, h: 74, h1: 54, a0: 0.5, a1: 1.25, lookH: 0, dur: 6.5, title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
     { at: on(FLAGPOLE), r: 19, r1: 15, h: 7, h1: 5, a0: 2.3, a1: 1.5, lookH: 1.5, dur: 5.5, title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
-    { at: () => player.position, r: 7.5, r1: 5.5, h: 2.8, h1: 2, a0: back - 0.7, a1: back - 0.15, lookH: 1, dur: 5, title: 'Your boat has just come in', sub: 'Welcome to camp, scout' },
+    // From the pier: the ferry at its moorings, closing in on you at the top of the gangway.
+    { at: () => player.position, r: 17, r1: 6, h: 6, h1: 2.2, a0: back - 0.75, a1: back - 0.2, lookH: 1.4, dur: 6, title: 'Your ferry has just come in', sub: 'Welcome to camp, scout' },
   ]; },
   exercise: () => [{ at: on({ x: 8.5, z: 17.3 }), r: 15, r1: 12, h: 5, h1: 3.5, a0: 2.6, a1: 1.7, lookH: 1, dur: 7, title: 'Morning exercise', sub: 'One, two, three, four!' }],
   ceremony: () => [{ at: on(FLAGPOLE), r: 13, r1: 10, h: 2.2, h1: 3.2, a0: 2.4, a1: 1.6, lookH: 3.6, dur: 7, title: 'Flag ceremony', sub: 'The whole camp stands for the flag' }],
@@ -410,19 +411,21 @@ const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.
 const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 5.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5]];
 
 // The first key press or click leaves the start screen. Browsers only allow sound after that.
-// 'journey' starts you on the dock with a short film and a guide; 'free' drops you in camp.
+// 'journey' starts you on the ferry at the dock with a short film and a guide; 'free' drops you in camp.
 function begin(mode, opts = {}) {
   if (hud.started) return;
   audio.start(); hud.begin(); ui.showHint(); ui.hideHintSoon(10);
   // Whatever key started the game should not also hop, mute or use something.
   input.consumeHop(); input.consumeInteract(); input.consumeMute();
+  for (const a of areas) if (a.begin) a.begin(mode); // e.g. the harbour moors the ferry for a journey
   if (mode === 'journey') {
     guideOn = true;
-    const d = DOCK.length - 2.6;
-    player.position.x = DOCK.x + Math.sin(DOCK.rot) * d; player.position.z = DOCK.z + Math.cos(DOCK.rot) * d; player.position.y = groundAt(player.position.x, player.position.z);
-    rig.yaw = DOCK.rot;
+    // At the top of the ferry's gangway, turned toward the island (see ARRIVAL in src/world/areas/harbour.js).
+    const at = harbour.ARRIVAL;
+    player.position.x = at.x; player.position.z = at.z; player.position.y = groundAt(at.x, at.z);
+    rig.yaw = at.yaw; player.gesture('wave', 1.0, at.look);
     if (!params.has('t')) timeOfDay = 0.52;
-    const hello = () => { tip('move', 'W A S D to walk, hold Shift to run. Drag the mouse to look around.'); tip('guide', 'The journey, top right, suggests what to try next. Follow it or ignore it: press G to hide it.'); };
+    const hello = () => { tip('arrive', 'Welcome to the island! Walk down the gangway and follow the trail up to camp: the arrow shows the way.'); tip('move', 'W A S D to walk, hold Shift to run. Drag the mouse to look around.'); tip('guide', 'The journey, top right, suggests what to try next. Follow it or ignore it: press G to hide it.'); };
     if (opts.skipIntro) hello(); else film('intro', { onEnd: hello });
   } else tip('free', 'No guide this time. Press G if you would like the journey after all.');
   refreshQuest();
@@ -581,7 +584,7 @@ function step() {
     campLife.update(dt, elapsed);
     animals.update(dt, elapsed, player, night);
     wildlife.update(dt, elapsed, player, night);
-    pond.update(dt, elapsed, night);
+    pond.update(dt, elapsed, night, player.position);
     pickups.update(dt, player.position);
     wilds.update(elapsed, night, player.position);
     for (const a of areas) if (a.update) a.update(dt, elapsed, player, night);

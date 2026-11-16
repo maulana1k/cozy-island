@@ -11,6 +11,11 @@ const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chro
   '--headless=new', '--use-angle=metal', '--enable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${dir}`,
   '--window-size=1512,982', '--force-device-scale-factor=2', '--disable-frame-rate-limit', '--disable-gpu-vsync', 'about:blank',
 ], { stdio: 'ignore' });
+// GUARD: the browser is always closed, even if this script fails or hangs (leftover browsers heat the machine).
+const killChrome = () => { try { chrome.kill('SIGKILL'); } catch {} };
+process.on('exit', killChrome); process.on('uncaughtException', (e) => { console.error(String(e)); process.exit(1); }); process.on('unhandledRejection', (e) => { console.error(String(e)); process.exit(1); });
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(1));
+setTimeout(() => { console.error('timed out'); process.exit(1); }, Number(process.env.MAXMS || 240000)).unref();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 await sleep(1500);
 const tabs = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();

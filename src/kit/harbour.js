@@ -63,7 +63,9 @@ function lifeRing(body, x, y, z, axis) {
 
 export function buildFerry() {
   const group = new THREE.Group(), body = new THREE.Group(); // `body` is what bobs on the water
-  group.add(body);
+  // Only the big shapes (hull, cabin, wheelhouse) cast shadows; all the small detail is welded separately without.
+  const shell = new THREE.Group(), detail = new THREE.Group();
+  group.add(body); body.add(shell, detail);
   const colliders = [], platforms = [];
   const soup = { blue: new Soup(), cream: new Soup(), deck: new Soup(), rim: new Soup() };
 
@@ -86,11 +88,11 @@ export function buildFerry() {
     soup.blue.quad(hullPt(z0, 0, -1), hullPt(z1, 0, -1), hullPt(z1, 0, 1), hullPt(z0, 0, 1), V(0, -1, 0)); // the keel underside
     soup.deck.quad(hullPt(z0, 4, -1), hullPt(z1, 4, -1), hullPt(z1, 4, 1), hullPt(z0, 4, 1), V(0, 1, 0)); // the deck planking
   }
-  body.add(soup.blue.mesh(BLUE), soup.cream.mesh(CREAM), soup.deck.mesh(WOOD), soup.rim.mesh(BLUE));
+  shell.add(soup.blue.mesh(BLUE), soup.cream.mesh(CREAM), soup.deck.mesh(WOOD), soup.rim.mesh(BLUE));
 
   // ---- Portholes: round blue windows along both sides of the hull.
   for (const z of [-5.2, -4.2, -3.2, -2.2, -1.2, -0.2, 0.8, 1.8, 2.8]) for (const side of [-1, 1]) {
-    const p = cyl(0.16, 0.16, 0.1, BLUE, side * hullX(z, 0.8), 0.8, z, 8); p.rotation.z = Math.PI / 2; body.add(p);
+    const p = cyl(0.16, 0.16, 0.1, BLUE, side * hullX(z, 0.8), 0.8, z, 8); p.rotation.z = Math.PI / 2; detail.add(p);
   }
 
   // ---- Railings: wooden posts with two white rails round the deck, open at the gangway.
@@ -100,78 +102,82 @@ export function buildFerry() {
     for (let k = 2; k <= NS - 2; k++) {
       const { x, z } = railPost(side, k);
       if (side > 0 && Math.abs(z) < 0.1) { prev = null; continue; } // the gap
-      body.add(cyl(0.03, 0.035, 0.55, WOOD, x, DECK + 0.3 + 0.275, z, 5));
-      if (prev) for (const y of [DECK + 0.85, DECK + 0.58]) body.add(stick([prev.x, y, prev.z], [x, y, z], 0.02, CREAM, 5));
+      detail.add(cyl(0.03, 0.035, 0.55, WOOD, x, DECK + 0.3 + 0.275, z, 5));
+      if (prev) for (const y of [DECK + 0.85, DECK + 0.58]) detail.add(stick([prev.x, y, prev.z], [x, y, z], 0.02, CREAM, 5));
       prev = { x, z };
     }
   }
   for (const k of [2, NS - 2]) { // rails across the stern and bow
     const a = railPost(-1, k), b = railPost(1, k);
-    for (const y of [DECK + 0.85, DECK + 0.58]) body.add(stick([a.x, y, a.z], [b.x, y, b.z], 0.02, CREAM, 5));
+    for (const y of [DECK + 0.85, DECK + 0.58]) detail.add(stick([a.x, y, a.z], [b.x, y, b.z], 0.02, CREAM, 5));
   }
 
   // ---- Cabin: the main passenger house, cream walls, blue roof, with windows and a door each side.
   const CZ = -0.5, CW = 1.3, CH = 2.0, roofY = DECK + CH;
-  body.add(box(CW * 2, CH, 5, CREAM, 0, DECK + CH / 2, CZ));
-  body.add(box(CW * 2 + 0.4, 0.14, 5.4, BLUE, 0, roofY + 0.07, CZ));
-  colliders.push({ x: 0, z: CZ, hw: CW, hd: 2.5, rot: 0 });
+  shell.add(box(CW * 2, CH, 5, CREAM, 0, DECK + CH / 2, CZ));
+  shell.add(box(CW * 2 + 0.4, 0.14, 5.4, BLUE, 0, roofY + 0.07, CZ));
+  colliders.push({ x: 0, z: CZ, hw: CW - 0.1, hd: 2.5, rot: 0 }); // a touch inside the walls, so you can squeeze along the side deck
   for (const side of [-1, 1]) {
-    for (const z of [-2.4, -1.6, -0.9, 0.9, 1.6]) body.add(box(0.05, 0.55, 0.55, BLUE, side * (CW + 0.02), DECK + 1.2, z)); // side windows
-    body.add(box(0.06, 1.4, 0.7, WOOD, side * (CW + 0.02), DECK + 0.7, 0));          // a door in the middle of each side
-    body.add(box(0.07, 0.3, 0.4, BLUE, side * (CW + 0.03), DECK + 1.15, 0));           // its little window
+    for (const z of [-2.4, -1.6, -0.9, 0.9, 1.6]) detail.add(box(0.05, 0.55, 0.55, BLUE, side * (CW + 0.02), DECK + 1.2, z)); // side windows
+    detail.add(box(0.06, 1.4, 0.7, WOOD, side * (CW + 0.02), DECK + 0.7, 0));          // a door in the middle of each side
+    detail.add(box(0.07, 0.3, 0.4, BLUE, side * (CW + 0.03), DECK + 1.15, 0));           // its little window
   }
-  for (const x of [-0.6, 0.6]) { body.add(box(0.5, 0.55, 0.05, BLUE, x, DECK + 1.2, CZ + 2.52)); body.add(box(0.5, 0.55, 0.05, BLUE, x, DECK + 1.2, CZ - 2.52)); } // end windows
+  for (const x of [-0.6, 0.6]) { detail.add(box(0.5, 0.55, 0.05, BLUE, x, DECK + 1.2, CZ + 2.52)); detail.add(box(0.5, 0.55, 0.05, BLUE, x, DECK + 1.2, CZ - 2.52)); } // end windows
 
   // ---- Wheelhouse: the little captain's room on the roof, with a window all round and a red roof.
   const WZ = 0.9, WY = roofY + 0.14;
-  body.add(box(2.0, 1.15, 1.8, CREAM, 0, WY + 0.575, WZ));
-  body.add(box(2.3, 0.12, 2.1, RED, 0, WY + 1.21, WZ));
-  for (const x of [-0.5, 0.5]) body.add(box(0.6, 0.5, 0.05, BLUE, x, WY + 0.65, WZ + 0.91));
-  for (const side of [-1, 1]) body.add(box(0.05, 0.5, 1.0, BLUE, side * 1.01, WY + 0.65, WZ));
-  lifeRing(body, -1.07, WY + 0.55, WZ - 0.6 + 0.1, 'x'); lifeRing(body, 1.07, WY + 0.55, WZ - 0.6 + 0.1, 'x'); // rings on the wheelhouse sides
-  lifeRing(body, 0, DECK + 0.78, -L * 0.835, 'z');                                                              // and one hung on the stern rail
+  shell.add(box(2.0, 1.15, 1.8, CREAM, 0, WY + 0.575, WZ));
+  detail.add(box(2.3, 0.12, 2.1, RED, 0, WY + 1.21, WZ));
+  for (const x of [-0.5, 0.5]) detail.add(box(0.6, 0.5, 0.05, BLUE, x, WY + 0.65, WZ + 0.91));
+  for (const side of [-1, 1]) detail.add(box(0.05, 0.5, 1.0, BLUE, side * 1.01, WY + 0.65, WZ));
+  lifeRing(detail, -1.07, WY + 0.55, WZ - 0.6 + 0.1, 'x'); lifeRing(detail, 1.07, WY + 0.55, WZ - 0.6 + 0.1, 'x'); // rings on the wheelhouse sides
+  lifeRing(detail, 0, DECK + 0.78, -L * 0.835, 'z');                                                              // and one hung on the stern rail
 
   // ---- Funnel: fat red chimney with a blue band, behind the wheelhouse. And a short mast for the flag.
-  body.add(cyl(0.38, 0.5, 1.6, RED, 0, roofY + 0.14 + 0.8, -1.7, 12), cyl(0.41, 0.41, 0.16, BLUE, 0, roofY + 0.14 + 1.45, -1.7, 12), cyl(0.3, 0.38, 0.12, BLUE, 0, roofY + 0.14 + 1.68, -1.7, 12));
+  detail.add(cyl(0.38, 0.5, 1.6, RED, 0, roofY + 0.14 + 0.8, -1.7, 12), cyl(0.41, 0.41, 0.16, BLUE, 0, roofY + 0.14 + 1.45, -1.7, 12), cyl(0.3, 0.38, 0.12, BLUE, 0, roofY + 0.14 + 1.68, -1.7, 12));
   const mastTop = WY + 1.27 + 1.5;
-  body.add(cyl(0.035, 0.05, 1.5, WOOD, 0, WY + 1.27 + 0.75, WZ + 0.2, 6), ball(0.07, WOOD, 0, mastTop + 0.04, WZ + 0.2));
+  detail.add(cyl(0.035, 0.05, 1.5, WOOD, 0, WY + 1.27 + 0.75, WZ + 0.2, 6), ball(0.07, WOOD, 0, mastTop + 0.04, WZ + 0.2));
 
   // ---- Aft deck: striped awning on four poles, two benches under it.
   const AZ0 = -5.9, AZ1 = -3.2, poleHi = 2.4, poleLo = 2.1;
   for (const x of [-1.4, 1.4]) {
-    body.add(cyl(0.04, 0.045, poleHi, WOOD, x, DECK + poleHi / 2, AZ1 - 0.2, 6), cyl(0.04, 0.045, poleLo, WOOD, x, DECK + poleLo / 2, AZ0 + 0.3, 6));
+    detail.add(cyl(0.04, 0.045, poleHi, WOOD, x, DECK + poleHi / 2, AZ1 - 0.2, 6), cyl(0.04, 0.045, poleLo, WOOD, x, DECK + poleLo / 2, AZ0 + 0.3, 6));
     colliders.push({ x, z: AZ1 - 0.2, r: 0.06 }, { x, z: AZ0 + 0.3, r: 0.06 });
   }
   const stripes = 6, sw = (AZ1 - AZ0) / stripes, tilt = Math.atan((poleHi - poleLo) / (AZ1 - AZ0));
   for (let i = 0; i < stripes; i++) { // alternating red and cream strips of cloth, sloping back toward the stern
     const z = AZ0 + sw * (i + 0.5), y = DECK + poleLo + 0.17 + (poleHi - poleLo) * (i + 0.5) / stripes;
-    const s = box(3.3, 0.05, sw + 0.01, i % 2 ? CREAM : RED, 0, y, z); s.rotation.set(-tilt, 0, 0); body.add(s);
+    const s = box(3.3, 0.05, sw + 0.01, i % 2 ? CREAM : RED, 0, y, z); s.rotation.set(-tilt, 0, 0); detail.add(s);
   }
-  for (let i = 0; i < 8; i++) body.add(box(0.41, 0.2, 0.04, i % 2 ? CREAM : RED, -1.44 + i * 0.41, DECK + poleLo + 0.04, AZ0 - 0.04)); // scalloped fringe at the back edge
+  for (let i = 0; i < 8; i++) detail.add(box(0.41, 0.2, 0.04, i % 2 ? CREAM : RED, -1.44 + i * 0.41, DECK + poleLo + 0.04, AZ0 - 0.04)); // scalloped fringe at the back edge
   for (const x of [-1.1, 1.1]) { // benches
-    body.add(box(0.42, 0.07, 1.7, WOOD, x, DECK + 0.45, -4.5));
-    for (const z of [-5.2, -3.8]) body.add(box(0.36, 0.42, 0.07, WOOD, x, DECK + 0.21, z));
-    body.add(box(0.06, 0.4, 1.7, WOOD, x + Math.sign(x) * 0.2, DECK + 0.68, -4.5));
+    detail.add(box(0.42, 0.07, 1.7, WOOD, x, DECK + 0.45, -4.5));
+    for (const z of [-5.2, -3.8]) detail.add(box(0.36, 0.42, 0.07, WOOD, x, DECK + 0.21, z));
+    detail.add(box(0.06, 0.4, 1.7, WOOD, x + Math.sign(x) * 0.2, DECK + 0.68, -4.5));
     colliders.push({ x, z: -4.5, hw: 0.25, hd: 0.85, rot: 0 });
   }
 
   // ---- Foredeck: mooring posts (bollards) fore and aft, a coil of rope and a couple of crates.
-  for (const [x, z] of [[-0.7, 4.4], [0.7, 4.4], [-0.9, -6.1], [0.9, -6.1]]) { body.add(cyl(0.09, 0.11, 0.3, WOOD, x, DECK + 0.15, z, 8), cyl(0.13, 0.09, 0.08, WOOD, x, DECK + 0.34, z, 8)); colliders.push({ x, z, r: 0.13 }); }
-  const coil = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.06, 5, 10), shared(WOOD)); coil.rotation.x = Math.PI / 2; coil.position.set(0.5, DECK + 0.07, 3.1); body.add(coil);
-  body.add(box(0.55, 0.5, 0.55, WOOD, -0.55, DECK + 0.25, 3.2, 0.2), box(0.45, 0.4, 0.45, WOOD, -0.55, DECK + 0.7, 3.2, 0.5));
+  for (const [x, z] of [[-0.7, 4.4], [0.7, 4.4], [-0.9, -6.1], [0.9, -6.1]]) { detail.add(cyl(0.09, 0.11, 0.3, WOOD, x, DECK + 0.15, z, 8), cyl(0.13, 0.09, 0.08, WOOD, x, DECK + 0.34, z, 8)); colliders.push({ x, z, r: 0.13 }); }
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.06, 5, 10), shared(WOOD)); coil.rotation.x = Math.PI / 2; coil.position.set(0.5, DECK + 0.07, 3.1); detail.add(coil);
+  detail.add(box(0.55, 0.5, 0.55, WOOD, -0.55, DECK + 0.25, 3.2, 0.2), box(0.45, 0.4, 0.45, WOOD, -0.55, DECK + 0.7, 3.2, 0.5));
   colliders.push({ x: -0.55, z: 3.2, hw: 0.3, hd: 0.3, rot: 0 });
 
-  mergeStatic(body);
+  mergeStatic(shell); mergeStatic(detail);
+  for (const m of detail.children) m.castShadow = false;
 
   // ---- The flag: a red pennant on the mast that ripples. The only moving part, so it stays its own mesh.
   const flagMat = flat(RED, { side: THREE.DoubleSide });
   const fg = new THREE.PlaneGeometry(0.9, 0.5, 7, 1); fg.translate(0.45, 0, 0); fg.rotateY(Math.PI / 2); // its long side trails toward -z
   const base = fg.attributes.position.array.slice();
-  const flag = new THREE.Mesh(fg, flagMat); flag.position.set(0, mastTop - 0.3, WZ + 0.2);
+  const flag = new THREE.Mesh(fg, flagMat); flag.position.set(0, mastTop - 0.3, WZ + 0.2); flag.castShadow = false;
   body.add(flag);
 
-  // The deck you can stand on: a long box through the middle, a narrower one for the bow, and a landing patch at the gangway opening.
-  platforms.push({ x: 0, z: -1.1, hw: 1.5, hd: 4.5, rot: 0, top: DECK }, { x: 0, z: 4.1, hw: 0.9, hd: 0.7, rot: 0, top: DECK }, { x: 1.65, z: 0, hw: 0.35, hd: 0.6, rot: 0, top: DECK });
+  // The deck you can stand on, kept inside the rails as the hull narrows: the waist (wide enough to walk round the
+  // cabin), the stern, the bow in two steps, and a landing patch out to the hull side at the gangway opening.
+  platforms.push({ x: 0, z: -1.25, hw: 1.78, hd: 3.25, rot: 0, top: DECK }, { x: 0, z: -5.25, hw: 1.3, hd: 0.75, rot: 0, top: DECK },
+    { x: 0, z: 2.8, hw: 1.25, hd: 0.8, rot: 0, top: DECK }, { x: 0, z: 4.2, hw: 0.8, hd: 0.6, rot: 0, top: DECK },
+    { x: 1.65, z: 0, hw: 0.35, hd: 0.6, rot: 0, top: DECK });
 
   // Gentle bob (up and down), roll (side to side along the length) and a little pitch; the flag ripples.
   const update = (dt, elapsed) => {
@@ -182,7 +188,7 @@ export function buildFerry() {
     for (let i = 0; i < p.count; i++) { const along = -base[i * 3 + 2]; p.setX(i, base[i * 3] + Math.sin(along * 8 - elapsed * 5) * 0.07 * (along / 0.9)); }
     p.needsUpdate = true;
   };
-  return { group, colliders, platforms, deckY: DECK, update };
+  return { group, body, colliders, platforms, deckY: DECK, update };
 }
 
 // ================================ GANGWAY ========================================================
@@ -266,6 +272,17 @@ export function buildDock(length = 20, width = 3.6) {
 }
 
 // ================================ DOCK PROPS =====================================================
+// The glass of every harbour lamp shares this material: turn up its emissiveIntensity after dark.
+export const LAMP_GLASS = new THREE.MeshStandardMaterial({ color: 0xfff1cf, emissive: 0xffc46b, emissiveIntensity: 0, roughness: 0.5 });
+// A lamp post standing at x, z: dark pole on a base, an arm at the top (toward +x) and a lantern hanging from it.
+// `ry` turns it about the pole. Its glass uses LAMP_GLASS.
+export function lampPost(x = 0, z = 0, ry = 0) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry;
+  g.add(cyl(0.16, 0.2, 0.25, DARK, 0, 0.125, 0, 8), cyl(0.05, 0.07, 2.6, DARK, 0, 1.3, 0, 6), box(0.5, 0.05, 0.05, DARK, 0.25, 2.55, 0), cyl(0.01, 0.01, 0.1, DARK, 0.45, 2.5, 0, 4));
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, 0.24), LAMP_GLASS); glass.position.set(0.45, 2.3, 0);
+  g.add(glass, cyl(0.02, 0.2, 0.14, DARK, 0.45, 2.52, 0, 4), box(0.28, 0.04, 0.28, DARK, 0.45, 2.13, 0));
+  return g;
+}
 // Things to put on a pier, laid out in a row along x with their feet at y = 0 (put the group at deck height).
 // Left to right: crates (x -5.6), barrels (-3.8), luggage pile (-1.2), lamp post (0.8), signboard (2.6), hand cart (4.6).
 export function buildDockProps() {
@@ -291,10 +308,9 @@ export function buildDockProps() {
   bag(-1.2, 0.5, 0.2); bag(-0.8, -0.45, -0.4);
   colliders.push({ x: -1.2, z: 0.05, hw: 0.65, hd: 0.7, rot: 0 });
 
-  // ---- Lamp post: dark pole on a base, an arm at the top and a lantern hanging from it (yellow glass, dark cap).
+  // ---- Lamp post (see lampPost above).
   const lx = 0.8;
-  add(cyl(0.16, 0.2, 0.25, DARK, lx, 0.125, 0, 8), cyl(0.05, 0.07, 2.6, DARK, lx, 1.3, 0, 6), box(0.5, 0.05, 0.05, DARK, lx + 0.25, 2.55, 0), cyl(0.01, 0.01, 0.1, DARK, lx + 0.45, 2.5, 0, 4));
-  add(box(0.24, 0.3, 0.24, YELLOW, lx + 0.45, 2.3, 0), cyl(0.02, 0.2, 0.14, DARK, lx + 0.45, 2.52, 0, 4), box(0.28, 0.04, 0.28, DARK, lx + 0.45, 2.13, 0));
+  add(lampPost(lx, 0));
   lamps.push({ x: lx + 0.45, y: 2.3, z: 0 });
   colliders.push({ x: lx, z: 0, r: 0.15 });
 

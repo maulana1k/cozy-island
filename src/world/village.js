@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import {
-  COTTAGES, PATHS, FENCES, DOCK, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD, HILL_PATH, RAILINGS, STAIRS, TREAD, STAIR_HALF,
+  COTTAGES, PATHS, FENCES, BOAT, VILLAGE_CENTER, TENTS, WINDMILL, FIELD, HILL_PATH, RAILINGS, STAIRS, TREAD, STAIR_HALF,
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 import { texture, mergeStatic, stick, shared } from './build.js';
@@ -49,9 +49,12 @@ function buildField(mats) {
 }
 
 // A canvas ridge tent with an open front.
+const tentCanvas = new Map(), tentMat = flat(0xd88f6a);
 function buildTent(t, i, mats) {
   const g = new THREE.Group();
-  const canvas = flat(PALETTE.tents[i % PALETTE.tents.length], { side: THREE.DoubleSide, map: texture('fabric', 0.8, 0.8) });
+  // Tents of one colour share a material (and the mats all share one), so each colour is one draw.
+  const tint = PALETTE.tents[i % PALETTE.tents.length];
+  const canvas = tentCanvas.get(tint) || tentCanvas.set(tint, flat(tint, { side: THREE.DoubleSide, map: texture('fabric', 0.8, 0.8) })).get(tint);
   const body = new THREE.Mesh(roofGeometry(2.5, 1.75, 2.7), canvas);
   body.castShadow = true; body.receiveShadow = true;
   const opening = new THREE.Mesh(roofGeometry(1.5, 1.25, 0.04), mats.tentInside);
@@ -60,7 +63,7 @@ function buildTent(t, i, mats) {
   pole.rotation.x = Math.PI / 2; pole.position.y = 1.74;
   const front = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.8, 6), mats.woodDark);
   front.position.set(0, 0.88, 1.38);
-  const mat = box(1.5, 0.05, 0.9, flat(0xd88f6a), 0, 0.03, 1.9); // a little mat at the entrance
+  const mat = box(1.5, 0.05, 0.9, tentMat, 0, 0.03, 1.9); // a little mat at the entrance
   mat.castShadow = false;
   g.add(body, opening, pole, front, mat);
   g.position.set(t.x, heightAt(t.x, t.z) - 0.03, t.z);
@@ -128,24 +131,7 @@ function buildFence([a, b], mats) {
   return g;
 }
 
-function buildDock(mats) {
-  const g = new THREE.Group();
-  const planks = 22, step = (DOCK.length + 0.6) / planks;
-  for (let i = 0; i < planks; i++) {
-    const p = box(DOCK.width, 0.12, step * 0.9, i % 2 ? mats.wood : mats.woodLight, 0, DOCK.top - 0.06, -0.6 + step * (i + 0.5));
-    p.rotation.y = Math.sin(i * 4.1) * 0.015;
-    g.add(p);
-  }
-  for (const along of [1.5, 5, 9.6]) for (const side of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 3.4, 7), mats.woodDark);
-    post.position.set(side * (DOCK.width / 2 - 0.05), DOCK.top - 1.25, along); post.castShadow = true;
-    g.add(post);
-  }
-  g.position.set(DOCK.x, 0, DOCK.z);
-  g.rotation.y = DOCK.rot;
-  return g;
-}
-
+// The dock itself (pier, props, ferry) is built by the harbour area: src/world/areas/harbour.js.
 function buildBoat(mats) {
   const g = new THREE.Group();
   const hullGeo = new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
@@ -245,13 +231,12 @@ export function createVillage(scene) {
   for (const f of FENCES) group.add(buildFence(f, mats));
   group.add(buildHillTrail());
   TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
-  group.add(buildDock(mats));
   // None of the scenery so far moves: weld it into a handful of meshes.
   mergeStatic(group);
   const windmill = buildWindmill(mats);
   windmill.g.remove(windmill.hub); mergeStatic(windmill.g); windmill.g.add(windmill.hub);
   mergeStatic(windmill.hub);
-  const boat = buildBoat(mats);
+  const boat = mergeStatic(buildBoat(mats)); // it bobs as one piece: one mesh per colour
   group.add(windmill.g, boat);
   scene.add(group);
 

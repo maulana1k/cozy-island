@@ -1,9 +1,11 @@
-// A fabric tent door that unzips: a small puller travels the zip line (up one side, over the top, down the other)
-// while the panel behind it peels away from the tent, then the whole panel flops down onto the porch floor.
-// One small CPU-animated grid (no allocations per frame). t: 0 closed .. 1 open; closing runs it backwards.
+// A fabric tent door that unzips and rolls up: a small puller travels the zip line (up one side, over the top, down
+// the other), then the panel rolls up from the bottom into a fat fabric roll that ends tucked under the top of the
+// doorway, the way a real tent door is rolled and tied open. Closing runs it backwards (unroll, then zip shut).
+// One small CPU-animated grid (no allocations per frame). t: 0 closed .. 1 open.
 import * as THREE from 'three';
 
-const NC = 11, NR = 6, ZIP_END = 0.7; // columns, rows; the zip takes the first 70% of t, the flop the rest
+const NC = 11, NR = 6, RR = 8, ZIP_END = 0.45; // columns, panel rows, rows wrapped round the roll; the zip takes the first 45% of t
+const ROWS = RR + NR, TURNS = 1.8 * Math.PI;    // the roll is just under one full turn round its core
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const ease = (v) => v * v * (3 - 2 * v);
 
@@ -22,15 +24,14 @@ export function createZipDoor(ring, material, plane) {
     }
     return top;
   };
-  const restX = new Float32Array(NC), restH = new Float32Array(NC * NR);
-  for (let c = 0; c < NC; c++) {
-    const x = xmax - ((xmax - xmin) * c) / (NC - 1) * 0.999, h = Math.max(0.05, topAt(x) - yb);
-    restX[c] = x;
-    for (let r = 0; r < NR; r++) restH[c * NR + r] = (h * r) / (NR - 1);
-  }
-  const geo = new THREE.BufferGeometry(), pos = new Float32Array(NC * NR * 3), idx = [];
+  const restX = new Float32Array(NC), restH = new Float32Array(NC);
+  for (let c = 0; c < NC; c++) { const x = xmax - ((xmax - xmin) * c) / (NC - 1) * 0.999; restX[c] = x; restH[c] = Math.max(0.05, topAt(x) - yb); }
+  // The roll rises to just under the top of the doorway (straight across the middle; near the sides of an arched
+  // doorway it stays under the arch).
+  const rollTop = [...restH].sort((p, q) => p - q)[Math.floor(NC / 2)] * 0.88;
+  const geo = new THREE.BufferGeometry(), pos = new Float32Array(NC * ROWS * 3), idx = [];
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  for (let c = 0; c < NC - 1; c++) for (let r = 0; r < NR - 1; r++) { const a = c * NR + r, b2 = (c + 1) * NR + r; idx.push(a, b2, b2 + 1, a, b2 + 1, a + 1); }
+  for (let c = 0; c < NC - 1; c++) for (let r = 0; r < ROWS - 1; r++) { const a = c * ROWS + r, b2 = (c + 1) * ROWS + r; idx.push(a, b2, b2 + 1, a, b2 + 1, a + 1); }
   geo.setIndex(idx);
   const mesh = new THREE.Mesh(geo, material); mesh.castShadow = true; mesh.frustumCulled = false; mesh.material.side = THREE.DoubleSide;
 
@@ -47,19 +48,27 @@ export function createZipDoor(ring, material, plane) {
   let last = -1;
   function update(t) {
     if (Math.abs(t - last) < 1e-4) return; last = t;
-    const zp = clamp01(t / ZIP_END), flop = ease(clamp01((t - ZIP_END) / (1 - ZIP_END)));
-    // the puller rides the zip line
+    const zp = clamp01(t / ZIP_END), roll = ease(clamp01((t - ZIP_END) / (1 - ZIP_END)));
+    // The puller rides the zip line; once it is round, it stays at the end of its run.
     const want = zp * total; let i = 1; while (i < lens.length - 1 && lens[i] < want) i++;
     const u = clamp01((want - lens[i - 1]) / Math.max(1e-6, lens[i] - lens[i - 1])), a = path[i - 1], c = path[i];
     puller.position.set(a.x + (c.x - a.x) * u, a.y + (c.y - a.y) * u, z0 + 0.03);
-    // the panel: a column is freed once the puller has passed it, sags forward, then everything flops flat
+    // The roll: its bottom edge climbs from the ground to rollTop, the rolled fabric thickening its radius as it goes.
+    const lift = roll * rollTop, rr = 0.006 + 0.07 * roll;
     let k = 0;
     for (let col = 0; col < NC; col++) {
-      const rel = col / (NC - 1), freed = ease(clamp01((zp - rel * 0.9) / 0.1)), phi = freed * 0.3 + flop * 1.25, cs = Math.cos(phi), sn = Math.sin(phi);
-      const belly = Math.sin(rel * Math.PI) * 0.06 * freed * (1 - flop);
+      const rel = col / (NC - 1), freed = ease(clamp01((zp - rel * 0.9) / 0.1)), h = restH[col];
+      const belly = Math.sin(rel * Math.PI) * 0.035 * freed * (1 - roll); // a loose panel bellies out a little once unzipped
+      const yE = yb + Math.min(lift, h * 0.92);
+      // Wrapped round the roll first (innermost turn first), ending where the flat panel begins.
+      for (let j = 0; j < RR; j++) {
+        const ang = (1 - j / RR) * TURNS;
+        pos[k++] = restX[col]; pos[k++] = yE - rr * Math.sin(ang); pos[k++] = z0 + belly + rr - rr * Math.cos(ang);
+      }
+      // The flat panel from the roll up to the top of the doorway.
       for (let r = 0; r < NR; r++) {
-        const h = restH[col * NR + r];
-        pos[k++] = restX[col]; pos[k++] = yb + h * cs + 0.012 * flop; pos[k++] = z0 + h * sn + belly * (h > 0 ? 1 : 0);
+        const f = r / (NR - 1), y = yE + (yb + h - yE) * f;
+        pos[k++] = restX[col]; pos[k++] = y; pos[k++] = z0 + belly * (1 - f);
       }
     }
     geo.attributes.position.needsUpdate = true; geo.computeVertexNormals();

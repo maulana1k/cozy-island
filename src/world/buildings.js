@@ -247,7 +247,7 @@ export function createBuildings(scene, deps) {
     // Walls, furniture and shut doors, for the player.
     colliders() {
       out.length = 0;
-      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.doorBlock && (b.panel ? b.door.t < 0.7 : b.door.angle > -0.9)) out.push(b.doorBlock); }
+      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.doorBlock && (b.panel ? b.door.t < 0.85 : b.door.angle > -0.9)) out.push(b.doorBlock); /* a zip door lets you through once it is rolled most of the way up */ }
       return out;
     },
     // Canvas lit from inside: only a faint warm glow in the evening (before lights out at 21:36), dark after.
@@ -277,8 +277,8 @@ export function createBuildings(scene, deps) {
         b.shimmer += (want - b.shimmer) * (1 - Math.exp(-dt * 6));
         b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28)) * (b.panel ? 0.3 : 1); // a dark tent fabric needs a lighter hint than canvas
         if (b.panel) {
-          // The zip door runs 0..1 over about a second (a touch quicker to close); an open door lets a little daylight glow in.
-          b.door.t = Math.max(0, Math.min(1, b.door.t + (b.door.open ? 1 : -1) * dt * (b.door.open ? 0.8 : 1.0)));
+          // The zip door: unzip then roll up, 0..1 over about 1.7 s (a touch quicker to close); an open door lets a little daylight glow in.
+          b.door.t = Math.max(0, Math.min(1, b.door.t + (b.door.open ? 1 : -1) * dt * (b.door.open ? 0.6 : 0.75))); // unzip, then roll up (about 1.7 s)
           b.panel.update(b.door.t);
           b.canvas.emissiveIntensity = b.nightGlow + Math.min(1, b.door.t * 1.5) * 0.07;
         } else b.hinge.rotation.y = b.door.angle + (b.door.open ? Math.sin(elapsed * 1.3 + b.c.x) * 0.03 : 0);

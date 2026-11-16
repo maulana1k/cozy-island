@@ -300,7 +300,7 @@ export function createProps(scene, deps) {
   // Real lights are costly, so only the three lit lanterns nearest the player get one.
   // A few real lights follow the lamps nearest you, so the ground and walls round them are lit; every
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
-  const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(PALETTE.lantern, 0, 12, 1.4); scene.add(l); return l; });
+  const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
   const outside = [];
   const byDistance = [];
 
@@ -336,7 +336,7 @@ export function createProps(scene, deps) {
       const dusk = Math.min(1, Math.max(0, (nightF - 0.3) / 0.4));
       for (const l of outside) { l.glow = dusk; if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
-      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l) { light.position.copy(l.pos); light.intensity = l.glow * 9 * l.flicker; } else light.intensity = 0; });
+      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker; } else light.intensity = 0; });
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];

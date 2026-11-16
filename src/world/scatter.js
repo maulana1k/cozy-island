@@ -167,10 +167,10 @@ export function swayingGrassMaterial(grassTime, grassWalker) {
         float swayA = sin(uTime * 1.05 + at.x * 0.16 + at.y * 0.11) * gust;
         float swayB = cos(uTime * 0.8 + at.x * 0.09 - at.y * 0.13) * gust;
         float tip = position.y * position.y;
-        float ws = 1.0 + uWind.z * 3.0; // the shared wind: stronger sway, and a lean the way it blows
+        float ws = 1.0 + uWind.z * 1.6; // the shared wind: stronger sway, and a lean the way it blows
         transformed.x += swayA * 0.16 * tip * ws;
         transformed.z += swayB * 0.1 * tip * ws;
-        transformed.xz += windPush(at, uWind.w, uWind.z) * tip * 3.0;
+        transformed.xz += windPush(at, uWind.w, uWind.z) * tip * 2.0;
         // Grass leans away from feet walking through it.
         vec2 away = at - uWalker.xz; float near = 1.0 - smoothstep(0.2, 1.3, length(away));
         transformed.xz += normalize(away + 0.0001) * near * 0.45 * tip;
@@ -328,9 +328,9 @@ export function createScatter(scene) {
       for (const t of trees) {
         // A slow breeze, plus a quick fading wobble when shaken.
         // The shared wind (src/world/weather.js): a stronger sway and a lean the way it blows, gusting in waves.
-        const wv = WIND.value, ws = wv.z, amp = 0.012 * (1 + ws * 3.2);
-        let tiltX = Math.sin(elapsed * (0.8 + ws * 1.2) + t.phase) * amp, tiltZ = Math.cos(elapsed * (0.6 + ws) + t.phase) * amp;
-        { const gust = (0.55 + 0.45 * Math.sin(wv.w * 0.9 + (t.x * wv.x + t.z * wv.y) * 0.07)) * (0.5 + 0.5 * Math.sin(wv.w * (1.3 + 2.4 * ws) + t.x * 0.31 + t.z * 0.23)), lean = (0.004 + 0.075 * ws * ws) * gust / Math.sqrt(t.scale);
+        const wv = WIND.value, ws = wv.z, amp = 0.012 * (1 + ws * 1.6);
+        let tiltX = Math.sin(elapsed * (0.6 + ws * 0.35) + t.phase) * amp, tiltZ = Math.cos(elapsed * (0.45 + ws * 0.3) + t.phase) * amp;
+        { const gust = (0.55 + 0.45 * Math.sin(wv.w * 0.35 + (t.x * wv.x + t.z * wv.y) * 0.05)) * (0.5 + 0.5 * Math.sin(wv.w * (0.7 + 0.5 * ws) + t.x * 0.31 + t.z * 0.23)), lean = (0.004 + 0.045 * ws * ws) * gust / Math.sqrt(t.scale);
           const c = Math.cos(t.rot), sn = Math.sin(t.rot), lx = wv.x * c - wv.y * sn, lz = wv.x * sn + wv.y * c; // the lean in the tree's own frame (rotation order YXZ)
           tiltX += lz * lean; tiltZ -= lx * lean; }
         const since = elapsed - t.shakeStart;

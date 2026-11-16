@@ -529,7 +529,8 @@ export function createFigure({
   const edgeT = { z: 0, y: 0, sg: 0, zf: 0 }, edgeA = { z: 0, y: 0, sg: 0, zf: 0 }, edgeB = { z: 0, y: 0, sg: 0, zf: 0 };
   // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
   const PACK_W = 26, PACK_K = 0.2, PACK_S = 2.5; // the backpack on its straps: how tightly it follows the hops, how far it lifts, how far it swings out
-  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0], packY: [0, 0] };
+  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0], packY: [0, 0], jolt: [0, 0], joltX: [0, 0], joltR: [0, 0] };
+  let lastBnc = null, bncVel = 0, bncAcc = 0; // the running bounce's own rise and fall, for the pack's footstep jolt
   const pull = (sp, target, w, z, dt, force = 0) => {
     if (dt > 0.06 || dt <= 0) { if (dt > 0.06) { sp[0] = target; sp[1] = 0; } return sp[0]; }
     // In steps of at most 0.01 s, so it is stable however long the frame (w * step stays well under 1).
@@ -1367,7 +1368,16 @@ export function createFigure({
       // landing. Walking it barely stirs; standing it is still.
       const packLag = pull(spring.bob, bounce, PACK_W, 0.22, dt), packRel = clamp(packLag - bounce, -0.12, 0.12);
       pack.position.y = P.neckY * 0.86 + packRel * PACK_K + pull(spring.packY, 0, 18, 0.5, dt, -pyAcc * 0.15 * (1 - fly)) * 0.3;
+      // Running: each foot strike (the bounce's sharp upward acceleration) kicks the pack up (<= ~5 cm), it slaps
+      // back with a little overshoot, and it wobbles and rolls a beat behind the body. Walking: a slight sway only.
+      if (lastBnc !== null && dt > 0 && dt < 0.06) { const v = (bounce - lastBnc) / dt; bncAcc += (clamp((v - bncVel) / dt, -60, 60) - bncAcc) * ease(40); bncVel = v; }
+      lastBnc = bounce;
+      const jk = rg * rg, jolt = pull(spring.jolt, 0, 24, 0.22, dt, bncAcc * 0.9 * jk);
+      const joltX = pull(spring.joltX, 0, 14, 0.25, dt, (-Math.cos(2 * Math.PI * phase) * 3 + bncAcc * 0.03) * jk + Math.cos(2 * Math.PI * phase) * 0.4 * gait * (1 - rg));
+      const joltR = pull(spring.joltR, 0, 15, 0.22, dt, (bncAcc * 0.05 + Math.sin(2 * Math.PI * phase) * 3) * jk);
+      pack.position.y += clamp(jolt, -0.02, 0.05); pack.position.x = clamp(joltX, -0.02, 0.02); pack.rotation.z = clamp(joltR, -0.2, 0.2);
       pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.004, -0.04, 0.08) + Math.max(0, packRel) * PACK_S, 12, 0.3, dt), 0, 0.22);
+      pack.rotation.x = clamp(pack.rotation.x + clamp(jolt, -0.02, 0.05) * 2.5, 0, 0.3);
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);

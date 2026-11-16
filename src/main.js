@@ -415,14 +415,20 @@ function syncLook() {
   if (!want && mouseHeld()) document.exitPointerLock();
 }
 function toggleLook() { freeLook = !freeLook; hud.setLook(freeLook); audio.play('ui'); syncLook(); }
+let lockEscAt = -1e9; // when Esc last released the mouse; a keydown for the same press is ignored
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
-  // Esc releases the mouse before the game sees the key: while looking through the telescope that means "leave it".
-  if (!mouseHeld() && scope.active) { scope.close(); input.consumeInteract(); return; }
-  // Otherwise treat it as "pause".
-  if (!mouseHeld() && freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) hud.openMenu();
+  if (mouseHeld() || !hud.started) return;
+  // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
+  // (The journal, map and bag release the mouse themselves when they open, so a release with one of them open is not an Esc.)
+  if (scope.active) { lockEscAt = performance.now(); scope.close(); input.consumeInteract(); return; }
+  if (storyRt.ui.open) { lockEscAt = performance.now(); storyRt.close(); input.consumeInteract(); return; }
+  if (director.active) { lockEscAt = performance.now(); director.skip(); input.consumeHop(); input.consumeInteract(); return; }
+  if (freeLook && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) { lockEscAt = performance.now(); hud.openMenu(); }
 });
-canvas.addEventListener('click', syncLook);
+// Esc is not a user gesture, so closing the menu with it cannot always take the mouse back; the next click does.
+window.addEventListener('click', syncLook);
+document.addEventListener('pointerlockerror', () => {});
 const hud = createHUD({
   onResume: () => { hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
@@ -511,6 +517,7 @@ function begin(mode, opts = {}) {
 const wake = () => begin('free');
 window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === 'Escape' && performance.now() - lockEscAt < 200) return; // the same press already acted on the lock release
   // A conversation or the name picker takes the keys while it is open (1-4 answer, Esc leaves).
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }

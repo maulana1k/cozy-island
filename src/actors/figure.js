@@ -1167,6 +1167,37 @@ export function createFigure({
         const hit = Math.sin(e * 4.2);
         t.thL = t.thR = -1.0; t.knL = t.knR = 1.75; t.py = -0.48 * LEG; t.lean = 0.38;
         t.shRx = -1.0 + hit * 0.5; t.elR = -0.9 - hit * 0.3; t.shLx = -0.8; t.elL = -0.7;
+      } else if (o.pose === 'climb') {
+        // On a ladder: o.climb counts the rungs climbed. Each step one foot comes up to the next rung while the
+        // other leg straightens and lifts the body, and the opposite hand lets go and reaches for a higher rung.
+        legsIK = false; t.trunk = 0;
+        const c = o.climb || 0, k = Math.floor(c), u = c - k, s = u * u * (3 - 2 * u), lift = Math.sin(u * Math.PI);
+        const thUp = lerp(-0.3, -1.35, s), knUp = lerp(0.45, 1.85, s) + lift * 0.35, thDn = lerp(-1.35, -0.3, s), knDn = lerp(1.85, 0.45, s);
+        const shUp = lerp(-1.55, -2.6, s), elUp = -0.4 - lift * 0.95, shDn = lerp(-2.6, -1.55, s), elDn = lerp(-0.35, -1.2, s);
+        if (k % 2 === 0) { t.thL = thUp; t.knL = knUp; t.thR = thDn; t.knR = knDn; t.shRx = shUp; t.elR = elUp; t.shLx = shDn; t.elL = elDn; }
+        else { t.thR = thUp; t.knR = knUp; t.thL = thDn; t.knL = knDn; t.shLx = shUp; t.elL = elUp; t.shRx = shDn; t.elR = elDn; }
+        t.shLz = -0.12; t.shRz = 0.12; t.spreadL = -0.07; t.spreadR = 0.07; t.lean = 0.1; t.py = -0.04; t.hp = -0.2;
+        t.fL = clamp(-(t.thL + t.knL + t.lean), -0.9, 0.9); t.fR = clamp(-(t.thR + t.knR + t.lean), -0.9, 0.9); // soles flat on the rungs
+        snap = 18;
+      } else if (o.pose === 'ride') {
+        // Sitting in a harness under the flying fox: hands up on the lanyard, legs dangling and now and then
+        // kicking (o.kick 0..1), knees drawn up at the start (o.tuck 0..1).
+        legsIK = false; t.trunk = 0;
+        const kick = o.kick || 0, tuck = o.tuck || 0, kk = Math.sin(e * 10), drift = Math.sin(e * 2.1) * 0.07;
+        t.shLx = t.shRx = -2.75; t.shLz = 0.14; t.shRz = -0.14; t.elL = t.elR = -0.45;
+        t.thL = lerp(-0.45 + kk * 0.45 * kick + drift, -1.2, tuck); t.thR = lerp(-0.45 - kk * 0.45 * kick - drift, -1.2, tuck);
+        t.knL = lerp(0.35 + Math.max(0, kk) * 0.75 * kick, 1.5, tuck); t.knR = lerp(0.35 + Math.max(0, -kk) * 0.75 * kick, 1.5, tuck);
+        t.spreadL = -0.08; t.spreadR = 0.08; t.py = 0; t.lean = -0.04; t.fL = t.fR = 0.5; t.hp = -0.05;
+        snap = 16;
+      } else if (o.pose === 'squat') {
+        // Landing in a crouch, arms out for balance: o.squat 0 (standing) .. 1 (right down), soles flat.
+        legsIK = false; t.trunk = 0;
+        const q = clamp(o.squat ?? 1, 0, 1);
+        t.thL = t.thR = -1.15 * q; t.knL = t.knR = 2.0 * q; t.lean = 0.35 * q; t.py = -0.48 * LEG * q;
+        t.spreadL = -0.12 * q; t.spreadR = 0.12 * q;
+        t.shLx = t.shRx = -1.1 * q; t.shLz = -0.15 - 0.55 * q; t.shRz = 0.15 + 0.55 * q; t.elL = t.elR = -0.3;
+        t.fL = t.fR = clamp(-(t.thL + t.knL + t.lean), -0.9, 0.9);
+        snap = 26;
       }
       // Holding a torch out in front, the beam swinging a little with each step.
       if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 - (t.lean + t.trunk) * 0.6 + Math.sin(phase * Math.PI * 4) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
@@ -1213,6 +1244,19 @@ export function createFigure({
           case 'rub': mix('shRx', -0.55); mix('elR', -1.5); mix('shRz', -0.45 + osc(8) * 0.12); t.lean += 0.14 * env; t.hp += 0.2 * env; break;
           case 'pant': mix('shRx', -0.6); mix('shLx', -0.6); mix('elR', -0.3); mix('elL', -0.3); t.lean += 0.45 * env; mix('thL', -0.3); mix('thR', -0.3); mix('knL', 0.55); mix('knR', 0.55); t.py -= 0.05 * env + Math.abs(osc(6)) * 0.02; t.hp += 0.25 * env; break;
           case 'peer': mix('shRx', -1.5); mix('shLx', -1.5); mix('elR', -2.0); mix('elL', -2.0); mix('shRz', -0.3); mix('shLz', 0.3); t.lean += 0.12 * env; break;
+          case 'clip': { // a lanyard onto a harness: reach up for the hook, fiddle it on at the belly, tug to check
+            const h = clamp(Math.min(u, 1 - u) * 7, 0, 1), m = (key, v) => { t[key] = lerp(t[key], v, h); };
+            if (u < 0.32) { m('shRx', -2.6); m('elR', -0.35); m('shLx', -2.35); m('elL', -0.5); m('shRz', -0.05); m('shLz', 0.05); t.hp -= 0.3 * h; }
+            else if (u < 0.72) { const f = Math.sin(u * 60); m('shRx', -0.75 + f * 0.08); m('elR', -1.45 - f * 0.12); m('shLx', -0.6); m('elL', -1.5 + f * 0.1); m('shRz', -0.25); m('shLz', 0.25); t.hp += 0.38 * h; t.lean += 0.06 * h; }
+            else { const tug = Math.max(0, Math.sin(((u - 0.72) / 0.28) * Math.PI * 2)); m('shRx', -2.4 + tug * 0.3); m('elR', -0.6 - tug * 0.5); m('shLx', -0.5); m('elL', -1.4); t.py -= tug * 0.03 * h; t.hp -= 0.15 * h; }
+            break;
+          }
+          case 'unclip': { // one hand finds the gate at the belt and squeezes it open, then both arms fly up: let go!
+            const h = clamp(Math.min(u, 1 - u) * 6, 0, 1), m = (key, v) => { t[key] = lerp(t[key], v, h); };
+            if (u < 0.55) { const f = Math.sin(u * 50); m('shRx', -0.7 + f * 0.06); m('elR', -1.5 - f * 0.1); m('shRz', -0.25); t.hp += 0.3 * h; }
+            else { m('shRz', 2.3); m('shLz', -2.3); m('shRx', -0.2); m('shLx', -0.2); m('elR', -0.25); m('elL', -0.25); }
+            break;
+          }
           default: mix('shRx', -1.35); mix('elR', -0.25); mix('shRz', 0.1); t.lean += 0.1 * env; // 'reach'
         }
         snap = 20;

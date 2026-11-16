@@ -72,11 +72,14 @@ export function createPlayer(scene, opts = {}) {
         return;
       }
       if (player.riding) {
-        input.consumeHop(); vel.x = vel.z = 0; heading = player.riding.heading;
+        // The flying fox moves and poses the scout (walking to the ladder, climbing, swinging in the harness),
+        // tilting the whole body as it swings: riding is { heading, speed, pitch, roll, opts }.
+        const r = player.riding;
+        input.consumeHop(); vel.x = vel.z = 0; heading = r.heading;
         facing.x = Math.sin(heading); facing.z = Math.cos(heading);
         player.speed = 0; player.moving = false; player.pushing = false; player.sitting = false;
-        figure.group.position.copy(position); figure.group.rotation.y = heading;
-        figure.animate(0, elapsed, { pose: 'hang' });
+        figure.group.position.copy(position); figure.group.rotation.set(r.pitch || 0, heading, r.roll || 0, 'YXZ');
+        figure.animate(r.speed || 0, elapsed, r.opts || { pose: 'hang' });
         return;
       }
       const move = player.auto ? { x: 0, z: 1 } : input.move;

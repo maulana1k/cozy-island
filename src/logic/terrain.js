@@ -111,41 +111,151 @@ function massifHeight(x, z) {
   return hs - (MAS.ledge / (2 * Math.PI)) * Math.sin((2 * Math.PI * hs) / MAS.ledge) * 0.85 + 0.35 * u * noise(x / 3.1, z / 3.1 + 17);
 }
 // ---- A natural coastline --------------------------------------------------------------------
-// The coast is where the island's scale reads 60. A low-frequency noise (broad bulges 20 to 40 m, bays,
-// coves, points and small wiggles) is added to that measure near the shore. It is zero inland of the grass
-// (the camp core stays put), fades out to sea, and fades to nothing within about 14 m of everything fixed
-// on the beach: the dock and ferry, the campfire, the river and its mouth, the bridge, the lake and the jetty.
-// Positive shift = the land recedes (a bay), negative = it reaches out (a headland).
-const COAST_DOCK = { a: { x: Math.cos(0.3142) * 52, z: Math.sin(0.3142) * 52 }, b: { x: Math.cos(0.3142) * 82, z: Math.sin(0.3142) * 82 } }; // layout.js DOCK: 18 deg, radial
-const COAST_FIRE = { x: Math.cos(128 * Math.PI / 180) * 53, z: Math.sin(128 * Math.PI / 180) * 53 }; // layout.js CAMPFIRE
+// The coast is where the island's scale reads 60. That measure is reshaped near the shore, in layers:
+//   1. a broad, low noise plus a few explicit bays, added across the beach band (the grass line stays put);
+//   2. narrow coves carved into the beach;
+//   3. headlands and a sand spit melted onto the land: each is a spine with, at every vertex, the measure
+//      on the spine `t` and the half width `hw` where it meets the sea; past that it drops away at `k` per metre
+//      (steep for rock, gentle for sand);
+//   4. small rock islets, too far out and too deep round to wade to.
+// None of it reaches the camp core (inside 48 m of the middle), and all of it fades to nothing round
+// everything fixed on the shore: the dock, pier, ferry and the sea it sails out over, the beach camp,
+// the flying fox's landing, the river and its mouth, the bridge, the lake and the jetty.
+const COAST_KEEP = [
+  { a: { x: Math.cos(0.3142) * 50, z: Math.sin(0.3142) * 50 }, b: { x: Math.cos(0.3142) * 112, z: Math.sin(0.3142) * 112 }, near: 16, fade: 12 }, // layout.js DOCK (18 deg, radial), harbour.js ferry
+  { a: { x: -32.63, z: 41.77 }, near: 10, fade: 8 },  // layout.js CAMPFIRE (128 deg, 53 m): the beach camp, its tents and props
+  { a: { x: 36.6, z: 36.5 }, near: 5, fade: 8 },      // layout.js ZIPLINE.bottom: the flying fox landing
+];
 const COAST_JETTY = { a: { x: 150, z: -62 }, b: { x: 196, z: -62 } };
 const COAST_NEAR = 14, COAST_FADE = 12;
 function coastKeep(x, z) {
-  const near = (d) => d < COAST_NEAR;
-  if (near(capsuleD(x, z, COAST_DOCK.a, COAST_DOCK.b))) return 0;
-  if (near(Math.hypot(x - COAST_FIRE.x, z - COAST_FIRE.z) - 6)) return 0;
-  let d = Math.min(capsuleD(x, z, COAST_DOCK.a, COAST_DOCK.b), Math.hypot(x - COAST_FIRE.x, z - COAST_FIRE.z) - 6);
+  let t = Infinity;
+  for (const k of COAST_KEEP) t = Math.min(t, ((k.b ? capsuleD(x, z, k.a, k.b) : Math.hypot(x - k.a.x, z - k.a.z)) - k.near) / k.fade);
+  if (t <= 0) return 0;
   if (inNew(x, z) || (x > 14 && x < 215 && z < 40 && z > -200)) {
-    d = Math.min(d, capsuleD(x, z, COAST_JETTY.a, COAST_JETTY.b), capsuleD(x, z, AREAS.bridge.a, AREAS.bridge.b),
-      Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r);
+    let d = Math.min(capsuleD(x, z, COAST_JETTY.a, COAST_JETTY.b), capsuleD(x, z, AREAS.bridge.a, AREAS.bridge.b),
+      Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r, Math.hypot(x - AREAS.riverMouth.x, z - AREAS.riverMouth.z));
     const rv = nearestOn(riverLine, x, z, 45);
     if (rv.d !== Infinity) { const { a, b } = riverLine.segs[rv.i]; d = Math.min(d, rv.d - (a.w + (b.w - a.w) * rv.t)); }
-    d = Math.min(d, Math.hypot(x - AREAS.riverMouth.x, z - AREAS.riverMouth.z));
+    t = Math.min(t, (d - COAST_NEAR) / COAST_FADE);
   }
-  return smooth((d - COAST_NEAR) / COAST_FADE);
+  return smooth(t);
 }
-function coastNoise(x, z) {
-  const bay = noise(x / 19 + 300, z / 19 + 40), point = noise(x / 23 + 90, z / 23 + 410);
-  return 11.0 * noise(x / 34 + 101, z / 34 + 17) + 4.2 * noise(x / 13 + 7, z / 13 + 211) + 1.6 * noise(x / 6 + 55, z / 6 + 9)
-    + 6.0 * smooth((bay - 0.35) / 0.3) - 5.0 * smooth((-point - 0.35) / 0.3);
+// Broad bays: the beach band is pushed inland by up to `amp` on the island's scale, in a round `rad` wide.
+// `deep` bays (away from camp) may cut into the grass line as well.
+const BAYS = [
+  { x: 15, z: 63, rad: 22, amp: 10 },                 // Long Bay, the camp's south beach between two points
+  { x: -112, z: 44, rad: 34, amp: 16, deep: true },   // Palm Bay, the jungle's south coast
+  { x: 104, z: -226, rad: 26, amp: 18, deep: true },  // the jungle's north-east coast, between two points
+  { x: 98, z: -180, rad: 13, amp: 9, deep: true },    // a small bay under the massif's north side
+  { x: 108, z: -4, rad: 16, amp: 6 },                 // the locals' south beach
+  { x: 175, z: -37, rad: 16, amp: 7 },                // the locals' east beach, south of the jetty
+];
+// Headlands (`rock` ones get boulders, rock-coloured ground and narrow shallows) and the sand spit.
+const lobe = (rock, k, pts) => ({ rock, k, ...line(pts.map(([x, z, t, hw]) => ({ x, z, t, hw }))) });
+const LOBES = [
+  lobe(false, 1.4, [[29, 45, 49, 12], [35, 55, 52, 8.5], [39, 63, 55, 4.5], [39.5, 67, 57.5, 2.5]]),   // Sandy Point, past the flying fox landing
+  lobe(true, 2, [[-4, 48, 49, 17], [-8, 62, 51, 12], [-6, 72, 53, 8], [-1, 79, 55.5, 4.5]]),              // Gull Point, south of camp
+  lobe(true, 2, [[-64, 4, 48, 18], [-71, 20, 50, 14], [-75, 31, 52.5, 9], [-73, 39, 55.5, 4.5]]),             // West Rocks, where camp meets jungle
+  { ...lobe(false, 1.2, [[-45, 28, 52, 8], [-52, 39, 55, 5], [-56, 48, 56.5, 3.5], [-55, 56, 58.5, 2.2]]), spit: true }, // the sand spit off the beach camp's bay
+  lobe(true, 2, [[-148, 36, 46, 20], [-156, 55, 50, 13], [-160, 68, 53, 8], [-157, 76, 56, 4]]),           // Palm Bay's west point
+  lobe(true, 2, [[78, -190, 46, 18], [96, -196, 50, 12], [110, -200, 53, 8], [119, -203, 56, 4]]),         // the north-east point
+  lobe(false, 1.5, [[82, -262, 46, 16], [98, -266, 51, 10], [109, -268, 55, 5], [115, -268, 58, 2.5]]),    // a sandy point further north
+  lobe(true, 2, [[138, -30, 46, 15], [151, -19, 50, 11], [160, -11, 53.5, 7], [166, -5, 56, 3.5]]),        // the locals' south-east point
+  lobe(true, 2, [[158, -90, 46, 15], [173, -96, 50, 11], [183, -99, 53.5, 7], [189.5, -101, 56, 3.5]]),    // the point north of the jetty
+];
+const LOBE_REACH = 22, SPIT = LOBES.find((f) => f.spit);
+// Narrow coves, from the sea in: `t` is the measure on the cove's line (over 60 is water), `k` how fast it rises to the banks.
+const COVES = [
+  { k: 1.4, ...line([{ x: -18.5, z: 67, t: 66 }, { x: -15.5, z: 56.5, t: 63.5 }]) },     // beside Gull Point
+  { k: 1.3, ...line([{ x: 104, z: -246, t: 67 }, { x: 92, z: -243, t: 64 }, { x: 84, z: -238, t: 62 }]) }, // the north-east coast
+  { k: 1.3, ...line([{ x: 166, z: -124, t: 66 }, { x: 156, z: -121, t: 63.5 }]) },        // under the massif's east end
+];
+// Islets: rocks a few metres across off the points.
+export const COAST_ISLETS = [
+  { x: -1, z: 90, rad: 2.6 }, { x: -11.5, z: 88.5, rad: 1.7 }, // off Gull Point
+  { x: -81, z: 47.5, rad: 2.2 },                                // off West Rocks
+  { x: -151, z: 86, rad: 2.5 },                                 // off Palm Bay's west point
+  { x: 129, z: -206, rad: 2.4 },                                // off the north-east point
+  { x: 174, z: 4, rad: 2.0 },                                   // off the locals' south-east point
+];
+const lobeAt = (f, x, z) => {
+  const n = nearestOn(f, x, z, LOBE_REACH);
+  if (n.d === Infinity) return null;
+  const { a, b } = f.segs[n.i];
+  return { d: n.d, s: n.s, t: a.t + (b.t - a.t) * n.t, hw: a.hw + (b.hw - a.hw) * n.t };
+};
+function lobeR(f, x, z) {
+  const l = lobeAt(f, x, z);
+  if (!l) return Infinity;
+  const r = l.d < l.hw ? l.t + (ISLAND_RADIUS - l.t) * (l.d / l.hw) ** 1.5 : ISLAND_RADIUS + f.k * (l.d - l.hw);
+  return r + 1.3 * noise(x / 4.5 + 13, z / 4.5 + 71) + 0.6 * noise(x / 1.8 + 5, z / 1.8 + 3);
 }
-// How much the coast measure moves at (x, z) where the unshifted measure reads r.
-function coastShiftAt(x, z, r) {
-  const w = smooth((r - GRASS_RADIUS) / 12) * (1 - smooth((r - ISLAND_RADIUS - 10) / 16));
-  if (w <= 0) return 0;
+const isletR = (i, x, z) => ISLAND_RADIUS + 3 * (Math.hypot(x - i.x, z - i.z) - i.rad) + 0.7 * noise(x / 1.6 + 41, z / 1.6 + 7);
+// The coast measure at (x, z) where the measure before reshaping reads r0.
+function coastR(x, z, r0) {
+  if (r0 < 42 || r0 > 140) return r0;
   const keep = coastKeep(x, z);
-  return keep > 0 ? coastNoise(x, z) * keep * w : 0;
+  if (keep <= 0) return r0;
+  // 1. Noise and bays across the beach band, fading far out to sea and far from the play area.
+  let r = r0;
+  const band = smooth((r0 - 49) / 7) * (1 - smooth((r0 - 76) / 14));
+  if (band > 0) {
+    const far = 1 - smooth((Math.hypot(x - 20, z + 70) - 200) / 40);
+    let s = far * (6 * noise(x / 46 + 101, z / 46 + 17) + 3 * noise(x / 17 + 7, z / 17 + 211) + 1.1 * noise(x / 6 + 55, z / 6 + 9));
+    for (const b of BAYS) { const d = Math.hypot(x - b.x, z - b.z); if (d < b.rad && !b.deep) s += b.amp * smooth(1 - d / b.rad); }
+    r += band * s;
+  }
+  const deepBand = smooth((r0 - 34) / 10) * (1 - smooth((r0 - 80) / 14));
+  if (deepBand > 0) for (const b of BAYS) { const d = Math.hypot(x - b.x, z - b.z); if (d < b.rad && b.deep) r += deepBand * b.amp * smooth(1 - d / b.rad); }
+  // 2. Coves, carved only where the beach is (never into the grass line).
+  const cw = smooth((r0 - 50) / 5);
+  if (cw > 0) for (const c of COVES) {
+    const n = nearestOn(c, x, z, 12);
+    if (n.d === Infinity) continue;
+    const { a, b } = c.segs[n.i], rc = a.t + (b.t - a.t) * n.t - c.k * n.d;
+    if (rc > r) r += cw * (rc - r);
+  }
+  // 3. Headlands and the spit, melted on so they grow out of the land with no crease.
+  for (const f of LOBES) { const rl = lobeR(f, x, z); if (rl < r + 6) r = meltK(r, rl, 6); }
+  // 4. Islets.
+  for (const i of COAST_ISLETS) if (Math.abs(x - i.x) < 14 && Math.abs(z - i.z) < 14) r = Math.min(r, isletR(i, x, z));
+  const core = smooth((Math.hypot(x, z) - 48) / 4); // the camp core never moves
+  return r0 + (r - r0) * keep * core;
 }
+// How rocky the shore is at (x, z): 1 on the rocky points' outer parts and on the islets, 0 on sand.
+// `reach` widens it (the sea shader uses a wide one so the shallows narrow round rocky points).
+export function coastRock(x, z, reach = 0) {
+  let k = 0;
+  for (const f of LOBES) {
+    if (!f.rock) continue;
+    const n = nearestOn(f, x, z, 6 + reach + 16);
+    if (n.d === Infinity) continue;
+    const { a, b } = f.segs[n.i], hw = a.hw + (b.hw - a.hw) * n.t;
+    k = Math.max(k, smooth((hw + 2.5 + reach - n.d) / (4 + reach * 0.5)) * smooth((n.s / f.total - 0.12) / 0.3));
+  }
+  for (const i of COAST_ISLETS) k = Math.max(k, smooth((i.rad + 3 + reach - Math.hypot(x - i.x, z - i.z)) / (2 + reach * 0.5)));
+  if (k <= 0 || reach > 0) return k;
+  return Math.min(1, k * (0.8 + 0.35 * noise(x / 5 + 7, z / 5 + 19)));
+}
+// How broad the shallows are, 0 (a narrow fringe round rock) to 1 (wide turquoise flats in a sandy bay).
+export function coastShallow(x, z) {
+  let bay = 0;
+  for (const b of BAYS) { const d = Math.hypot(x - b.x, z - b.z); bay = Math.max(bay, smooth(1.4 - d / b.rad)); }
+  const spit = lobeAt(SPIT, x, z), sp = spit ? smooth(1 - spit.d / 20) : 0;
+  return Math.min(1, Math.max(0, 0.5 + 0.45 * Math.max(bay, sp) - 0.75 * coastRock(x, z, 10)));
+}
+// The rock dressing and the ground mesh tiles want to know where the rocky points and islets are.
+export const coastFeatures = () => ({ lobes: LOBES.filter((f) => f.rock).map((f) => ({ pts: f.pts, box: f.box })), islets: COAST_ISLETS });
+// Rocky ground stands a little proud of the beach: knolls of rock that end at the waterline.
+function rockLift(x, z) {
+  const k = coastRock(x, z);
+  if (k <= 0) return 0;
+  const r = landR(x, z);
+  return k * 1.5 * smooth((59.4 - r) / 4.5) * (0.7 + 0.45 * noise(x / 3.3 + 2, z / 3.3 + 61));
+}
+// How much the coast measure moves at (x, z), where the unshifted measure reads r.
+const coastShiftAt = (x, z, r) => coastR(x, z, r) - r;
 const landR0 = (x, z) => {
   const old = oldLandR(x, z);
   if (!inNew(x, z)) return old;
@@ -327,8 +437,8 @@ function localsHeight(x, z, lr, rv, beforePaddies = false) {
   return old + (h - old) * (1 - keep);
 }
 
-function newLand(x, z, hOld) {
-  const rv = riverAt(x, z), lr0 = localsR(x, z, rv), lr = lr0 + coastShiftAt(x, z, lr0);
+function newLand(x, z, hOld, shift) {
+  const rv = riverAt(x, z), lr = localsR(x, z, rv) + shift;
   let h = lr < ISLAND_RADIUS + 2 ? localsHeight(x, z, lr, rv) : shore(lr);
   const hm = massifHeight(x, z);
   h = Math.max(hOld, h, hm);
@@ -376,7 +486,7 @@ function cutPath(L, run, x, z, h) {
 // keeps its numbers exactly; the new land only ever adds to it.
 export function landR(x, z) {
   const r = landR0(x, z);
-  return r + coastShiftAt(x, z, r);
+  return coastR(x, z, r);
 }
 // The same, but with the river and the lake counted as inland water, not sea: the sea shader,
 // the map and the sound of the surf use this, so the river has no surf and no sea roar.
@@ -523,8 +633,9 @@ function hillHeight(x, z, r) {
 }
 
 // The lie of the camp and the jungle before anything is dug into it.
-function oldHeight(x, z) {
-  const r0 = Math.hypot(x, z), eq = wildEq(x, z), rm = melt(r0, eq), r = rm + coastShiftAt(x, z, rm);
+function oldHeight(x, z, shift) {
+  // The coast's reshaping moves the jungle's measure too, so a bay cut into the jungle is not filled in again below.
+  const r0 = Math.hypot(x, z), eq = wildEq(x, z) + shift, rm = melt(r0, eq - shift), r = rm + shift;
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
   else if (r <= ISLAND_RADIUS) {
@@ -568,8 +679,9 @@ function oldHeight(x, z) {
 // The lie of the land before the trails are cut: the camp and jungle, the new land beside it,
 // then the river and the lake dug out and the cliff path cut in.
 function rawHeight(x, z) {
-  const h = oldHeight(x, z);
-  return inNew(x, z) ? newLand(x, z, h) : h;
+  const r0 = landR0(x, z), shift = coastR(x, z, r0) - r0;
+  const h = oldHeight(x, z, shift);
+  return (inNew(x, z) ? newLand(x, z, h, shift) : h) + rockLift(x, z);
 }
 
 export function zoneAt(x, z) {

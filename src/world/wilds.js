@@ -5,7 +5,8 @@
 // lump per treetop. There is no fence: the camp's woods just thicken into it.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { heightAt, landR, wildDepth, wildness, groundKind, ridgeForest } from '../logic/terrain.js';
+import { heightAt, landR, wildDepth, wildness, groundKind, ridgeForest, coastFeatures } from '../logic/terrain.js';
+import { paintCoastRock } from './island.js';
 import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
@@ -75,6 +76,10 @@ export function createWilds(scene) {
     // Nothing but sea here?
     let land = false;
     for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]]) if (landR(x0 + u * TILE, z0 + v * TILE) < ISLAND_RADIUS + 14) land = true;
+    // The coast's rocky points and islets reach well out to sea: a tile touching one gets ground (and finer ground).
+    const touch = (bx0, bx1, bz0, bz1) => bx1 > x0 - 10 && bx0 < x0 + TILE + 10 && bz1 > z0 - 10 && bz0 < z0 + TILE + 10;
+    const coast = coastFeatures(), rocky = coast.lobes.some((f) => touch(...f.box)) || coast.islets.some((i) => touch(i.x - i.rad - 6, i.x + i.rad + 6, i.z - i.rad - 6, i.z + i.rad + 6));
+    if (rocky) land = true;
     if (!land) return { empty: true };
     const tile = { ix, iz, cx: x0 + TILE / 2, cz: z0 + TILE / 2, trees: [], bushes: [], rocks: [], ferns: [], tufts: [], mesh: null };
 
@@ -85,7 +90,7 @@ export function createWilds(scene) {
       // cliff path and the locals' land get one every metre (2 m on the high rock), and the village's
       // terraces one every two thirds of a metre, like the camp's own mesh (clean faces and stamps).
       // Tiles finer than 2 m also get a 2 m version, shown when you are more than FINE_WITHIN away.
-      let seg = 12;
+      let seg = rocky ? 24 : 12;
       for (let u = 0; u <= 8 && seg < 72; u++) for (let v = 0; v <= 8; v++) {
         const g = groundKind(x0 + u * TILE / 8, z0 + v * TILE / 8);
         if (!g) continue;
@@ -114,6 +119,7 @@ export function createWilds(scene) {
             color.lerp(cSand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
           } else color.copy(cSand).lerp(cWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
           paintNewGround(color, x, z, h, slopes[i]);
+          paintCoastRock(color, x, z, r);
           colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
         };
         for (let i = 0; i < pos.count; i++) paint(i);

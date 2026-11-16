@@ -1,7 +1,7 @@
 // On-screen interface. During play it is just white text and line icons over the picture,
 // with no panels. The journal is a notebook and the map is a paper sheet you hold up.
 import { GRASS_RADIUS, HILL, POND, AREAS } from './config.js';
-import { heightAt, landR, shoreR, wildness, groundKind } from './logic/terrain.js';
+import { heightAt, landR, shoreR, wildness, groundKind, coastRock, coastShallow } from './logic/terrain.js';
 import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, getScatter } from './logic/layout.js';
 import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
@@ -51,11 +51,12 @@ function drawPaperMap(c) {
   const STEP = 3, n = MAP / STEP, img = new ImageData(n, n), px = img.data;
   const hex = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
   const SEA = hex(0xbfe6f6), SURF = hex(0xffffff), SAND = hex(0xf6e3b6), GRASS = hex(0xc7cf8a), JUNGLE = hex(0x7da36a), DEEP = hex(0x6a9460),
-    WATER = hex(0x8fd0e6), ROCK = hex(0xb9ab98), ROCKD = hex(0x9c8f80), LOCAL = hex(0xd5d48c), FARM = hex(0xa9c47a), EARTH = hex(0xe2c18c), TRAIL = hex(0xb98a55);
+    WATER = hex(0x8fd0e6), SHALLOW = hex(0xa9e4dc), ROCK = hex(0xb9ab98), ROCKD = hex(0x9c8f80), LOCAL = hex(0xd5d48c), FARM = hex(0xa9c47a), EARTH = hex(0xe2c18c), TRAIL = hex(0xb98a55);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = MX0 + ((i + 0.5) * STEP) / MK, z = MZ0 + ((j + 0.5) * STEP) / MK, h = heightAt(x, z), r = shoreR(x, z);
     let col = SEA;
-    if (h < 0) col = r < 58 ? WATER : r < 62.4 ? SURF : SEA;
+    // The sea: white surf at the shore, then turquoise shallows, broad in the sandy bays and thin round the rocks.
+    if (h < 0) col = r < 58 ? WATER : r < 62.4 ? SURF : r < 64 + 12 * coastShallow(x, z) ? SHALLOW : SEA;
     else {
       const g = groundKind(x, z), w = wildness(x, z), lr = landR(x, z);
       col = lr > GRASS_RADIUS ? SAND : w > 0.55 ? ((i * 7 + j * 13) % 11 < 3 ? DEEP : JUNGLE) : GRASS;
@@ -71,6 +72,7 @@ function drawPaperMap(c) {
         if (g.rock > 0.5 && h > 2) col = h > AREAS.massif.height - 1.5 && w > 0.4 ? JUNGLE : (i + j) % 4 ? ROCK : ROCKD;
         if (g.oldTrail < 1.4) col = TRAIL;
       }
+      if (lr > 49 && coastRock(x, z) * Math.min(1, (lr - 49) / 4) > 0.45) col = (i + j) % 4 ? ROCK : ROCKD; // the rocky points
     }
     const k = (j * n + i) * 4; px[k] = col[0]; px[k + 1] = col[1]; px[k + 2] = col[2]; px[k + 3] = 255;
   }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { heightAt, landR, wildness, shoreR, coastShift } from '../logic/terrain.js';
+import { heightAt, landR, wildness, shoreR, coastShift, coastShallow, coastRock } from '../logic/terrain.js';
+import { createCoastRocks } from './rocks.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
@@ -63,6 +64,7 @@ function buildTerrain() {
       c.lerp(C(0xfff7dc), smooth((speck(x * 0.5, z * 0.5) - 0.6) / 0.3) * 0.3);
     }
     paintNewGround(c, x, z, h, slopes[i]); // the river banks, the locals' land and the rest of the new ground
+    paintCoastRock(c, x, z, r);
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   for (let i = 0; i < pos.count; i++) paint(i);
@@ -89,6 +91,16 @@ function buildTerrain() {
   return mesh;
 }
 
+// Rocky points and islets: grey-brown rock near the waterline, in patches further up. Shared with wilds.js.
+const COAST_ROCK = [new THREE.Color(0x8c8378), new THREE.Color(0x766e66), new THREE.Color(0xa0968a)];
+export function paintCoastRock(c, x, z, r) {
+  if (r < 46) return;
+  const k = Math.min(1, coastRock(x, z) * 1.25) * smooth((r - 47.5) / 3);
+  if (k <= 0) return;
+  const v = 0.5 + 0.5 * Math.sin(x * 1.3 + Math.cos(z * 1.1) * 2) * Math.cos(z * 0.9 - x * 0.4);
+  c.lerp(v < 0.33 ? COAST_ROCK[1] : v > 0.7 ? COAST_ROCK[2] : COAST_ROCK[0], k);
+}
+
 const waterVertex = /* glsl */ `
   uniform float uTime;
   varying vec3 vWorld;
@@ -108,6 +120,7 @@ const waterVertex = /* glsl */ `
 const waterFragment = /* glsl */ `
   uniform float uTime;
   uniform vec3 uShallow;
+  uniform vec3 uTurq;
   uniform vec3 uDeep;
   uniform vec3 uFoam;
   uniform vec3 uLight;
@@ -128,16 +141,20 @@ const waterFragment = /* glsl */ `
     float r = mix(rb, ra, mh) - uBlend * mh * (1.0 - mh);
     // Over the new land the coastline comes from a baked map of the same measure, which also
     // counts the river and the lake as inland water (so they get no surf).
+    // Elsewhere the round coast is moved by the same reshaping the land uses (baked from terrain.js: bays,
+    // coves, points, the spit and the islets). The map's second channel says how broad the shallows are.
+    vec2 cuv = (vWorld.xz - uCoastBox.xy) * uCoastBox.zw;
+    vec2 cs = vec2(0.0, 0.5);
+    if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0) cs = texture2D(uCoast, cuv).rg;
     vec2 luv = (vWorld.xz - uLandBox.xy) * uLandBox.zw;
     if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) r = texture2D(uLand, luv).r;
-    else {
-      // Elsewhere the round coast is moved by the same irregular shift the land uses (baked from terrain.js).
-      vec2 cuv = (vWorld.xz - uCoastBox.xy) * uCoastBox.zw;
-      if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0) r += texture2D(uCoast, cuv).r;
-    }
+    else r += cs.r;
     float ang = atan(vWorld.z, vWorld.x);
-    float depthT = smoothstep(uShore - 2.0, uShore + 22.0, r);
-    vec3 col = mix(uShallow, uDeep, depthT);
+    // Turquoise flats hug the shore: broad in the sandy bays, a narrow fringe round the rocky points.
+    float reach = mix(7.0, 30.0, cs.g);
+    float depthT = smoothstep(uShore - 2.0, uShore + reach, r);
+    vec3 col = mix(uTurq, uShallow, smoothstep(uShore - 0.5, uShore + reach * 0.5, r));
+    col = mix(col, uDeep, depthT);
 
     // Soft sparkle bands
     float band = sin(vWorld.x * 0.11 + vWorld.z * 0.07 + uTime * 0.25) * sin(vWorld.z * 0.09 - vWorld.x * 0.05 - uTime * 0.2);
@@ -155,6 +172,8 @@ const waterFragment = /* glsl */ `
     float foam = smoothstep(-0.55, 0.0, surf) * (1.0 - smoothstep(0.15, 1.25, surf)) * (0.45 + 0.4 * wash);
     float edge2 = r - (uShore + 2.6 + wobble * 1.4 - tide);
     foam += (1.0 - smoothstep(0.0, 0.5, abs(edge2))) * 0.28 * (1.0 - wash * 0.6);
+    // Rocky shores break the swell into more white water.
+    foam *= mix(1.45, 1.0, smoothstep(0.1, 0.45, cs.g));
     col = mix(col, uFoam, clamp(foam, 0.0, 1.0) * 0.8);
 
     col *= uLight;
@@ -181,11 +200,16 @@ function bakeLand() {
 
 // The irregular coast's shift (metres on the island's scale), baked on a wide box at 1.5 m: the
 // sea shader adds it to its round coast where the land is not covered by the map above.
-const COAST_BOX = { x0: -200, z0: -200, cell: 1.5, w: 294, h: 227 };
+// Its second channel is how broad the shallows are there (coastShallow).
+const COAST_BOX = { x0: -260, z0: -320, cell: 1.5, w: 337, h: 308 };
 function bakeCoast() {
-  const { x0, z0, cell, w, h } = COAST_BOX, data = new Uint16Array(w * h);
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) data[j * w + i] = THREE.DataUtils.toHalfFloat(coastShift(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell));
-  const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat, THREE.HalfFloatType);
+  const { x0, z0, cell, w, h } = COAST_BOX, data = new Uint16Array(w * h * 2), toHalf = THREE.DataUtils.toHalfFloat;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell, k = (j * w + i) * 2, s = coastShift(x, z);
+    data[k] = toHalf(s);
+    data[k + 1] = toHalf(Math.abs(landR(x, z) - 60) < 45 ? coastShallow(x, z) : 0.5);
+  }
+  const tex = new THREE.DataTexture(data, w, h, THREE.RGFormat, THREE.HalfFloatType);
   tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
   return tex;
 }
@@ -200,6 +224,7 @@ function buildWater() {
     uniforms: {
       uTime: { value: 0 },
       uShallow: { value: new THREE.Color(PALETTE.water) },
+      uTurq: { value: new THREE.Color(0x86d9cc) },
       uDeep: { value: new THREE.Color(PALETTE.waterDeep) },
       uFoam: { value: new THREE.Color(PALETTE.foam) },
       uLight: { value: new THREE.Color(1, 1, 1) },
@@ -223,6 +248,7 @@ export function createIsland(scene) {
   const terrain = buildTerrain();
   const water = buildWater();
   scene.add(terrain, water);
+  createCoastRocks(scene); // boulders on the rocky points and the islets
   return {
     terrain,
     water,

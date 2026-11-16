@@ -98,8 +98,8 @@ export function createSky(scene, renderer) {
   const cam = sunLight.shadow.camera;
   cam.left = -SHADOW_HALF; cam.right = SHADOW_HALF; cam.top = SHADOW_HALF; cam.bottom = -SHADOW_HALF;
   cam.near = 1; cam.far = 260;
-  sunLight.shadow.bias = -0.0006;
-  sunLight.shadow.normalBias = 0.06;
+  sunLight.shadow.bias = -0.0004;
+  sunLight.shadow.normalBias = 0.018; // about one texel: enough against acne without lifting shadows off their feet
   sunLight.shadow.radius = 1; // a clean edge, filtered a little so it is smooth rather than stair-stepped
   if ('intensity' in sunLight.shadow) sunLight.shadow.intensity = 0.75; // one even shadow tone everywhere
 

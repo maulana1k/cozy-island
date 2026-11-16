@@ -259,6 +259,9 @@ export function createFigure({
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
   for (const seg of [armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, ...accents]) weld(seg, false);
   group.scale.setScalar(scale);
+  // People further off draw more simply: no shadow past 26 m, and no separate shoes past 45 m.
+  const casters = []; group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o); });
+  let lod = 0;
 
   let phase = 0, lastElapsed = null, gait = 0, run = 0, footLift = 0;
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
@@ -281,7 +284,9 @@ export function createFigure({
     // pose: 'clap' | 'jacks' | 'salute' | 'stir' | 'eat' | 'hammer'.
     animate(speed, elapsed, o = {}) {
       // People a long way off only need a fresh pose every third frame.
-      const far = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2 > 38 * 38;
+      const d2v = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2, far = d2v > 38 * 38;
+      const want = d2v > 45 * 45 ? 2 : d2v > 26 * 26 ? 1 : 0;
+      if (want !== lod) { lod = want; for (const m of casters) m.castShadow = lod === 0; legL.foot.visible = legR.foot.visible = lod < 2; }
       if (far && (frameCount + slot) % 3 !== 0) return;
       const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, 0.1);
       lastElapsed = elapsed;
@@ -489,7 +494,7 @@ export function createFigure({
       torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 1.2);
       pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
       // Small details are not worth drawing on people a long way off.
-      eyeRig.visible = mouth.visible = !far;
+      eyeRig.visible = mouth.visible = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2 < 15 * 15;
       armL.shoulder.rotation.set(pose.shLx, 0, pose.shLz); armR.shoulder.rotation.set(pose.shRx, 0, pose.shRz);
       armL.elbow.rotation.x = pose.elL; armR.elbow.rotation.x = pose.elR;
       pelvis.position.y = PELVIS_Y + pose.py;

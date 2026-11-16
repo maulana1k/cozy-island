@@ -9,7 +9,7 @@ import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } fr
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
-const TILE = 48, VIEW = 300, NEAR = 88, UNDER = 58; // tile size; how far tiles exist; how far real trees and undergrowth go
+const TILE = 48, VIEW = 230, NEAR = 58, UNDER = 36; // tile size; how far tiles exist; how far real trees and undergrowth go
 const MAIN_HALF = 85;                                  // the camp's own ground mesh covers this far from the middle
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 
@@ -37,13 +37,15 @@ export function createWilds(scene) {
   const colliders = [];
 
   // ---- Shared pools: one instanced mesh per kind of thing, refilled when the nearby tiles change.
-  const pool = (geo, material, cap, shadow) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.castShadow = shadow; m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m; };
+  const pool = (geo, material, cap) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.castShadow = false; // no shadows out here: that alone halves the cost
+    m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m; };
   const trunkMat = flat(PALETTE.treeTrunk), white = flat(0xffffff);
   const trees = KINDS.map((def) => ({ trunk: pool(def.trunk(), trunkMat, 2600, true), canopy: pool(def.canopy(), white, 2600, true) }));
   const lumpGeo = new THREE.IcosahedronGeometry(1, 0); lumpGeo.scale(1, 0.62, 1);
   const lumps = pool(lumpGeo, white, 26000, false);
   const leaves = flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide });
-  const bushes = pool(bushGeometry(), white, 2400, true), rocks = pool(rockGeometry(), white, 700, true);
+  const lightBush = mergeGeometries([[0.62, 0, 0.42, 0], [0.42, 0.42, 0.32, 0.12], [0.44, -0.4, 0.3, -0.1]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.78, 1); g.translate(x, y, z); return g; }));
+  const bushes = pool(lightBush, white, 2400), rocks = pool(rockGeometry(), white, 700);
   const ferns = pool(fernGeometry(), leaves, 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
 
   // ---- One tile: its ground and a list of what grows on it. Made once, then kept while it is near.
@@ -131,10 +133,10 @@ export function createWilds(scene) {
     for (const tile of tiles.values()) {
       if (tile.empty) continue;
       const d = Math.hypot(tile.cx - px, tile.cz - pz);
-      const real = d < NEAR;
       for (const t of tile.trees) {
         const def = KINDS[t.kind];
-        if (real && counts[t.kind] < 2600) {
+        // Only the trees right round you are real; the rest are a single lump each, which reads the same through the haze.
+        if (Math.hypot(t.x - px, t.z - pz) < NEAR && counts[t.kind] < 2600) {
           const i = counts[t.kind]++;
           put(trees[t.kind].trunk, i, t.x, t.y, t.z, t.scale, t.rot); trees[t.kind].canopy.setMatrixAt(i, dummy.matrix);
           trees[t.kind].canopy.setColorAt(i, color.setHex(def.color).offsetHSL(t.tint * 0.03, 0, t.tint * 0.07));
@@ -146,11 +148,12 @@ export function createWilds(scene) {
           lumps.setColorAt(nLump++, color.setHex(def.color).offsetHSL(t.tint * 0.03, 0, t.tint * 0.07 - 0.02));
         }
       }
-      if (d < UNDER) {
-        for (const b of tile.bushes) if (nBush < 2400) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
-        for (const b of tile.rocks) if (nRock < 700) { put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
-        for (const b of tile.ferns) if (nFern < 3600) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
-        for (const b of tile.tufts) if (nTuft < 5200) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.6 ? 0xd9c46a : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
+      if (d < NEAR + TILE) {
+        const closeBy = (b) => Math.hypot(b.x - px, b.z - pz) < UNDER;
+        for (const b of tile.bushes) if (nBush < 2400 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
+        for (const b of tile.rocks) if (nRock < 700 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
+        for (const b of tile.ferns) if (nFern < 3600 && closeBy(b)) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
+        for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.6 ? 0xd9c46a : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
       }
     }
     KINDS.forEach((_, k) => { for (const m of [trees[k].trunk, trees[k].canopy]) { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; } });
@@ -173,7 +176,7 @@ export function createWilds(scene) {
       if (tile.mesh) { group.remove(tile.mesh); tile.mesh.geometry.dispose(); }
       tiles.delete(key); dirty = true;
     }
-    if (dirty || Math.hypot(px - lastFill.x, pz - lastFill.z) > 20) { refill(px, pz); lastFill = { x: px, z: pz }; dirty = false; }
+    if (dirty || Math.hypot(px - lastFill.x, pz - lastFill.z) > 7) { refill(px, pz); lastFill = { x: px, z: pz }; dirty = false; }
   }
 
   // ---- Eyes in the dark: something is watching from between the trees.

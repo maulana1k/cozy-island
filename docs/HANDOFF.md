@@ -147,3 +147,19 @@ against the debug URL options above. The Playwright browser tools were removed p
   only near the shore.
 - **Not measured:** frame rate after this round. The jungle adds roughly 600,000 triangles and
   each person three to five more things to draw.
+
+## Performance pass on the jungle (after the seventh round)
+
+Measured with `?dbg` in headless Chrome (triangles and draw calls per frame, shadow pass included):
+
+| Where | Before this pass | After | Before this session's work |
+|---|---|---|---|
+| In the jungle (-45, -55) | 1,446,000 / 173 | 691,000 / 200 | not applicable |
+| Summit | 1,557,000 / 930 | 1,102,000 / 841 | not measured |
+| Middle of camp (10, 14) | not measured | 1,189,000 / 1,432 | 1,031,000 / 1,350 |
+
+What changed: jungle scenery casts no shadows; real trees only within 58 m and ferns and grass
+within 36 m, chosen per tree, not per tile; lumps and tiles out to 230 m with thicker fog covering
+the edge; a lighter bush; people beyond 26 m cast no shadow, beyond 45 m have no separate shoes,
+and beyond 15 m have no eyes or mouth drawn. Frame rate itself was not measured.
+The camp is now the heaviest place, mostly the 70 people (about 1,400 draw calls).

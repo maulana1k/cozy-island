@@ -164,6 +164,8 @@ export const PATHS = [
   [VILLAGE_CENTER, ...HILL_TRAIL],
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
+  // The trail to the village: off the dock path, out across the meadow to the windmill knoll and the bridge.
+  [{ x: 24, z: 11 }, { x: 27.5, z: 6.5 }, { x: 31, z: 2 }, { x: 34.5, z: -3 }, { x: 37.5, z: -8 }, { x: 40.2, z: -13.5 }, { x: 42.5, z: -19 }, { x: 47.5, z: -19.6 }, { x: 53.4, z: -21.2 }],
 ];
 const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1];
 export const HILL_PATH = PATHS[COTTAGES.length + 2];

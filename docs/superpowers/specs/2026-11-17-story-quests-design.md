@@ -216,6 +216,8 @@ Exact layout, sizes and how far the island grows are **left to the builder** and
 4. **Language:** English only, no translation plan. Text may live in plain JS data modules; no i18n layer.
 5. **First slice (Phase 1):** confirmed: story engine + saving + conversation screen + name/look picker + cast on today's map + Chapters 1-2.
 
+6. **Built in milestones (owner, 2026-11-17):** the story is built gradually, one checkpoint at a time, and the owner playtests each one before the next starts. Milestone 1 = engine, saving, picker, conversation screen, Quests/Notes tabs, Chapter 1 "New scout" with the camp leader, buddy and younger scout, and one sample sequence puzzle. Later milestones add the village cast, Chapter 2, more puzzles and the side-quest templates, a chapter at a time.
+
 ## 10b. Builder check results (settled as BUILDER CALLs; owner may override)
 
 1. **Save compatibility:** save has a `version`. Quest and node ids are treated as stable once shipped. On load, unknown ids are dropped and missing ones start fresh; no migration code until a breaking change actually happens.

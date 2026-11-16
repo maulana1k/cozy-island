@@ -124,7 +124,7 @@ export function createCrowd() {
     // Everyone has their own pace, gets going gradually and slows as they arrive.
     const pace = 0.88 + ((m.index * 37) % 25) / 100;
     m.go = (m.go || 0) + (1 - (m.go || 0)) * (1 - Math.exp(-dt * 2.5));
-    const cruise = (hurry ? 3.6 : 1.3) * (m.adult ? (hurry ? 0.9 : 1.05) : 1) * pace * Math.max(0.25, m.go) * Math.min(1, 0.4 + d / 1.8);
+    const cruise = (hurry ? 3.6 : 1.05) * (m.adult ? (hurry ? 0.9 : 1.05) : 1) * pace * Math.max(0.25, m.go) * Math.min(1, 0.4 + d / 1.8);
     const speed = Math.min(cruise, d / Math.max(dt, 1e-3));
     let nx = dx / d, nz = dz / d;
     if (m.stuck > 0.6) { const side = m.index % 2 ? 1 : -1; const ox = -nz * side, oz = nx * side; nx = nx * 0.3 + ox; nz = nz * 0.3 + oz; const l = Math.hypot(nx, nz); nx /= l; nz /= l; }

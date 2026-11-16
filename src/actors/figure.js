@@ -421,7 +421,7 @@ export function createFigure({
     const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.85;
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
     const Dw = 0.6 - 0.1 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
-    const Cw = 0.72, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
+    const Cw = 0.42, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
     const r = smooth((vk - 2.15) / 0.75);                  // 0 walking .. 1 running
     const cWk = Math.min(4.4, Math.max(cWalk, (vk * 2 * Dw) / Cw));
     const cK = lerp(cWk, cRun, r);
@@ -603,7 +603,7 @@ export function createFigure({
       hLow = Math.min(hLow, hOver(stanceAt(0.9, C, heelUp, toeOff, edgeT, aS, r0), kE), hOver(stanceAt(0.08, C, heelUp, toeOff, edgeT, aS, r0), kE));
       const beat = 0.5 + 0.5 * Math.cos(4 * Math.PI * (phase - D / 2)); // 1 over the middle of each footfall
       // walking: the hips vault over the planted leg, up to nearly straight mid-step and down toward the footfalls: a long step costs a bob, not a crouch
-      let h = hLow + gait * going * (1 - run) * Math.max(0.04 * LL, 0.7 * (kE * LL + ANK - hLow)) * beat;
+      let h = hLow + gait * going * (1 - run) * Math.max(0.04 * LL, 0.9 * (kE * LL + ANK - hLow)) * beat;
       // Running: a bounce. Off the ground the body flies a true arc under the game's gravity, highest halfway
       // between the steps. On the ground the leg takes the weight like a spring: the hips sink to their lowest
       // halfway through the step (the knee bending to about 40 degrees) and rise again to push off at the

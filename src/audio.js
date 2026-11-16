@@ -189,6 +189,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
 
   const SOUNDS = {
     lantern() { tone(E5, { dur: 0.5, gain: 0.09 }); tone(A5, { dur: 0.6, gain: 0.07, delay: 0.09 }); },
+    zip() { hiss({ type: 'highpass', freq: 3400, dur: 0.75, gain: 0.035 }); },
     door() { tone(170, { type: 'sine', dur: 0.16, gain: 0.16, to: 110 }); hiss({ type: 'lowpass', freq: 900, dur: 0.08, gain: 0.05 }); },
     bell() {
       for (const [mult, gain, dur] of [[1, 0.13, 2.4], [2.01, 0.06, 1.8], [2.76, 0.04, 1.3], [5.4, 0.02, 0.8]]) {

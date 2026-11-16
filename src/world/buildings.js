@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, floorHeight, BED_PLAN } from '../logic/layout.js';
 import { box, cyl, ball, stick, roofGeometry, shared, texture, mergeStatic } from './build.js';
+import { createZipDoor } from './zipDoor.js';
 import { familyTunnelTent, geodesicTent, groupShelter, utilityTent, TENT_COLORS } from '../kit/tents.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
@@ -26,8 +27,8 @@ const STYLES = {
 const PATROL_TENT_COLORS = [TENT_COLORS.forest, TENT_COLORS.orange, TENT_COLORS.slate, TENT_COLORS.mustard];
 const TENT_PLAN = {
   hall: { make: groupShelter, o: { color: TENT_COLORS.brick, backWall: true }, s: [2, 1.2, 1.5], legs: [3.64, 2.73], back: -2.73 },
-  patrol: { make: familyTunnelTent, o: {}, s: [1, 1, 1], door: { w: 2.0, h: 1.75, z: 2.45 } },
-  staff: { make: geodesicTent, o: { open: true, color: 0xa488b0 }, s: [1.5, 1.4, 1.5], door: { w: 0.95, h: 0.85, z: 2.46 } },
+  patrol: { make: familyTunnelTent, o: {}, s: [1, 1, 1], door: { w: 1.7, h: 2.0, z: 3.3 } },
+  staff: { make: geodesicTent, o: { open: true, color: 0xa488b0 }, s: [2.3, 1.6, 2.3], door: { w: 1.9, h: 1.15, z: 3.77 } },
   mess: { make: groupShelter, o: { color: TENT_COLORS.orange, backWall: true }, s: [1.5, 1.15, 1.25], legs: [2.73, 2.28], back: -2.28 },
   aid: { make: utilityTent, o: { open: true, cross: true, color: 0xd8dccf, accent: 0xb53a32 }, s: [1.5, 1.1, 1.667], door: { w: 1.45, h: 1.55, z: 2.0 } },
 };
@@ -117,20 +118,14 @@ export function createBuildings(scene, deps) {
     const hinge = new THREE.Group(); hinge.position.set(-dw / 2, 0, doorZ + 0.06);
     const doorColor = new THREE.Color(st.canvas).multiplyScalar(0.9);
     const doorMat = sliced(T ? (T.o.accent ?? tentAccent(tentColor ?? T.o.color ?? 0x4a6a8a)) : doorColor, { map: T ? null : texture('fabric', 1, 1), emissive: 0xffe9a8, emissiveIntensity: 0 }); // its own material: only this flap shimmers
-    const door = { open: false, angle: 0, speed: 0 };
+    const door = { open: false, angle: 0, speed: 0, t: 0 }; // t: 0 shut .. 1 open, for the zip doors
     let doorSpot = null;
     let panel = null;
     if (dw && T && tentGroup.userData.doorRing) {
-      // The panel is the shape of the doorway, hung from its top edge, with a zip line round the edge and down the middle.
+      // The doorway outline in the building's frame; the zip door peels open along it.
       const ring = tentGroup.userData.doorRing.map(([x, y, z]) => [x * T.s[0], y * T.s[1], z * T.s[2]]);
-      const top = Math.max(...ring.map((r) => r[1])), z0 = ring[0][2] + 0.03;
-      const geo = new THREE.ShapeGeometry(new THREE.Shape(ring.map(([x, y]) => new THREE.Vector2(x * 0.985, y - top))));
-      panel = new THREE.Mesh(geo, doorMat); panel.material.side = THREE.DoubleSide; panel.position.set(0, top, z0); panel.castShadow = true;
-      const zipMat = new THREE.LineBasicMaterial({ color: 0x1b1d20, clippingPlanes: [plane] });
-      const edge = ring.map(([x, y]) => new THREE.Vector3(x * 0.95, (y - top) * 0.985, 0.012));
-      const low = Math.min(...ring.map((r) => r[1]));
-      panel.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([...edge.slice(1, -1)]), zipMat), new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, low - top + 0.05, 0.013), new THREE.Vector3(0, -0.05, 0.013)]), zipMat));
-      g.add(panel);
+      panel = createZipDoor(ring, doorMat, plane);
+      g.add(panel.group);
     } else if (dw) {
       hinge.add(use(box(dw - 0.04, dh - 0.04, 0.045, 0, dw / 2, dh / 2, 0), doorMat));
       hinge.add(use(box(dw - 0.04, 0.12, 0.06, 0, dw / 2, dh * 0.55, 0), trim));
@@ -141,7 +136,7 @@ export function createBuildings(scene, deps) {
       interactables.push({
         id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + (T ? Math.max(1.6, dh + 0.5) : 2.25),
         prompt: () => (T ? (door.open ? 'E — close door' : 'E — open door') : (door.open ? 'E — close flap' : 'E — open flap')),
-        interact() { door.open = !door.open; audio.play('door'); },
+        interact() { door.open = !door.open; if (T) audio.play('zip'); else audio.play('door'); },
       });
     }
 
@@ -192,9 +187,10 @@ export function createBuildings(scene, deps) {
           });
         }
       });
-      g.add(crate(0, -front + 0.45, 0.45), box(0.16, 0.24, 0.16, shared(0xffe2a0), 0, 0.65, -front + 0.45), box(0.2, 0.04, 0.2, 0x5b4636, 0, 0.79, -front + 0.45));
+      { const cz = c.type === 'staff' ? -front + 1.3 : -front + 0.45; // the staff tent's round rear wall is further in
+        g.add(crate(0, cz, 0.45), box(0.16, 0.24, 0.16, shared(0xffe2a0), 0, 0.65, cz), box(0.2, 0.04, 0.2, 0x5b4636, 0, 0.79, cz)); }
       { // kit by the door (inside the tent's own outline: the big patrol tent's door is further in)
-        const kx = c.type === 'patrol' ? 1.5 : W / 2 - 0.5, kz = c.type === 'patrol' ? 1.7 : front - 0.5;
+        const kx = c.type === 'patrol' ? 2.3 : 1.9, kz = c.type === 'patrol' ? 2.2 : 2.6;
         g.add(box(0.34, 0.42, 0.22, 0x6f9a5a, -kx, 0.27, kz, 0.4), box(0.34, 0.42, 0.22, 0xd9634a, kx, 0.27, kz - 0.05, -0.3), box(0.34, 0.42, 0.22, 0x4f7fc9, kx - 0.45, 0.27, kz + 0.1, 0.5));
       }
       // The patrol's pennant on a pole beside the door.
@@ -238,7 +234,7 @@ export function createBuildings(scene, deps) {
     }
 
     // Everything but the door flap stands still, so weld it: one mesh per material.
-    g.remove(hinge); if (panel) g.remove(panel); mergeStatic(g); if (dw) g.add(hinge); if (panel) g.add(panel); // the door moves: it stays out of the weld
+    g.remove(hinge); if (panel) g.remove(panel.group); mergeStatic(g); if (dw && !panel) g.add(hinge); if (panel) g.add(panel.group); // the door moves: it stays out of the weld
     if (tentGroup) g.add(tentGroup); // after the weld: it keeps its vertex colours and its own sliceable material
     scene.add(g);
     return { state, c, g, plane, hinge, panel, panelOpen: 0, nightGlow: 0, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, tentFabric: !!T, canvas: T ? tentGroup.children[0].material : canvas, roofMat: T ? { emissiveIntensity: 0 } : roofMat, groundY, openTop, W, D, inside: false };
@@ -251,7 +247,7 @@ export function createBuildings(scene, deps) {
     // Walls, furniture and shut doors, for the player.
     colliders() {
       out.length = 0;
-      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.doorBlock && b.door.angle > -0.9) out.push(b.doorBlock); }
+      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.doorBlock && (b.panel ? b.door.t < 0.7 : b.door.angle > -0.9)) out.push(b.doorBlock); }
       return out;
     },
     // Canvas lit from inside: only a faint warm glow in the evening (before lights out at 21:36), dark after.
@@ -281,10 +277,10 @@ export function createBuildings(scene, deps) {
         b.shimmer += (want - b.shimmer) * (1 - Math.exp(-dt * 6));
         b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28)) * (b.panel ? 0.3 : 1); // a dark tent fabric needs a lighter hint than canvas
         if (b.panel) {
-          // The panel shrinks up into its bundle as the door opens (it never swings out), and an open door lets a little daylight glow in.
-          const amt = Math.min(1, Math.max(0, -b.door.angle / 1.9));
-          b.panel.scale.y = Math.max(0.06, 1 - 0.94 * amt); b.panel.visible = b.panel.scale.y > 0.07;
-          b.canvas.emissiveIntensity = b.nightGlow + amt * 0.07;
+          // The zip door runs 0..1 over about a second (a touch quicker to close); an open door lets a little daylight glow in.
+          b.door.t = Math.max(0, Math.min(1, b.door.t + (b.door.open ? 1 : -1) * dt * (b.door.open ? 0.8 : 1.0)));
+          b.panel.update(b.door.t);
+          b.canvas.emissiveIntensity = b.nightGlow + Math.min(1, b.door.t * 1.5) * 0.07;
         } else b.hinge.rotation.y = b.door.angle + (b.door.open ? Math.sin(elapsed * 1.3 + b.c.x) * 0.03 : 0);
         if (b.smoke) for (const p of b.smoke) {
           const u = p.userData, t = (elapsed * 0.2 + u.offset) % 1;

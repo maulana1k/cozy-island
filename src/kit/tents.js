@@ -179,29 +179,31 @@ export function tunnelTent(o = {}) {
 }
 
 // ==== 3b. Family tunnel tent: the big patrol dormitory tent =================================================
-// 4.8 m wide, 6.1 m of body plus a 1.3 m porch (7.4 m), 2.85 m at the tallest hoop. Four hoops step down toward
-// the back, panels bow gently between them, a charcoal skirt runs round the bottom, side windows have a rolled
-// flap, two roof vents have hoods, every hoop has a raised sleeve, reflective tab and pegged guylines.
-// The front is the door (grey inner, `open` rolls the door panel up) under a porch awning on two poles.
+// 6.6 m wide, 8.1 m of body plus a 1.5 m porch (9.6 m), 3.2 m at the tallest hoop. Near-vertical side walls
+// (a squared-off "tunnel with walls" section), five hoops that step down toward the back, panels that bow gently
+// between them, a charcoal skirt, side windows with a rolled flap, roof vents with hoods, raised pole sleeves,
+// reflective tabs, pegged guylines. The front is a wall with a D-shaped door (zip line round its curve) under a
+// porch awning on two poles; `open` rolls the door bundle up, `hollow` (with `open`) leaves the doorway empty so
+// the game can hang its own zip door and show the inner tent.
 export function familyTunnelTent(o = {}) {
   const color = o.color ?? TENT_COLORS.forest, accent = o.accent ?? autoAccent(color), open = !!o.open, hollow = !!o.hollow;
-  const seamC = dark(color, 0.36), accSeam = dark(accent, 0.3), SKIRT = 0x2f3236, gap = 0.08, d = 0.05;
+  const seamC = dark(color, 0.36), accSeam = dark(accent, 0.3), SKIRT = 0x2f3236, gap = 0.08, d = 0.05, P = 0.6;
   const keys = [
-    { z: -3.7, W: 1.1, H: 1.45 }, { z: -2.75, W: 1.8, H: 1.95, hoop: 1 }, { z: -1.25, W: 2.15, H: 2.35, hoop: 1 },
-    { z: 0.25, W: 2.35, H: 2.65, hoop: 1 }, { z: 1.6, W: 2.4, H: 2.85, hoop: 1 }, { z: 2.4, W: 2.0, H: 2.1 },
+    { z: -4.8, W: 2.6, H: 2.0 }, { z: -3.9, W: 3.0, H: 2.55, hoop: 1 }, { z: -2.3, W: 3.25, H: 2.85, hoop: 1 }, { z: -0.7, W: 3.3, H: 3.05, hoop: 1 },
+    { z: 0.9, W: 3.3, H: 3.15, hoop: 1 }, { z: 2.5, W: 3.3, H: 3.2, hoop: 1 }, { z: 3.3, W: 3.1, H: 2.9 },
   ];
-  const first = keys[0], last = keys[keys.length - 1], b = new Mesher();
+  const first = keys[0], last = keys[keys.length - 1], b = new Mesher(), fz = last.z;
   const env = (z) => {
     let i = 0; while (i < keys.length - 2 && z > keys[i + 1].z) i++;
-    const a = keys[i], c = keys[i + 1], t = clamp((z - a.z) / (c.z - a.z), 0, 1), bu = 1 + 0.025 * Math.sin(PI * t); // panels bow out between hoops
+    const a = keys[i], c = keys[i + 1], t = clamp((z - a.z) / (c.z - a.z), 0, 1), bu = 1 + 0.02 * Math.sin(PI * t); // panels bow out between hoops
     return { W: lerp(a.W, c.W, t) * bu, H: lerp(a.H, c.H, t) * bu };
   };
-  const sec = (z, th) => { const { W, H } = env(z); return [W * Math.cos(th), gap + (H - gap) * Math.abs(Math.sin(th)) ** 0.7, z]; };
-  const outN = (z, th) => { const { W, H } = env(z); return nrm([Math.cos(th) / W, Math.sin(th) / (H - gap), 0]); };
+  const sec = (z, th) => { const { W, H } = env(z); return [W * sgnpow(Math.cos(th), P), gap + (H - gap) * Math.abs(Math.sin(th)) ** P, z]; };
+  const outN = (z, th) => { const p0 = sec(z, th - 0.01), p1 = sec(z, th + 0.01); return nrm([p1[1] - p0[1], p0[0] - p1[0], 0]); };
   // rows: each bay is split so the middle of a side bay can hold a window
   const zs = [first.z], cells = []; let prev = first.z, kd = 'rear';
   const bay = (z1) => {
-    const L = z1 - prev, fr = L > 1 ? [0, 0.12, 0.5, 0.88, 1] : [0, 0.5, 1];
+    const L = z1 - prev, fr = L > 1 ? [0, 0.1, 0.5, 0.9, 1] : [0, 0.5, 1];
     fr.slice(1).forEach((f, q) => { zs.push(prev + L * f); cells.push({ kd, win: kd === 'bay' && fr.length === 5 && (q === 1 || q === 2) }); });
     prev = z1;
   };
@@ -209,79 +211,77 @@ export function familyTunnelTent(o = {}) {
     const k = keys[i];
     if (k.hoop) { bay(k.z - d); zs.push(k.z + d); cells.push({ kd: 'seam' }); prev = k.z + d; kd = i === keys.length - 2 ? 'front' : 'bay'; } else bay(k.z);
   }
-  const th = [0, 0.13, 0.45, 0.95, PI / 2 - 0.07, PI / 2 + 0.07, PI - 0.95, PI - 0.45, PI - 0.13, PI];
+  const th = [0, 0.04, 0.12, 0.5, 0.95, PI / 2 - 0.1, PI / 2 + 0.1, PI - 0.95, PI - 0.5, PI - 0.12, PI - 0.04, PI];
   b.grid(th, zs, (t, z) => sec(z, t), (i, j) => {
     const c = cells[j];
-    if (i === 0 || i === 8) return SKIRT;
-    if (c.win && (i === 2 || i === 6)) return GLASS;
+    if (i === 0 || i === 10) return SKIRT;
+    if (c.win && (i === 2 || i === 8)) return GLASS;
     if (c.kd === 'seam') return cells[j + 1] && cells[j + 1].kd === 'front' || cells[j - 1] && cells[j - 1].kd === 'front' ? accSeam : seamC;
-    if (i === 4) return c.kd === 'front' ? accSeam : seamC;
+    if (i === 5) return c.kd === 'front' ? accSeam : seamC;
     return c.kd === 'front' ? accent : color;
   });
-  // end caps: closed rear; the front ring is the door
+  // closed rear; the front is a wall round a D-shaped door
   const ringAt = (z) => th.map((t) => sec(z, t)), centre = (z) => [0, gap + (env(z).H - gap) * 0.4, z];
   b.fan(centre(first.z), ringAt(first.z), color);
-  const fr = ringAt(last.z), fc = centre(last.z), fz = last.z;
+  const fr = ringAt(fz), DW = 0.85, DH = 2.0;
+  const Q = th.map((t) => [DW * sgnpow(Math.cos(t), 0.55), gap + (DH - gap) * Math.abs(Math.sin(t)) ** 0.6, fz]);
+  for (let i = 0; i < th.length - 1; i++) b.quad(fr[i], fr[i + 1], Q[i + 1], Q[i], accent);
+  b.tube(Q.map((p) => [p[0], p[1], fz + 0.012]), 0.011, ZIP, 3); // the zip line round the door's curve
   if (open) {
-    if (!hollow) b.fan(fc, fr, INNER);
-    if (!hollow) b.fan([fc[0], fc[1] - 0.1, fz + 0.012], [1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1] - 0.1, fz + 0.012]; }), GLASS); // the dark doorway
-    b.tube([2, 3, 4, 5, 6, 7].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.84)); return [p[0], p[1], fz + 0.05]; }), 0.05, accent, 4); // the rolled-up door
-    for (const x of [-0.6, 0.6]) b.quad([x - 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.45, fz + 0.06], [x - 0.02, fc[1] + 0.45, fz + 0.06], ZIP); // its ties
-  } else {
-    b.fan(fc, fr, accent);
-    b.tube([1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1], fz + 0.012]; }), 0.008, ZIP, 3);
-  }
+    b.tube(Q.slice(2, 10).map((p) => [p[0] * 0.98, p[1] + 0.03, fz + 0.05]), 0.045, accent, 4); // the rolled-up door bundle
+    if (!hollow) b.fan([0, 0.9, fz - 0.02], Q.map((p) => [p[0], p[1], fz - 0.02]), INNER);
+  } else b.fan([0, 0.9, fz + 0.005], Q.map((p) => [p[0], p[1], fz + 0.005]), accent);
   // raised pole sleeves, one per hoop, running over the roof and down to the ground
-  const pth = [0, 0.45, 0.95, PI / 2, PI - 0.95, PI - 0.45, PI], hoops = keys.filter((q) => q.hoop);
+  const pth = [0, 0.12, 0.5, 0.95, PI / 2, PI - 0.95, PI - 0.5, PI - 0.12, PI], hoops = keys.filter((q) => q.hoop);
   for (const k of hoops) {
     const pts = pth.map((t) => { const p = sec(k.z, t), n = outN(k.z, t); return [p[0] + n[0] * 0.015, p[1] + n[1] * 0.015, k.z]; });
     b.tube([[pts[0][0], 0.02, k.z], ...pts, [pts[pts.length - 1][0], 0.02, k.z]], 0.022, seamC, 3);
   }
   // side windows get a rolled flap above them
   const flapRows = []; for (let j = 0; j < cells.length; j++) if (cells[j].win) flapRows.push(zs[j], zs[j + 1]);
-  for (const sgn of [1, -1]) {
-    const t0 = sgn > 0 ? 0.95 : PI - 0.95;
-    for (let q = 0; q < flapRows.length; q += 4) { const za = flapRows[q], zb = flapRows[q + 3]; b.tube([za, (za + zb) / 2, zb].map((z) => { const p = sec(z, t0), n = outN(z, t0); return [p[0] + n[0] * 0.02, p[1] + n[1] * 0.02, z]; }), 0.028, accent, 4); }
+  for (const t0 of [0.5, PI - 0.5]) for (let q = 0; q < flapRows.length; q += 4) {
+    const za = flapRows[q], zb = flapRows[q + 3];
+    b.tube([za, (za + zb) / 2, zb].map((z) => { const p = sec(z, t0), n = outN(z, t0); return [p[0] + n[0] * 0.02, p[1] + n[1] * 0.02, z]; }), 0.03, accent, 4);
   }
-  // two roof vents with small hoods, one each side
+  // roof vents with small hoods
   const vent = (z, t) => {
-    const p = sec(z, t), n = outN(z, t), u = nrm(cross(n, [0, 0, 1])), U = mul(u, 0.17), V = [0, 0, 0.13];
-    b.patch(p, n, 0.3, 0.2, GLASS, 0.008);
+    const p = sec(z, t), n = outN(z, t), u = nrm(cross(n, [0, 0, 1])), U = mul(u, 0.2), V = [0, 0, 0.15];
+    b.patch(p, n, 0.36, 0.24, GLASS, 0.008);
     const base = (sx, sz, h) => add(add(add(p, mul(n, h)), mul(U, sx)), mul(V, sz));
-    b.quad(base(-1, -1, 0.025), base(1, -1, 0.025), base(1, 1, 0.1), base(-1, 1, 0.1), accent);
-    b.tri(base(-1, -1, 0.025), base(-1, 1, 0.1), base(-1, 1, 0.0), accSeam); b.tri(base(1, -1, 0.025), base(1, 1, 0.1), base(1, 1, 0.0), accSeam);
+    b.quad(base(-1, -1, 0.03), base(1, -1, 0.03), base(1, 1, 0.12), base(-1, 1, 0.12), accent);
+    b.tri(base(-1, -1, 0.03), base(-1, 1, 0.12), base(-1, 1, 0.0), accSeam); b.tri(base(1, -1, 0.03), base(1, 1, 0.12), base(1, 1, 0.0), accSeam);
   };
-  vent(-2.0, 1.25); vent(-0.5, PI - 1.25);
+  vent(-3.1, 1.2); vent(-1.5, PI - 1.2); vent(0.1, 1.2); vent(1.7, PI - 1.2);
   // the grey inner tent: a pale lining just inside the fly, so a rolled-up door shows a bright interior, not a dark hollow
   if (hollow) {
-    const lz = keys.map((k) => k.z).filter((z) => z > first.z + 0.01 && z < last.z - 0.01);
-    const rows = [first.z + 0.03, ...lz, last.z - 0.03], inn = (z, t) => { const p = sec(z, t); return [p[0] * 0.965, gap + (p[1] - gap) * 0.965, z]; };
+    const rows = [first.z + 0.03, ...keys.map((k) => k.z).filter((z) => z > first.z + 0.01 && z < fz - 0.01), fz - 0.03];
+    const inn = (z, t) => { const p = sec(z, t); return [p[0] * 0.965, gap + (p[1] - gap) * 0.965, z]; };
     b.grid(th, rows, (t, z) => inn(z, t), () => 0xb4b2a8);
     b.fan([0, gap + (env(first.z).H - gap) * 0.38, first.z + 0.03], th.map((t) => inn(first.z + 0.03, t)), 0xb4b2a8);
   }
   // groundsheet edge
-  b.band([...keys.map((k) => [k.W * 0.96, k.z]), ...keys.slice().reverse().map((k) => [-k.W * 0.96, k.z])], 0, gap + 0.05, TUB);
+  b.band([...keys.map((k) => [k.W * 0.97, k.z]), ...keys.slice().reverse().map((k) => [-k.W * 0.97, k.z])], 0, gap + 0.05, TUB);
   // porch awning on two poles, with a valance
-  const xb = 1.15, yb = sec(fz, Math.acos(xb / last.W))[1] + 0.03, xf = 1.75, yf = 1.62, zf = fz + 1.3;
-  const awn = (u, v) => [lerp(xb, xf, v) * u, lerp(yb, yf, v) - 0.05 * Math.sin(PI * v) * (1 - u * u), fz + 0.02 + (zf - fz - 0.02) * v];
+  const xb = 1.5, tb = Math.acos((xb / last.W) ** (1 / P)), yb = sec(fz, tb)[1] + 0.03, xf = 2.1, yf = 2.15, zf = fz + 1.5;
+  const awn = (u, v) => [lerp(xb, xf, v) * u, lerp(yb, yf, v) - 0.06 * Math.sin(PI * v) * (1 - u * u), fz + 0.02 + (zf - fz - 0.02) * v];
   b.grid([-1, -0.5, 0.5, 1], [0, 0.5, 1], awn, (i) => (i === 1 ? accSeam : accent));
-  const e0 = awn(-1, 1), e1 = awn(1, 1); b.quad(e0, e1, add(e1, [0, -0.1, 0]), add(e0, [0, -0.1, 0]), accSeam);
+  const e0 = awn(-1, 1), e1 = awn(1, 1); b.quad(e0, e1, add(e1, [0, -0.12, 0]), add(e0, [0, -0.12, 0]), accSeam);
   for (const sx of [-1, 1]) {
     const top = [sx * xf, yf, zf], a0 = awn(sx, 0), a1 = awn(sx, 1);
     b.tri(a0, a1, [a0[0], a1[1], a0[2]], accSeam);
-    b.tube([top, [sx * xf, 0.02, zf]], 0.02, POLE, 4);
-    b.guy(add(top, [0, 0, -0.01]), [sx * 0.8, 1], 1.4, 0.1);
+    b.tube([top, [sx * xf, 0.02, zf]], 0.022, POLE, 4);
+    b.guy(add(top, [0, 0, -0.01]), [sx * 0.8, 1], 1.5, 0.1);
   }
   // pegged guylines: both ends, and a pair per hoop leaning to the nearer end
-  b.guy(sec(first.z, PI / 2), [0, -1], 1.3, 0.1);
+  b.guy(sec(first.z, PI / 2), [0, -1], 1.4, 0.1);
   const mid = (first.z + last.z) / 2;
-  for (const k of hoops) for (const sx of [1, -1]) b.guy(sec(k.z, sx > 0 ? 0.95 : PI - 0.95), [sx, 0.3 * Math.sign(k.z - mid)], 1.2, 0.1);
+  for (const k of hoops) for (const sx of [1, -1]) b.guy(sec(k.z, sx > 0 ? 0.5 : PI - 0.5), [sx, 0.3 * Math.sign(k.z - mid)], 1.4, 0.1);
   // reflective tabs at each hoop, and the brand patch
-  for (const k of hoops) for (const sx of [1, -1]) { const t = sx > 0 ? 0.3 : PI - 0.3; b.patch(sec(k.z + 0.12, t), outN(k.z, t), 0.07, 0.22, REFL); }
-  b.patch(sec(-0.5, PI - 0.7), outN(-0.5, PI - 0.7), 0.6, 0.18, LOGO);
-  const g = finish(b, 'familyTunnelTent', [4.8, 2.85, 7.4], o.scale);
-  g.userData.doorRing = fr.map((p) => [p[0], p[1], fz]);
-  g.userData.footprint = [...keys.map((k) => [k.W * 0.96, k.z]), [xf, zf], [-xf, zf], ...keys.slice().reverse().map((k) => [-k.W * 0.96, k.z])];
+  for (const k of hoops) for (const sx of [1, -1]) { const t = sx > 0 ? 0.3 : PI - 0.3; b.patch(sec(k.z + 0.12, t), outN(k.z, t), 0.07, 0.24, REFL); }
+  b.patch(sec(-1.5, PI - 0.75), outN(-1.5, PI - 0.75), 0.7, 0.2, LOGO);
+  const g = finish(b, 'familyTunnelTent', [6.6, 3.2, 9.6], o.scale);
+  g.userData.doorRing = Q;
+  g.userData.footprint = [...keys.map((k) => [k.W * 0.97, k.z]), [xf + 0.1, zf], [-xf - 0.1, zf], ...keys.slice().reverse().map((k) => [-k.W * 0.97, k.z])];
   return g;
 }
 
@@ -459,7 +459,7 @@ export function utilityTent(o = {}) {
     for (const sx of [-1, 1]) cp([sx * 0.615, 1.96, 0], nrm([sx * 0.48, 1.23, 0]));
   }
   const g = finish(b, 'utilityTent', [2.4, 2.2, 2.4], o.scale);
-  g.userData.doorRing = [[-dx, y0, hd + 0.014], [dx, y0, hd + 0.014], [dx, dy1, hd + 0.014], [-dx, dy1, hd + 0.014]];
+  g.userData.doorRing = [[dx, y0, hd + 0.014], [dx, dy1, hd + 0.014], [-dx, dy1, hd + 0.014], [-dx, y0, hd + 0.014]];
   return g;
 }
 
@@ -473,7 +473,7 @@ function lineup(variants) {
   const g = new THREE.Group();
   const lawn = new THREE.Mesh(new THREE.CircleGeometry(24, 48), new THREE.MeshStandardMaterial({ color: 0x7f9a4e, roughness: 1 }));
   lawn.rotation.x = -PI / 2; lawn.position.y = 0.01; lawn.receiveShadow = true; g.add(lawn);
-  const list = [[backpackTent, 1.3], [domeTent, 2.1], [tunnelTent, 2.6], [familyTunnelTent, 4.8], [geodesicTent, 3.1], [groupShelter, 4], [utilityTent, 2.4]];
+  const list = [[backpackTent, 1.3], [domeTent, 2.1], [tunnelTent, 2.6], [familyTunnelTent, 6.6], [geodesicTent, 3.1], [groupShelter, 4], [utilityTent, 2.4]];
   const gapX = 1.5, total = list.reduce((s, [, w]) => s + w, 0) + gapX * (list.length - 1);
   let x = -total / 2;
   list.forEach(([fn, w], i) => { const t = fn(variants[i] || {}); t.position.x = x + w / 2; x += w + gapX; g.add(t); });

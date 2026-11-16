@@ -22,23 +22,23 @@ export const COTTAGE_SIZE = { width: 5, depth: 4, floor: 0.55 };
 // height of the floor above the ground (cabins stand on short stilts).
 const BUILDINGS = [
   { type: 'hall', x: 11.6, z: -7.3, rot: 0, width: 8, depth: 6 },        // big marquee: camp headquarters
-  { type: 'patrol', x: -3, z: 6, rot: 1.3, width: 5, depth: 7.4 },       // patrol dormitory tents, eight beds each
-  { type: 'patrol', x: -2.5, z: 16.5, rot: 0.9, width: 5, depth: 7.4 },
-  { type: 'patrol', x: 22, z: 2, rot: -1.9, width: 5, depth: 7.4 },
+  { type: 'patrol', x: -3, z: 6, rot: 1.3, width: 6.6, depth: 9.6 },       // patrol dormitory tents, eight beds each
+  { type: 'patrol', x: -2.5, z: 16.5, rot: 0.9, width: 6.6, depth: 9.6 },
+  { type: 'patrol', x: 22, z: 2, rot: -1.9, width: 6.6, depth: 9.6 },
   { type: 'farm', x: 33, z: 27, rot: -2.03, width: 5.5, depth: 4.5 }, // bamboo-and-tarp farm shed
   { type: 'guard', x: 44, z: 11, rot: 0.15, width: 3, depth: 3 },     // guard post by the dock path
   { type: 'mess', x: 12, z: 25, rot: -3.02, width: 6, depth: 5 },     // kitchen and food tent
   { type: 'aid', x: 19.5, z: -9, rot: -0.51, width: 3.6, depth: 4 },  // first-aid tent
-  { type: 'patrol', x: 29.5, z: -1, rot: -1.7, width: 5, depth: 7.4, path: [{ x: 17.2, z: -2 }, { x: 22.5, z: -3.6 }] },
-  { type: 'patrol', x: 34, z: 6.5, rot: -1.75, width: 5, depth: 7.4, path: [{ x: 27, z: 11.8 }] },
-  { type: 'patrol', x: 6, z: 33, rot: 3.0, width: 5, depth: 7.4, path: [{ x: 3, z: 24 }, { x: 5.5, z: 27.5 }] },
-  { type: 'staff', x: 16.5, z: 33.5, rot: 3.1, width: 4.6, depth: 5.4, path: [{ x: 13.5, z: 21.3 }, { x: 16.2, z: 22.2 }] }, // where the teachers sleep
+  { type: 'patrol', x: 33.5, z: -5, rot: -1.7, width: 6.6, depth: 9.6, path: [{ x: 17.2, z: -2 }, { x: 22.5, z: -3.6 }] },
+  { type: 'patrol', x: 34.5, z: 7.5, rot: -1.75, width: 6.6, depth: 9.6, path: [{ x: 27, z: 11.8 }] },
+  { type: 'patrol', x: 4.5, z: 34, rot: 3.0, width: 6.6, depth: 9.6, path: [{ x: 3, z: 24 }, { x: 5.5, z: 27.5 }] },
+  { type: 'staff', x: 16.5, z: 33.5, rot: 3.1, width: 7.2, depth: 8, path: [{ x: 13.5, z: 21.3 }, { x: 16.2, z: 22.2 }] }, // where the teachers sleep
 ].map((b) => ({ floor: 0, ...b }));
 
 // Where the beds stand inside a dormitory, in the tent's own frame. `side` is the wall the pillow is against.
 export const BED_PLAN = {
-  patrol: [-2.25, -1.15, -0.05, 1.05].flatMap((z) => [{ x: -1.65, z, side: -1 }, { x: 1.65, z, side: 1 }]),
-  staff: [-1.75, -0.45, 0.85].flatMap((z) => [{ x: -1.4, z, side: -1 }, { x: 1.4, z, side: 1 }]),
+  patrol: [-2.65, -1.5, -0.35, 0.8].flatMap((z) => [{ x: -2.05, z, side: -1 }, { x: 2.05, z, side: 1 }]),
+  staff: [-1.9, -0.6, 0.7].flatMap((z) => [{ x: -1.2, z, side: -1 }, { x: 1.2, z, side: 1 }]),
 };
 // Every bed in camp as a world position. `rot` lays a sleeper with their head on the pillow;
 // `door` is the spot outside the flap to walk to first. The first bed in each patrol tent is kept free for you.
@@ -132,7 +132,7 @@ const tentAt = (id, p, lookAt) => ({ id, x: p.x, z: p.z, rot: facing(p, lookAt) 
 export const TENTS = [
   ...[60, 185, 250].map((a, i) => tentAt(`tent-${i}`, around(CAMPFIRE, a, 5.4), CAMPFIRE)),
   tentAt('tent-3', { x: 15.5, z: 16 }, VILLAGE_CENTER), tentAt('tent-4', { x: 19, z: 17.5 }, VILLAGE_CENTER),
-  tentAt('tent-5', { x: -8, z: 12 }, VILLAGE_CENTER), tentAt('tent-6', { x: -9.5, z: 15.5 }, VILLAGE_CENTER),
+  tentAt('tent-5', { x: -8, z: 12 }, VILLAGE_CENTER), tentAt('tent-6', { x: -12, z: 16 }, VILLAGE_CENTER),
 ];
 
 // A pioneering gateway over the dock path, a bamboo lookout tower by the guard post,
@@ -140,7 +140,7 @@ export const TENTS = [
 export const GATE = { x: 30, z: 12.5, rot: Math.atan2(16, 4), half: 1.9 };
 export const TOWER = { x: 46.5, z: 8.2 };
 export const PICNIC_TABLES = [{ x: 17.8, z: 23.4, rot: 0.3 }, { x: 18.2, z: 27.2, rot: -0.25 }];
-export const PIONEER_SITE = { x: -5.3, z: 21 };
+export const PIONEER_SITE = { x: -9, z: 23 };
 // Open ground for games: tag, a tug-of-war and a game of catch.
 // The tug-of-war lies along +x on the flat plateau west of the tents, the beach squad drills east of the camp fire
 // (`beach` is the middle of the three; the trainer stands off to its side), and tag is on the level east of the clinic.
@@ -392,7 +392,7 @@ export function getScatter() {
   ];
   const clearOf = (p, list, extra = 0) => list.every((o) => dist(p, o) > (o.r || 0) + extra);
   // Bigger buildings need a wider berth.
-  const clearOfCottages = (p, d) => COTTAGES.every((c) => dist(p, c) > d + Math.max(0, (Math.max(c.width, c.depth) - 5) / 2));
+  const clearOfCottages = (p, d) => COTTAGES.every((c) => dist(p, c) > d + Math.max(0, (Math.max(c.width, c.depth) - 5) / 3));
 
   function place(count, prefix, ok, makeExtra) {
     const out = [];

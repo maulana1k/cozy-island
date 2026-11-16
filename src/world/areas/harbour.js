@@ -81,6 +81,7 @@ export function create(scene, { keepClear, addPlatform, removePlatform, dayTime,
   }
 
   return {
+    lamps: lamps.map((l) => { const p = toWorld(l.x, l.z); return { x: p.x, y: DOCK.top + 2.2, z: p.z }; }),
     // Called from begin() in src/main.js: a journey arrives by ferry.
     begin(mode) { if (mode === 'journey' && state === 'off') moorUp(); },
     colliders: () => (state === 'moored' ? colliders.concat(ferryColliders) : colliders),

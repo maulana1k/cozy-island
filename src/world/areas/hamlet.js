@@ -376,6 +376,7 @@ export function create(scene, deps) {
   let shown = true, first = true;
 
   return {
+    lamps: halos.map((l) => ({ x: l.x, y: l.y - 0.1, z: l.z })), // lit by the shared lamp lights at night
     interactables,
     colliders() { people.forEach((p, i) => { circles[i].x = p.x; circles[i].z = p.z; circles[i].r = p.hidden || !shown ? 0 : 0.3; }); return colliders.concat(circles); },
     // For checks from the console (window.__game.areas): the layout, the people and the walking network.

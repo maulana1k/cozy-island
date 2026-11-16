@@ -292,13 +292,18 @@ export function createProps(scene, deps) {
   }
 
   // Real lights are costly, so only the three lit lanterns nearest the player get one.
-  const lampLights = [0, 1, 2].map(() => { const l = new THREE.PointLight(PALETTE.lantern, 0, 11, 1.5); scene.add(l); return l; });
+  // A few real lights follow the lamps nearest you, so the ground and walls round them are lit; every
+  // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
+  const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(PALETTE.lantern, 0, 12, 1.4); scene.add(l); return l; });
+  const outside = [];
   const byDistance = [];
 
   let wasNight = null;
   return {
     interactables,
     onBell(cb) { bellListeners.push(cb); },
+    // Lamps placed by other areas: [{ x, y, z }] in world space. They light up after dusk on their own.
+    addLamps(points) { for (const p of points) outside.push({ pos: new THREE.Vector3(p.x, p.y, p.z), glow: 0, flicker: 1 }); },
     setFlag(up) { if (flagState) flagState.up = up; },
     // The nearest burning fire within reach, for cooking on or feeding.
     fireNear(x, z, lit = true) { let best = null, bd = Infinity; for (const f of fires) { const d = Math.hypot(x - f.x, z - f.z); if (d < (f.big ? 4.6 : 3) && d < bd && (!lit || f.fire.lit)) { best = f; bd = d; } } return best; },
@@ -321,6 +326,8 @@ export function createProps(scene, deps) {
       const pp = player.position;
       byDistance.length = 0;
       for (const l of lanterns) if (l.glow > 0.03) byDistance.push(l);
+      const dusk = Math.min(1, Math.max(0, (nightF - 0.3) / 0.4));
+      for (const l of outside) { l.glow = dusk; if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
       lampLights.forEach((light, k) => { const l = byDistance[k]; if (l) { light.position.copy(l.pos); light.intensity = l.glow * 9 * l.flicker; } else light.intensity = 0; });
 

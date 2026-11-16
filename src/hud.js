@@ -372,6 +372,7 @@ export function createHUD(handlers) {
   quest.append(questHead, questTitle, questText, questKey);
   const way = el('div', 'way'); const wayDist = el('b'); way.append(el('i'), wayDist);
   // ---- A tip: one line of help the first time something comes up
+  const lookHint = el('div', 'lookhint', 'Click to look around');
   const tip = el('div', 'tip1'); const tipText = el('span'); tip.append(el('b', null, 'TIP'), tipText);
   let tipTimer = null; const tipQueue = [];
   function nextTip() { const t = tipQueue.shift(); if (!t) { tip.classList.remove('show'); tipTimer = null; return; } tipText.textContent = t; tip.classList.add('show'); tipTimer = setTimeout(() => { tip.classList.remove('show'); tipTimer = setTimeout(nextTip, 500); }, 6500); }
@@ -404,7 +405,7 @@ export function createHUD(handlers) {
   speedRow.addEventListener('click', () => handlers.onDaySpeed());
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(danger, alertBox, stop, night, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -474,6 +475,7 @@ export function createHUD(handlers) {
     },
     toggleMap() { hud.mapOpen = !hud.mapOpen; sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen && hud.bagOpen) hud.toggleBag(); },
     setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.textContent = on ? 'Sound: on' : 'Sound: off'; },
+    setLookHint(on) { lookHint.classList.toggle('show', !!on); },
     setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look' : 'Camera: hold and drag'; },
     // 0 = safe; toward 1 the edges of the picture turn red and the warning shows.
     setDanger(level) { danger.style.opacity = level; root.classList.toggle('danger-on', level > 0); },

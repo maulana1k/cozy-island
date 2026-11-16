@@ -409,26 +409,47 @@ function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syn
 // is open (you need the cursor there) and taken again when you go back to playing.
 let freeLook = false;
 const mouseHeld = () => document.pointerLockElement === canvas;
+const lookWanted = () => freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
+let lockRefused = false; // the browser said no to the last request: it wants a click first
+function updateLookHint() { hud.setLookHint(lookWanted() && !mouseHeld() && lockRefused); }
 function syncLook() {
-  const want = freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
-  if (want && !mouseHeld()) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* the browser may refuse; a click on the picture retries */ } }
+  const want = lookWanted();
+  if (want && !mouseHeld()) {
+    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { lockRefused = true; updateLookHint(); }); } catch { lockRefused = true; /* the browser may refuse; the next click retries */ }
+  }
   if (!want && mouseHeld()) document.exitPointerLock();
+  if (!want) lockRefused = false;
+  updateLookHint();
 }
 function toggleLook() { freeLook = !freeLook; hud.setLook(freeLook); audio.play('ui'); syncLook(); }
 let lockEscAt = -1e9; // when Esc last released the mouse; a keydown for the same press is ignored
+let escActedAt = -1e9; // when an Esc keydown last closed a screen or the menu
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
-  if (mouseHeld() || !hud.started) return;
+  if (mouseHeld()) { lockRefused = false; updateLookHint(); return; }
+  updateLookHint();
+  if (!hud.started) return;
   // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
   // (The journal, map and bag release the mouse themselves when they open, so a release with one of them open is not an Esc.)
   if (scope.active) { lockEscAt = performance.now(); scope.close(); input.consumeInteract(); return; }
   if (storyRt.ui.open) { lockEscAt = performance.now(); storyRt.close(); input.consumeInteract(); return; }
   if (director.active) { lockEscAt = performance.now(); director.skip(); input.consumeHop(); input.consumeInteract(); return; }
+  // An Esc keydown that just closed a screen can win the lock back and lose it to the same held key: that is not "pause".
+  if (performance.now() - escActedAt < 500) return;
   if (freeLook && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) { lockEscAt = performance.now(); hud.openMenu(); }
 });
-// Esc is not a user gesture, so closing the menu with it cannot always take the mouse back; the next click does.
-window.addEventListener('click', syncLook);
-document.addEventListener('pointerlockerror', () => {});
+document.addEventListener('pointerlockerror', () => { lockRefused = true; updateLookHint(); });
+// Esc is not a user gesture, so closing the menu with it may not be allowed to take the mouse back.
+// Try again on the key coming up; if the browser still refuses, the next mouse press takes it, and does nothing else.
+window.addEventListener('keyup', (e) => { if (e.code === 'Escape' && lookWanted() && !mouseHeld()) syncLook(); });
+let swallowClick = false;
+const relockPress = (e) => {
+  if (!(lockRefused && lookWanted() && !mouseHeld()) || e.button !== 0) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  swallowClick = true; syncLook(); // pointerdown is the user gesture that lets the browser grant the lock
+};
+window.addEventListener('pointerdown', relockPress, true);
+window.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.preventDefault(); e.stopImmediatePropagation(); return; } syncLook(); }, true);
 const hud = createHUD({
   onResume: () => { hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
@@ -532,8 +553,15 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
   if (e.code === 'KeyB' && !hud.menuOpen) toggleBag();
   if (/^Digit[1-6]$/.test(e.code) && !hud.menuOpen) { const s = bag.slots[Number(e.code.slice(5)) - 1]; if (s) useItem(s.id); }
-  // Esc closes the journal first, then opens the pause menu.
-  if (e.code === 'Escape') { if (hud.bagOpen && !hud.menuOpen) toggleBag(); else if (hud.journalOpen && !hud.menuOpen) toggleJournal(); else if (hud.mapOpen && !hud.menuOpen) toggleMap(); else toggleMenu(); }
+  // Esc closes the pause menu, else the bag, journal or map, else opens the pause menu.
+  if (e.code === 'Escape') {
+    escActedAt = performance.now();
+    if (hud.menuOpen) toggleMenu();
+    else if (hud.bagOpen) toggleBag();
+    else if (hud.journalOpen) toggleJournal();
+    else if (hud.mapOpen) toggleMap();
+    else toggleMenu();
+  }
 });
 // Debug aids for automated screenshots: ?play skips the start screen, ?x=&z=&yaw= place the player and camera.
 if (params.has('play')) wake();

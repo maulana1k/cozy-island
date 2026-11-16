@@ -186,6 +186,9 @@
     /* One line of help */
     #hud .tip1 { position: absolute; left: 50%; bottom: 112px; transform: translate(-50%, 12px); max-width: min(86vw, 620px); display: flex; gap: 10px; align-items: center; font-size: 16px; font-weight: 700; text-align: left; opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease;
       background: linear-gradient(90deg, rgba(40, 30, 24, 0), rgba(40, 30, 24, 0.55) 12%, rgba(40, 30, 24, 0.55) 88%, rgba(40, 30, 24, 0)); padding: 8px 46px; }
+    #hud .lookhint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 18px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 8px 46px;
+      background: linear-gradient(90deg, rgba(40, 30, 24, 0), rgba(40, 30, 24, 0.55) 12%, rgba(40, 30, 24, 0.55) 88%, rgba(40, 30, 24, 0)); }
+    #hud .lookhint.show { opacity: 1; }
     #hud .tip1.show { opacity: 1; transform: translate(-50%, 0); }
     #hud .tip1 b { font-size: 11px; letter-spacing: 1.5px; color: var(--ink); background: var(--gold); border-radius: 999px; padding: 3px 9px; text-shadow: none; }
     #hud.filming .tip1 { opacity: 0; }

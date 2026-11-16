@@ -187,7 +187,8 @@ export function createBuildings(scene, deps) {
       for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.door.angle > -0.9) out.push(b.doorBlock); }
       return out;
     },
-    setNight(f) { for (const b of buildings) { b.canvas.emissiveIntensity = f * 0.42; b.roofMat.emissiveIntensity = f * 0.3; } },
+    // Canvas lit from inside: only a faint warm glow in the evening (before lights out at 21:36), dark after.
+    setNight(f, t = 0.8) { const awake = t >= 0.7 && t < 0.9 ? Math.min(1, (0.9 - t) / 0.02) : 0, k = f * awake; for (const b of buildings) { b.canvas.emissiveIntensity = k * 0.07; b.roofMat.emissiveIntensity = k * 0.04; } },
     update(dt, elapsed, player) {
       this.inside = null;
       for (const b of buildings) {

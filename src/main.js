@@ -719,7 +719,7 @@ function step() {
   island.setLight(sky.waterLight, sky.fogColor, scene.fog.density);
   village.update(elapsed);
   village.setNight(night);
-  buildings.setNight(night);
+  buildings.setNight(night, timeOfDay);
   scatter.update(elapsed, player.position);
   props.update(dt, elapsed, night);
   effects.update(dt);

@@ -261,14 +261,20 @@ export function createProps(scene, deps) {
     g.remove(flames, light); mergeStatic(g); g.add(flames, light);
     group.add(g);
 
-    const fire = { lit: f.lit, level: f.lit ? 1 : 0, sparkTimer: 0, boost: 0 };
+    // The big camp bonfire keeps camp hours: it burns from 18:00 until 06:00 on its own and nobody can
+    // light it or put it out in between. The small fires are the player's to light.
+    const scheduled = big && !!deps.dayTime;
+    const burning = () => { const h = (((deps.dayTime() % 1) + 1) % 1) * 24; return h >= 18 || h < 6; };
+    const fire = { lit: scheduled ? burning() : f.lit, level: 0, sparkTimer: 0, boost: 0, scheduled };
+    fire.level = fire.lit ? 1 : 0;
     interactables.push({
       id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + (big ? 3.1 : 1.7),
-      prompt: () => (fire.lit ? 'E — put out fire' : 'E — light fire'),
-      interact() { fire.lit = !fire.lit; audio.play('fire'); },
+      prompt: () => (scheduled ? (fire.lit ? 'Camp fire burns until 06:00' : 'Camp fire is lit at 18:00') : fire.lit ? 'E — put out fire' : 'E — light fire'),
+      interact() { if (scheduled) return; fire.lit = !fire.lit; audio.play('fire'); },
     });
     fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 9 : 5, loud: big ? 1 : 0.55 });
     updaters.push((dt, elapsed) => {
+      if (scheduled) fire.lit = burning();
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       flames.visible = fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
@@ -309,6 +315,7 @@ export function createProps(scene, deps) {
     fireNear(x, z, lit = true) { let best = null, bd = Infinity; for (const f of fires) { const d = Math.hypot(x - f.x, z - f.z); if (d < (f.big ? 4.6 : 3) && d < bd && (!lit || f.fire.lit)) { best = f; bd = d; } } return best; },
     // Throw wood on: the fire catches if it was out, flares up and throws sparks.
     stoke(f) {
+      if (f.fire.scheduled && !f.fire.lit) return; // the camp fire waits for 18:00; the wood is simply added to the stack
       f.fire.lit = true; f.fire.boost = 1;
       for (let i = 0; i < 14; i++) spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, f.y + (f.big ? 1.4 : 0.7), f.z + (Math.random() - 0.5) * 0.6), new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.6 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1.2, { gravity: 1.2, flutter: 0.8 });
     },

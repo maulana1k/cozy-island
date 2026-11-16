@@ -87,7 +87,7 @@ const wilds = createWilds(scene);
 const input = createInput(window, canvas);
 const player = createPlayer(scene, { groundAt, surfaceAt, surfaces: SURFACES });
 const rig = createFollowCamera(camera);
-const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed, onShake: (t) => shakeFruit(t) });
+const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed, dayTime: () => timeOfDay, onShake: (t) => shakeFruit(t) });
 setGround(groundAt); // every figure plants its feet on this
 const crowd = createCrowd(); // the camp timetable everyone follows
 const villagers = createVillagers(scene, { ui, audio, player, crowd });

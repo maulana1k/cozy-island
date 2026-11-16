@@ -23,7 +23,7 @@ export function createPlayer(scene, opts = {}) {
   const facing = { x: 0, z: -1 };
   const vel = { x: 0, z: 0 };
   let vy = 0, airborne = false, heading = Math.PI, yVel = 0;
-  let buffer = 0, coyote = 0, land = 0, sinceStep = 0, windUp = -1;
+  let buffer = 0, coyote = 0, land = 0, sinceStep = 0, windUp = -1, lastSteps = 0;
   let gesture = null, look = null, onGround = false, idleFor = 0, nextFidget = 5, stumbleRest = 0;
   const FIDGETS = [['scratch', 1.3], ['stretch', 1.6], ['yawn', 1.6], ['tapfoot', 1.8], ['lookabout', 1.8], ['lookabout', 1.8]];
 
@@ -123,9 +123,11 @@ export function createPlayer(scene, opts = {}) {
           sinceStep += Math.hypot(next.x - prev.x, next.z - prev.z);
         }
         const speed = Math.hypot(vel.x, vel.z);
-        // One footfall per step, in time with the legs (same step length as the animation).
+        // One footfall each time a foot touches down in the animation (a long way without one, say after a
+        // pose that held the legs, counts too).
         const stride = Math.max(0.2, figure.stepLength(speed));
-        if (sinceStep >= stride && !airborne) {
+        const fell = figure.steps !== lastSteps; lastSteps = figure.steps;
+        if (!airborne && ((fell && speed > 0.3 && sinceStep > stride * 0.4) || sinceStep >= stride * 1.6)) {
           sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 3.1);
           // Now and then a running scout trips over their own feet, more often on slippery ground.
           stumbleRest -= 1;

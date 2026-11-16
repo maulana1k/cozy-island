@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { heightAt, landR, wildness, shoreR } from '../logic/terrain.js';
+import { heightAt, landR, wildness, shoreR, coastShift } from '../logic/terrain.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
@@ -118,6 +118,8 @@ const waterFragment = /* glsl */ `
   uniform float uBlend;
   uniform sampler2D uLand;
   uniform vec4 uLandBox;
+  uniform sampler2D uCoast;
+  uniform vec4 uCoastBox;
   varying vec3 vWorld;
   varying float vWave;
   void main() {
@@ -128,6 +130,11 @@ const waterFragment = /* glsl */ `
     // counts the river and the lake as inland water (so they get no surf).
     vec2 luv = (vWorld.xz - uLandBox.xy) * uLandBox.zw;
     if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) r = texture2D(uLand, luv).r;
+    else {
+      // Elsewhere the round coast is moved by the same irregular shift the land uses (baked from terrain.js).
+      vec2 cuv = (vWorld.xz - uCoastBox.xy) * uCoastBox.zw;
+      if (cuv.x > 0.0 && cuv.y > 0.0 && cuv.x < 1.0 && cuv.y < 1.0) r += texture2D(uCoast, cuv).r;
+    }
     float ang = atan(vWorld.z, vWorld.x);
     float depthT = smoothstep(uShore - 2.0, uShore + 22.0, r);
     vec3 col = mix(uShallow, uDeep, depthT);
@@ -172,6 +179,17 @@ function bakeLand() {
   return tex;
 }
 
+// The irregular coast's shift (metres on the island's scale), baked on a wide box at 1.5 m: the
+// sea shader adds it to its round coast where the land is not covered by the map above.
+const COAST_BOX = { x0: -200, z0: -200, cell: 1.5, w: 294, h: 227 };
+function bakeCoast() {
+  const { x0, z0, cell, w, h } = COAST_BOX, data = new Uint16Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) data[j * w + i] = THREE.DataUtils.toHalfFloat(coastShift(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell));
+  const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat, THREE.HalfFloatType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+  return tex;
+}
+
 function buildWater() {
   const geo = new THREE.PlaneGeometry(900, 900, 220, 220);
   geo.rotateX(-Math.PI / 2);
@@ -191,6 +209,8 @@ function buildWater() {
       uWild: { value: new THREE.Vector3(WILD.x, WILD.z, WILD.radius) },
       uBlend: { value: WILD.blend },
       uLand: { value: bakeLand() },
+      uCoast: { value: bakeCoast() },
+      uCoastBox: { value: new THREE.Vector4(COAST_BOX.x0, COAST_BOX.z0, 1 / (COAST_BOX.w * COAST_BOX.cell), 1 / (COAST_BOX.h * COAST_BOX.cell)) },
       uLandBox: { value: new THREE.Vector4(LAND_BOX.x0, LAND_BOX.z0, 1 / LAND_BOX.w, 1 / LAND_BOX.h) },
     },
   });

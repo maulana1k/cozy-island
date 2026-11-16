@@ -303,6 +303,10 @@ const speechPos = new THREE.Vector3(), wayPos = new THREE.Vector3();
 const journey = createJourney();
 const director = createDirector(camera);
 const noLimit = params.has('nolimit'); // debug: draw as fast as possible, for measuring
+// How fast the day goes by: 1× is the normal 8-minute day, 2× is twice as fast. Remembered between visits.
+const DAY_SPEEDS = [1, 1.25, 1.5, 2];
+let daySpeed = 1; try { daySpeed = DAY_SPEEDS.includes(Number(localStorage.getItem('daySpeed'))) ? Number(localStorage.getItem('daySpeed')) : 1; } catch { /* private window */ }
+function cycleDaySpeed() { daySpeed = DAY_SPEEDS[(DAY_SPEEDS.indexOf(daySpeed) + 1) % DAY_SPEEDS.length]; hud.setDaySpeed(daySpeed); if (hud.started) hud.note && hud.note(`Day speed ${daySpeed}×`); audio.play('ui'); try { localStorage.setItem('daySpeed', String(daySpeed)); } catch { /* private window */ } }
 let saver = false; try { saver = localStorage.getItem('saver') === '1'; } catch { /* private window */ }
 let guideOn = false, filmsOn = true, collected = 0, filmDue = null;
 const tipsSeen = new Set(), filmsSeen = new Set();
@@ -412,8 +416,9 @@ const hud = createHUD({
   onDropItem: (id) => dropItem(id),
   describeItem: (id) => describeItem(id),
   onSetTime: (t) => { timeOfDay = t; },
+  onDaySpeed: () => cycleDaySpeed(),
 });
-refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver);
+refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setDaySpeed(daySpeed);
 // What every scout sets out with.
 bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
 refreshBag();
@@ -453,6 +458,7 @@ window.addEventListener('keydown', (e) => {
   // During a film any of these keys skips it; nothing else works until it is over.
   if (director.active) { if (['Space', 'Enter', 'Escape', 'KeyE'].includes(e.code)) { director.skip(); input.consumeHop(); input.consumeInteract(); } return; }
   if (e.code === 'KeyG' && !hud.menuOpen) toggleGuide();
+  if (e.code === 'KeyT') cycleDaySpeed();
   if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
   if (e.code === 'KeyM' && !hud.menuOpen) toggleMap();
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
@@ -520,7 +526,7 @@ function step() {
 
   if (!freezeTime) {
     const before = timeOfDay;
-    timeOfDay = advance(timeOfDay, dt * (sleeping ? 45 : 1));
+    timeOfDay = advance(timeOfDay, dt * (sleeping ? 45 : daySpeed));
     // Morning: time to get up. Pressing a movement key gets you up early.
     if (sleeping && ((before < 0.105 && timeOfDay >= 0.105) || input.move.x !== 0 || input.move.z !== 0)) wakeUp();
     if (timeOfDay < before && dt > 0) dayNumber++;

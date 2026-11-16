@@ -110,6 +110,51 @@ function massifHeight(x, z) {
   // Ledges: the rock climbs in steps, with a flat shelf every `ledge` metres of height.
   return hs - (MAS.ledge / (2 * Math.PI)) * Math.sin((2 * Math.PI * hs) / MAS.ledge) * 0.85 + 0.35 * u * noise(x / 3.1, z / 3.1 + 17);
 }
+// ---- A natural coastline --------------------------------------------------------------------
+// The coast is where the island's scale reads 60. A low-frequency noise (broad bulges 20 to 40 m, bays,
+// coves, points and small wiggles) is added to that measure near the shore. It is zero inland of the grass
+// (the camp core stays put), fades out to sea, and fades to nothing within about 14 m of everything fixed
+// on the beach: the dock and ferry, the campfire, the river and its mouth, the bridge, the lake and the jetty.
+// Positive shift = the land recedes (a bay), negative = it reaches out (a headland).
+const COAST_DOCK = { a: { x: Math.cos(0.3142) * 52, z: Math.sin(0.3142) * 52 }, b: { x: Math.cos(0.3142) * 82, z: Math.sin(0.3142) * 82 } }; // layout.js DOCK: 18 deg, radial
+const COAST_FIRE = { x: Math.cos(128 * Math.PI / 180) * 53, z: Math.sin(128 * Math.PI / 180) * 53 }; // layout.js CAMPFIRE
+const COAST_JETTY = { a: { x: 150, z: -62 }, b: { x: 196, z: -62 } };
+const COAST_NEAR = 14, COAST_FADE = 12;
+function coastKeep(x, z) {
+  const near = (d) => d < COAST_NEAR;
+  if (near(capsuleD(x, z, COAST_DOCK.a, COAST_DOCK.b))) return 0;
+  if (near(Math.hypot(x - COAST_FIRE.x, z - COAST_FIRE.z) - 6)) return 0;
+  let d = Math.min(capsuleD(x, z, COAST_DOCK.a, COAST_DOCK.b), Math.hypot(x - COAST_FIRE.x, z - COAST_FIRE.z) - 6);
+  if (inNew(x, z) || (x > 14 && x < 215 && z < 40 && z > -200)) {
+    d = Math.min(d, capsuleD(x, z, COAST_JETTY.a, COAST_JETTY.b), capsuleD(x, z, AREAS.bridge.a, AREAS.bridge.b),
+      Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r);
+    const rv = nearestOn(riverLine, x, z, 45);
+    if (rv.d !== Infinity) { const { a, b } = riverLine.segs[rv.i]; d = Math.min(d, rv.d - (a.w + (b.w - a.w) * rv.t)); }
+    d = Math.min(d, Math.hypot(x - AREAS.riverMouth.x, z - AREAS.riverMouth.z));
+  }
+  return smooth((d - COAST_NEAR) / COAST_FADE);
+}
+function coastNoise(x, z) {
+  const bay = noise(x / 19 + 300, z / 19 + 40), point = noise(x / 23 + 90, z / 23 + 410);
+  return 11.0 * noise(x / 34 + 101, z / 34 + 17) + 4.2 * noise(x / 13 + 7, z / 13 + 211) + 1.6 * noise(x / 6 + 55, z / 6 + 9)
+    + 6.0 * smooth((bay - 0.35) / 0.3) - 5.0 * smooth((-point - 0.35) / 0.3);
+}
+// How much the coast measure moves at (x, z) where the unshifted measure reads r.
+function coastShiftAt(x, z, r) {
+  const w = smooth((r - GRASS_RADIUS) / 12) * (1 - smooth((r - ISLAND_RADIUS - 10) / 16));
+  if (w <= 0) return 0;
+  const keep = coastKeep(x, z);
+  return keep > 0 ? coastNoise(x, z) * keep * w : 0;
+}
+const landR0 = (x, z) => {
+  const old = oldLandR(x, z);
+  if (!inNew(x, z)) return old;
+  const m = massifAt(x, z);
+  return Math.min(old, localsR(x, z, riverAt(x, z)), ISLAND_RADIUS + (m.d - MAS.r) * 2.5);
+};
+// The shift itself (metres on the island's scale), for the sea shader's baked map.
+export const coastShift = (x, z) => coastShiftAt(x, z, landR0(x, z));
+
 const shore = (r) => {
   if (r <= GRASS_RADIUS) return GRASS_HEIGHT;
   if (r <= ISLAND_RADIUS) { const t = (r - GRASS_RADIUS) / (ISLAND_RADIUS - GRASS_RADIUS); return GRASS_HEIGHT * (1 - t * t); }
@@ -283,7 +328,7 @@ function localsHeight(x, z, lr, rv, beforePaddies = false) {
 }
 
 function newLand(x, z, hOld) {
-  const rv = riverAt(x, z), lr = localsR(x, z, rv);
+  const rv = riverAt(x, z), lr0 = localsR(x, z, rv), lr = lr0 + coastShiftAt(x, z, lr0);
   let h = lr < ISLAND_RADIUS + 2 ? localsHeight(x, z, lr, rv) : shore(lr);
   const hm = massifHeight(x, z);
   h = Math.max(hOld, h, hm);
@@ -330,10 +375,8 @@ function cutPath(L, run, x, z, h) {
 // Where the land is, on the island's scale: under 60 is land, under 48 is grass. The old land
 // keeps its numbers exactly; the new land only ever adds to it.
 export function landR(x, z) {
-  const old = oldLandR(x, z);
-  if (!inNew(x, z)) return old;
-  const m = massifAt(x, z);
-  return Math.min(old, localsR(x, z, riverAt(x, z)), ISLAND_RADIUS + (m.d - MAS.r) * 2.5);
+  const r = landR0(x, z);
+  return r + coastShiftAt(x, z, r);
 }
 // The same, but with the river and the lake counted as inland water, not sea: the sea shader,
 // the map and the sound of the surf use this, so the river has no surf and no sea roar.
@@ -481,7 +524,7 @@ function hillHeight(x, z, r) {
 
 // The lie of the camp and the jungle before anything is dug into it.
 function oldHeight(x, z) {
-  const r0 = Math.hypot(x, z), eq = wildEq(x, z), r = melt(r0, eq);
+  const r0 = Math.hypot(x, z), eq = wildEq(x, z), rm = melt(r0, eq), r = rm + coastShiftAt(x, z, rm);
   let h;
   if (r <= GRASS_RADIUS) h = GRASS_HEIGHT;
   else if (r <= ISLAND_RADIUS) {

@@ -4,8 +4,10 @@ import { heightAt, zoneAt } from '../logic/terrain.js';
 import { getScatter, distanceToPath, jungleAt, PLAY_CLEAR, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
 import { POND, HILL } from '../config.js';
 import { createRng } from '../logic/rng.js';
-import { facetShade } from '../kit/plants.js';
+import { facetShade, meadowClump } from '../kit/plants.js';
+import { campDrift, vegDist } from './ground.js';
 import { PALETTE, SEED } from '../config.js';
+import { WIND, WIND_GLSL, windSway } from './weather.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 const SHAKE_TIME = 1.1;
@@ -14,7 +16,7 @@ const SHAKE_TIME = 1.1;
 export const shakeAmp = (height) => Math.min(0.05, 0.035 / Math.max(0.6, (height / 2.5) ** 2));
 // A short damped oscillation: ~3.2 Hz, dying away within SHAKE_TIME.
 export const shakeWave = (since) => Math.exp(-since * 4.2) * Math.sin(since * 20);
-const GRASS_TUFTS = 7000;
+const GRASS_TUFTS = 5600;
 const FERNS = 260;
 
 // A faceted lump, squashed and placed.
@@ -135,9 +137,8 @@ export const TREE_KINDS = [
 TREE_KINDS.forEach((k, i) => { const make = k.canopy; k.canopy = () => facetShade(make(), i + 1); });
 
 export const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
-// Soft grass: many thin curved blades, most of them short.
-// Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
-export const tuftGeometry = () => ribbonClump({ blades: 5, height: 0.72, width: 0.07, spread: 0.2, droop: 0.85, rows: 4 });
+// Soft meadow grass: a clump of 12 thin, curved, tapering blades (60 triangles), mostly short (src/kit/plants.js).
+export const tuftGeometry = () => meadowClump({ blades: 12, height: 0.5, spread: 0.34, width: 0.036, segs: 3, seed: 3 });
 
 // A chunky angular block of stone with a flat top.
 export function rockGeometry() {
@@ -157,8 +158,8 @@ export function bushGeometry() {
 export function swayingGrassMaterial(grassTime, grassWalker) {
   const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true });
   grassMat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = grassTime; shader.uniforms.uWalker = grassWalker;
-    shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWalker;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    shader.uniforms.uTime = grassTime; shader.uniforms.uWalker = grassWalker; shader.uniforms.uWind = WIND;
+    shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWalker;\nuniform vec4 uWind;\n' + WIND_GLSL + '\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
         // The breeze crosses the field as slow waves, with gusts; tips move most.
         vec2 at = instanceMatrix[3].xz;
@@ -166,8 +167,10 @@ export function swayingGrassMaterial(grassTime, grassWalker) {
         float swayA = sin(uTime * 1.05 + at.x * 0.16 + at.y * 0.11) * gust;
         float swayB = cos(uTime * 0.8 + at.x * 0.09 - at.y * 0.13) * gust;
         float tip = position.y * position.y;
-        transformed.x += swayA * 0.16 * tip;
-        transformed.z += swayB * 0.1 * tip;
+        float ws = 1.0 + uWind.z * 3.0; // the shared wind: stronger sway, and a lean the way it blows
+        transformed.x += swayA * 0.16 * tip * ws;
+        transformed.z += swayB * 0.1 * tip * ws;
+        transformed.xz += windPush(at, uWind.w, uWind.z) * tip * 3.0;
         // Grass leans away from feet walking through it.
         vec2 away = at - uWalker.xz; float near = 1.0 - smoothstep(0.2, 1.3, length(away));
         transformed.xz += normalize(away + 0.0001) * near * 0.45 * tip;
@@ -213,7 +216,7 @@ export function createScatter(scene) {
   dummy.rotation.order = 'XYZ';
 
   // ---- Spiky bushes
-  const bushes = new THREE.InstancedMesh(bushGeometry(), flat(0xffffff, { vertexColors: true }), data.bushes.length);
+  const bushes = new THREE.InstancedMesh(bushGeometry(), windSway(flat(0xffffff, { vertexColors: true }), 0.03), data.bushes.length);
   bushes.castShadow = true; bushes.receiveShadow = true;
   data.bushes.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - 0.05, b.z); dummy.rotation.set(0, b.rot, 0); dummy.scale.setScalar(b.scale * 1.15); dummy.updateMatrix();
@@ -254,34 +257,33 @@ export function createScatter(scene) {
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
-  const grassColors = [0x8fa457, 0x84994e, 0x9bad62, 0x7b9049, 0xa3a965]; // the camp ground's greens, a touch lighter so the tufts still read
-  const accentLavender = [0xa790c4, 0xb59ad0, 0x9a86bc], accentGold = [0xcdb35c, 0xd8c070, 0xbfa24f];
-  const lushColors = [0x7d9a4c, 0x718e45, 0x89a556, 0x67853f, 0x93a95c];
-  while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 40) {
+  // (src/world/island.js registers the camp's trees and bushes with the ground, so the ground tone and the wild clumps agree.)
+  while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 60) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.25) continue;
+    if (zoneAt(x, z) !== 'grass') continue;
+    const pathD = distanceToPath(x, z);
+    if (pathD < 1.25) continue;
     if (Math.hypot(x - HILL.x, z - HILL.z) < 7.6) continue; // the summit camp is trodden bare
     if (Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 6.2 || Math.hypot(x - WINDMILL.x, z - WINDMILL.z) < 2.6) continue;
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < Math.max(c.width, c.depth) / 2 + 1)) continue;
     if (PLAY_CLEAR.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue; // the games' ground stays open
     if (Math.hypot(x - FIELD.x, z - FIELD.z) < 5 || TENTS.some((t) => Math.hypot(x - t.x, z - t.z) < 1.9)) continue;
-    // Grass grows in drifts rather than evenly.
-    // Grass grows in thick stands with open ground between, and is kept thin and short round the camp.
-    const drift = Math.sin(x * 0.31 + Math.cos(z * 0.27) * 1.9) * Math.cos(z * 0.29 + 1.3) + Math.sin(x * 0.9 + z * 0.7) * 0.25;
+    // Grass grows in lush drifts (the same field that deepens the ground's green), thinning toward paths and round the camp.
+    const drift = campDrift(x, z), veg = vegDist(x, z), wild = veg < 1.8 ? 1 - Math.max(0, veg) / 1.8 : 0;
     const inCamp = Math.hypot(x - 10, z - 8) < 19;
-    if (drift < 0.12 && rng() < 0.93) continue;
-    if (inCamp && rng() < 0.7) continue;
+    const keep = (0.45 + 0.55 * Math.min(1, Math.max(0, (drift + 0.3) / 0.7))) * Math.min(1, (pathD - 1.25) / 2.5 + 0.35) * (inCamp ? 0.4 : 1) + wild * 0.5;
+    if (rng() > keep) continue;
     const pd = Math.hypot(x - POND.x, z - POND.z);
     if (pd < POND.rw + 1.3) continue; // bare mud at the water's edge
     const lush = Math.max(heightAt(x, z) > 3.2 ? 0 : jungleAt(x, z), pd < POND.rw + 9 ? 1 : 0);
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0);
-    const s = 0.75 + rng() * 0.6; dummy.scale.set(s, s * (inCamp ? 0.45 + rng() * 0.3 : 0.7 + rng() * 0.8), s); dummy.updateMatrix();
+    // Mostly short and soft; the odd taller clump, and tall wild ones against bushes and trunks.
+    const s = 0.8 + rng() * 0.5, tall = rng() < 0.12 ? 1.5 : 1;
+    dummy.scale.set(s, s * (inCamp ? 0.7 + rng() * 0.3 : 0.75 + rng() * 0.45) * tall * (1 + wild * (0.7 + rng() * 0.5)), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
-    // About 8% of the clumps are an accent (soft lavender, golden dry); the rest vary a little in tone.
-    const pick = rng();
-    color.setHex(pick < 0.045 ? accentLavender[Math.floor(rng() * 3)] : pick < 0.08 ? accentGold[Math.floor(rng() * 3)] : (lush > 0.5 ? lushColors : grassColors)[Math.floor(rng() * 5)]);
-    if (pick >= 0.08) color.offsetHSL((rng() - 0.5) * 0.03, 0, (rng() - 0.5) * 0.06);
-    grass.setColorAt(placed, color);
+    // The blades carry the colour; each clump only nudges hue and value, deeper in the jungle and where it is wild.
+    const v = 0.9 + rng() * 0.2, deep = (lush > 0.5 ? 0.92 : 1) * (1 - wild * 0.12);
+    grass.setColorAt(placed, color.setRGB(v * deep * (0.94 + rng() * 0.12), v * (0.96 + rng() * 0.08), v * deep * (0.9 + rng() * 0.16), THREE.LinearSRGBColorSpace));
     placed++;
   }
   grass.count = placed;
@@ -325,7 +327,12 @@ export function createScatter(scene) {
       if (!shaking && (swayFrame++ & 1)) return;
       for (const t of trees) {
         // A slow breeze, plus a quick fading wobble when shaken.
-        let tiltX = Math.sin(elapsed * 0.8 + t.phase) * 0.012, tiltZ = Math.cos(elapsed * 0.6 + t.phase) * 0.012;
+        // The shared wind (src/world/weather.js): a stronger sway and a lean the way it blows, gusting in waves.
+        const wv = WIND.value, ws = wv.z, amp = 0.012 * (1 + ws * 3.2);
+        let tiltX = Math.sin(elapsed * (0.8 + ws * 1.2) + t.phase) * amp, tiltZ = Math.cos(elapsed * (0.6 + ws) + t.phase) * amp;
+        { const gust = (0.55 + 0.45 * Math.sin(wv.w * 0.9 + (t.x * wv.x + t.z * wv.y) * 0.07)) * (0.5 + 0.5 * Math.sin(wv.w * (1.3 + 2.4 * ws) + t.x * 0.31 + t.z * 0.23)), lean = (0.004 + 0.075 * ws * ws) * gust / Math.sqrt(t.scale);
+          const c = Math.cos(t.rot), sn = Math.sin(t.rot), lx = wv.x * c - wv.y * sn, lz = wv.x * sn + wv.y * c; // the lean in the tree's own frame (rotation order YXZ)
+          tiltX += lz * lean; tiltZ -= lx * lean; }
         const since = elapsed - t.shakeStart;
         if (since >= 0 && since < SHAKE_TIME) {
           const a = shakeAmp(TREE_KINDS[t.kind].top * t.scale), w = shakeWave(since);

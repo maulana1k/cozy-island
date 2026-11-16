@@ -190,7 +190,41 @@ export function paintNewGround(c, x, z, h, slope) {
   if (g.oldTrail < 1.6) c.lerp(trail, smooth((1.02 - g.oldTrail) / 0.1));
   // Stamps: paths, the square, yards, and whatever the areas add.
   if (g.locals > 0.01 && h > 0.05) applyStamps(c, x, z);
+  if (h > 0.1) vegTone(c, x, z, g.locals < 0.5);
   return true;
+}
+
+// ---- Ground tone under vegetation: where the grass grows lush the ground is a deeper, richer green; round and under
+// bushes and trees it is darker and damper (a soft halo 2.4 m out). The grass uses the same drift fields and the same
+// bush/tree list (addVegetation), so ground and grass agree. Bare and trodden ground (not green) is left pale and dusty.
+const wave = (x, z, s, o) => Math.sin(x / s + o) * Math.cos(z / (s * 0.83) - o * 1.7) + 0.5 * Math.sin((x + z) / (s * 0.47) + o * 2.3);
+export const grassDrift = (x, z) => wave(x, z, 5.3, 0.9) + 0.6 * wave(x, z, 2.1, 3.3);                 // the locals' land (src/world/flora.js)
+export const campDrift = (x, z) => Math.sin(x * 0.31 + Math.cos(z * 0.27) * 1.9) * Math.cos(z * 0.29 + 1.3) + Math.sin(x * 0.9 + z * 0.7) * 0.25; // the camp (src/world/scatter.js)
+const VEG_CELL = 6, VEG_HALO = 2.4, vegGrid = new Map();
+// Registers bushes and trees as [{ x, z, r }] (r: how far the crown or the shrub reaches). With `dirty`, repaints the ground round them.
+export function addVegetation(list, dirty = false) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const p of list) {
+    const k = `${Math.floor(p.x / VEG_CELL)},${Math.floor(p.z / VEG_CELL)}`; let l = vegGrid.get(k); if (!l) vegGrid.set(k, l = []); l.push(p);
+    x0 = Math.min(x0, p.x - p.r - VEG_HALO); x1 = Math.max(x1, p.x + p.r + VEG_HALO); z0 = Math.min(z0, p.z - p.r - VEG_HALO); z1 = Math.max(z1, p.z + p.r + VEG_HALO);
+  }
+  if (dirty && list.length) DIRTY.push({ version: ++version, box: [x0, x1, z0, z1] });
+}
+// Metres from (x, z) to the edge of the nearest registered bush or tree (Infinity when none within a few metres).
+export function vegDist(x, z) {
+  let d = Infinity; const i0 = Math.floor((x - 5) / VEG_CELL), i1 = Math.floor((x + 5) / VEG_CELL), j0 = Math.floor((z - 5) / VEG_CELL), j1 = Math.floor((z + 5) / VEG_CELL);
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const l = vegGrid.get(`${i},${j}`); if (l) for (const p of l) d = Math.min(d, Math.hypot(p.x - x, p.z - z) - p.r); }
+  return d;
+}
+const veg = { deep: C(0x4a7a2a), damp: C(0x3e5024), dampBrown: C(0x4a4a2a) };
+// Tints `c` in place. `camp`: use the camp's drift field instead of the locals' land's.
+export function vegTone(c, x, z, camp = false) {
+  const green = smooth((c.g / Math.max(1e-4, c.r) - 1.15) / 0.35); // 0 on dirt, sand and stone; 1 on grass
+  if (green <= 0.01) return;
+  const drift = camp ? campDrift(x, z) : grassDrift(x, z);
+  c.lerp(veg.deep, green * smooth((drift + 0.1) / 0.7) * 0.4);
+  const e = vegDist(x, z);
+  if (e < VEG_HALO) c.lerp(veg.damp, green * smooth((VEG_HALO - e) / VEG_HALO) * 0.6).lerp(veg.dampBrown, green * smooth((0.8 - e) / 0.8) * 0.25);
 }
 
 // Slope (rise per metre) at each vertex of a regular grid of heights (row-major, n x n, spacing `step`).

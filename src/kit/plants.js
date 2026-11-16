@@ -211,14 +211,46 @@ export function flowerPatch() {
   }
   return merge(parts);
 }
-// A grass tuft: four soft blades (16 triangles). White, darker at the root: the instance colour sets the hue.
-// Multipliers on the instance colour (linear): a darker, cooler base into lighter, warmer yellow-green tips.
-const GRASS_BASE = new THREE.Color().setRGB(0.6, 0.68, 0.72, THREE.LinearSRGBColorSpace), GRASS_TIP = new THREE.Color().setRGB(1.25, 1.22, 0.88, THREE.LinearSRGBColorSpace);
-export function grassTuft() {
-  const parts = [];
-  for (let i = 0; i < 4; i++) parts.push(ribbon({ a: (i / 4) * Math.PI * 2 + (i % 2) * 0.7, len: 0.5 + (i % 3) * 0.14, width: 0.055, droop: 0.7 + (i % 2) * 0.35, rows: 2, r0: 0.03 + (i % 3) * 0.06, base: GRASS_BASE, tip: GRASS_TIP }));
-  return merge(parts);
+// A meadow clump: many thin, softly curved blades arching out of one spot, mostly short with a few medium ones.
+// Each blade is 2-3 ribbon segments tapering to a point. Colours are baked (linear, absolute) from deep green at the root
+// through mid green to a fresh yellow-green tip; ~13% of blades have a sun-dried tip. The instance colour only jitters
+// hue and value (keep it near white). `blades` x (segs 3: 5 triangles, segs 2: 3 triangles).
+const GRASS_DEEP = [0x3f5a2a, 0x4b6b30], GRASS_MID = 0x6b8f3e, GRASS_TIP = [0x9fb35a, 0xb3c06a], GRASS_DRY = 0xc2b46e;
+export function meadowClump({ blades = 10, height = 0.5, spread = 0.16, width = 0.026, segs = 3, seed = 1 } = {}) {
+  const r = rnd(seed), pos = [], nor = [], col = [];
+  const cd = new THREE.Color(), cm = new THREE.Color(), ct = new THREE.Color(), c = new THREE.Color();
+  const T = segs === 3 ? [0, 0.38, 0.72, 1] : [0, 0.5, 1], W = segs === 3 ? [1, 0.88, 0.55, 0] : [1, 0.68, 0];
+  for (let b = 0; b < blades; b++) {
+    const a = b * 2.39996 + r() * 0.6, dx = Math.cos(a), dz = Math.sin(a), px = -dz, pz = dx;
+    const hb = height * (0.3 + 0.7 * Math.pow(r(), 2.3)), r0 = spread * 0.5 * Math.sqrt(r()), lean = hb * (0.2 + 0.5 * r()), side = (r() - 0.5) * hb * 0.3, w0 = width * (0.8 + 0.5 * r());
+    const dry = r() < 0.13, v = 0.9 + 0.2 * r();
+    cd.setHex(GRASS_DEEP[0]).lerp(c.setHex(GRASS_DEEP[1]), r());
+    cm.setHex(GRASS_MID).multiplyScalar(v);
+    if (dry) { ct.setHex(GRASS_DRY).multiplyScalar(0.92 + 0.14 * r()); cm.lerp(c.setHex(GRASS_DRY), 0.3); }
+    else ct.setHex(GRASS_TIP[0]).lerp(c.setHex(GRASS_TIP[1]), r()).multiplyScalar(v);
+    const pts = T.map((t, i) => {
+      const out = r0 + lean * Math.pow(t, 1.7), y = hb * (t - 0.18 * t * t * (lean / hb)), sd = side * t * t, w = w0 * W[i];
+      const cx = dx * out + px * sd, cz = dz * out + pz * sd;
+      if (t < 0.45) c.copy(cd).lerp(cm, t / 0.45); else c.copy(cm).lerp(ct, Math.pow((t - 0.45) / 0.55, 0.9));
+      return { l: [cx - px * w, y, cz - pz * w], r: [cx + px * w, y, cz + pz * w], c: [c.r, c.g, c.b] };
+    });
+    const nx = dx * 0.3, nz = dz * 0.3, nl = Math.hypot(nx, 1, nz);
+    const tri = (p, q, s) => { for (const [pt, k] of [[p, 0], [q, 1], [s, 2]]) { pos.push(...pt[0]); col.push(...pt[1]); nor.push(nx / nl, 1 / nl, nz / nl); } };
+    for (let i = 0; i < T.length - 1; i++) {
+      const p = pts[i], q = pts[i + 1];
+      if (i === T.length - 2) { tri([p.l, p.c], [p.r, p.c], [q.l, q.c]); }
+      else { tri([p.l, p.c], [p.r, p.c], [q.l, q.c]); tri([p.r, p.c], [q.r, q.c], [q.l, q.c]); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeBoundingSphere();
+  return g;
 }
+// A grass tuft for the locals' land: 8 thin blades, 2 segments each (24 triangles).
+export const grassTuft = () => meadowClump({ blades: 8, height: 0.5, spread: 0.14, width: 0.028, segs: 2, seed: 7 });
 // A far-off stand-in for a tree or a bush: one squashed lump (20 triangles).
 export function lump() {
   const g = new THREE.IcosahedronGeometry(1, 0); g.scale(1, 0.62, 1);

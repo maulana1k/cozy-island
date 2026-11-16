@@ -16,9 +16,10 @@
 // pool (the camp's grass material). Made a few 4 m cells a frame as you walk.
 import * as THREE from 'three';
 import { heightAt, groundKind, wildness } from '../logic/terrain.js';
-import { paintNewGround, groundVersion } from './ground.js';
+import { paintNewGround, groundVersion, grassDrift, vegDist, addVegetation } from './ground.js';
 import { areaKeepsClear } from './wilds.js';
 import { swayingGrassMaterial } from './scatter.js';
+import { windSway } from './weather.js';
 import * as M from '../kit/plants.js';
 import { AREAS, SEED } from '../config.js';
 
@@ -30,7 +31,6 @@ const wave = (x, z, s, o) => Math.sin(x / s + o) * Math.cos(z / (s * 0.83) - o *
 // ---- The kinds of plant. `col`: collider radius per unit of scale (0: none); `clear`: metres kept from a
 // path's edge; `space`: metres kept from other solid plants (times scale); `lump`: the far stand-in (crown
 // centre height, radius, squash, colour), or null for none. `tree`: counts as a tree for spacing.
-const ACCENT_LAVENDER = [0xa790c4, 0xb59ad0, 0x9a86bc], ACCENT_GOLD = [0xcdb35c, 0xd8c070, 0xbfa24f];
 export const KINDS = {
   broad: { make: M.broadleafTree, cap: 1400, near: NEAR_TREE, col: 0.32, clear: 2.2, space: 2.8, tree: true, lump: { y: 4.6, r: 2.8, sy: 1.15, c: 0x557f45 } },
   tall: { make: M.tallTree, cap: 500, near: NEAR_TREE, col: 0.28, clear: 2.2, space: 2.4, tree: true, lump: { y: 8.4, r: 1.6, sy: 1.5, c: 0x527d43 } },
@@ -242,7 +242,7 @@ function grassCell(ix, iz) {
   for (let n = 0; n < N; n++) {
     const x = (ix + rng()) * CELL, z = (iz + rng()) * CELL, r1 = rng(), r2 = rng(), r3 = rng();
     // Thick stands with thinner ground between (checked first: it is the cheapest test).
-    const drift = wave(x, z, 5.3, 0.9) + 0.6 * wave(x, z, 2.1, 3.3);
+    const drift = grassDrift(x, z);
     if (drift < -0.45 && r2 < 0.75) continue;
     const g = groundKind(x, z);
     if (!g) continue;
@@ -258,15 +258,13 @@ function grassCell(ix, iz) {
     if (y < 0.3) continue;
     paintC.setHex(0xd9be66);
     if (!paintNewGround(paintC, x, z, y)) continue;
-    const { r, g: gg, b } = paintC;
     srgb.copy(paintC).convertLinearToSRGB();
     if (srgb.g / srgb.r < 0.845 || srgb.b / srgb.r > 0.6) continue; // dirt, clay, paths, packed earth, sand: no grass
     const short = edge < 0.9 ? 0.4 + edge * 0.35 : 1;
-    // The tuft takes the ground's own colour, a little lighter: golden on dry ground, green on wet.
-    const lift = 1.12 + r3 * 0.22;
-    const acc = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1; // ~8% of the clumps are an accent: lavender or golden
-    const o = { x, y: y - 0.03, z, s: 0.7 + r3 * 0.45, sy: short * (0.65 + r2 * 0.75), rot: r1 * 6.283, r: Math.min(1, r * lift), g: Math.min(1, gg * lift), b: Math.min(1, b * lift * 0.95) };
-    if (acc < 0.08) { paintC.setHex(acc < 0.045 ? ACCENT_LAVENDER[(r1 * 3) | 0] : ACCENT_GOLD[(r1 * 3) | 0]); o.r = paintC.r; o.g = paintC.g; o.b = paintC.b; }
+    // The blades carry the colour; each tuft only nudges hue and value. Tall wild tufts stand against bushes and trunks.
+    const wild = vegDist(x, z), tall = wild < 1.8 ? 1 + (1 - Math.max(0, wild) / 1.8) * (0.7 + r1 * 0.5) : 1;
+    const v = 0.9 + r3 * 0.2, c1 = ((x * 13.7 + z * 7.3) % 1 + 1) % 1, c2 = ((x * 5.1 - z * 11.9) % 1 + 1) % 1;
+    const o = { x, y: y - 0.03, z, s: 0.8 + r3 * 0.5, sy: short * (0.65 + r2 * 0.5) * tall, rot: r1 * 6.283, r: v * (0.94 + c1 * 0.12), g: v * (0.96 + c2 * 0.08), b: v * (0.9 + c1 * 0.16) };
     out.push(o);
   }
   return out;
@@ -275,8 +273,10 @@ function grassCell(ix, iz) {
 export function create(scene) {
   const group = new THREE.Group(); group.name = 'flora'; scene.add(group);
   const plants = layOut();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, side: THREE.DoubleSide });
-  const lumpMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, metalness: 0 });
+  // The ground under and round bushes and trees turns dark and damp (src/world/ground.js); the camp's and the jungle's meshes repaint once.
+  addVegetation(plants.filter((p) => KINDS[p.kind].col > 0).map((p) => ({ x: p.x, z: p.z, r: (KINDS[p.kind].tree ? 1.1 : 0.6) * p.s })), true);
+  const mat = windSway(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }), 0.02);
+  const lumpMat = windSway(new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, metalness: 0 }), 0.02);
   const pool = (geo, material, cap, shadow) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.frustumCulled = false; m.castShadow = !!shadow; m.receiveShadow = true; group.add(m); return m; };
   const pools = {};
   for (const [k, K] of Object.entries(KINDS)) pools[k] = pool(K.make(), mat, Math.min(K.cap, Math.max(1, plants.filter((p) => p.kind === k).length)), K.shadow);
@@ -332,7 +332,7 @@ export function create(scene) {
         // Full near you, thinning toward the edge of the grass's reach.
         if (d > 14 && ((t.x * 7.31 + t.z * 3.17) % 1 + 1) % 1 > 1 - ((d - 14) / (GRASS_R - 14)) * 0.65) continue;
         put(grass, i, t.x, t.y, t.z, t.s, t.rot, t.sy * t.s);
-        grass.setColorAt(i++, color.setRGB(t.r, t.g, t.b));
+        grass.setColorAt(i++, color.setRGB(t.r, t.g, t.b, THREE.LinearSRGBColorSpace));
       }
     }
     grass.count = i; grass.instanceMatrix.needsUpdate = true; grass.instanceColor.needsUpdate = true;

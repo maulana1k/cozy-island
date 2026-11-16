@@ -10,6 +10,7 @@ import { paintCoastRock } from './island.js';
 import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { facetShade } from '../kit/plants.js';
+import { windSway, wetSurface } from './weather.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -54,18 +55,18 @@ export const keepClearList = () => KEEP_CLEAR.slice(KEEP_DEFAULTS);
 export function createWilds(scene) {
   const group = new THREE.Group(); scene.add(group);
   const streamWater = buildStreamWater(); group.add(streamWater); // the farm valley's stream
-  const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  const groundMat = wetSurface(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
   const dummy = new THREE.Object3D(), color = new THREE.Color();
   const colliders = [];
 
   // ---- Shared pools: one instanced mesh per kind of thing, refilled when the nearby tiles change.
   const pool = (geo, material, cap) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.castShadow = false; // no shadows out here: that alone halves the cost
     m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m; };
-  const trunkMat = flat(PALETTE.treeTrunk), white = flat(0xffffff), faceted = flat(0xffffff, { vertexColors: true });
+  const trunkMat = windSway(flat(PALETTE.treeTrunk), 0.01), white = flat(0xffffff), crown = windSway(flat(0xffffff), 0.02), faceted = windSway(flat(0xffffff, { vertexColors: true }), 0.012);
   const trees = KINDS.map((def) => ({ trunk: pool(def.trunk(), trunkMat, 2600, true), canopy: pool(def.canopy(), faceted, 2600, true) }));
   const lumpGeo = new THREE.IcosahedronGeometry(1, 0); lumpGeo.scale(1, 0.62, 1);
-  const lumps = pool(lumpGeo, white, 26000, false);
-  const leaves = flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide });
+  const lumps = pool(lumpGeo, crown, 26000, false);
+  const leaves = windSway(flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), 0.02);
   const lightBush = mergeGeometries([[0.62, 0, 0.42, 0], [0.42, 0.42, 0.32, 0.12], [0.44, -0.4, 0.3, -0.1]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.78, 1); g.translate(x, y, z); return g; }));
   const bushes = pool(facetShade(lightBush, 5), faceted, 2400), rocks = pool(rockGeometry(), white, 700);
   const ferns = pool(fernGeometry(), leaves, 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
@@ -215,7 +216,7 @@ export function createWilds(scene) {
         for (const b of tile.bushes) if (nBush < 2400 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
         for (const b of tile.rocks) if (nRock < 700 && Math.hypot(b.x - px, b.z - pz) < NEAR) { colliders.push({ x: b.x, z: b.z, r: 0.75 * b.s * 1.2 }); put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
         for (const b of tile.ferns) if (nFern < 3600 && closeBy(b)) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
-        for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.96 ? 0xa790c4 : b.tint > 0.6 ? 0xcdb35c : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
+        for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); { const v = 0.9 + b.tint * 0.2; tufts.setColorAt(nTuft++, color.setRGB(v * (0.92 + b.tint * 0.1), v, v * (0.9 + b.tint * 0.14), THREE.LinearSRGBColorSpace)); } }
       }
     }
     KINDS.forEach((_, k) => { for (const m of [trees[k].trunk, trees[k].canopy]) { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; } });

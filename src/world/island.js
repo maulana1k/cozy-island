@@ -1,10 +1,11 @@
+import { wetSurface } from './weather.js';
 import * as THREE from 'three';
 import { heightAt, landR, wildness, shoreR, coastShift, coastShallow, coastRock } from '../logic/terrain.js';
 import { createCoastRocks } from './rocks.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
-import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
+import { distanceToPath, jungleAt, VILLAGE_CENTER, getScatter } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
-import { paintNewGround, gridSlopes, groundChanges } from './ground.js';
+import { paintNewGround, gridSlopes, groundChanges, vegTone, addVegetation } from './ground.js';
 
 const TERRAIN_SIZE = 170;
 const TERRAIN_SEGMENTS = 250;
@@ -38,6 +39,7 @@ function buildTerrain() {
     const h = tri(ix, iz, up), a = tri(iz, ix, up + 2);
     return h < 0.24 ? -(0.4 + 0.6 * a) : h > 0.78 ? (0.4 + 0.6 * a) : 0;
   }
+  { const sc = getScatter(); addVegetation([...sc.trees.map((t) => ({ x: t.x, z: t.z, r: 0.9 * t.scale })), ...sc.bushes.map((b) => ({ x: b.x, z: b.z, r: 0.7 * b.scale }))]); }
   function paint(i) {
     const x = pos.getX(i), z = pos.getZ(i), h = heights[i];
     const r = landR(x, z), pd = Math.hypot(x - POND.x, z - POND.z), wd = wildness(x, z);
@@ -71,7 +73,7 @@ function buildTerrain() {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
       c.lerp(C(0xfff7dc), smooth((speck(x * 0.5, z * 0.5) - 0.6) / 0.3) * 0.3);
     }
-    paintNewGround(c, x, z, h, slopes[i]); // the river banks, the locals' land and the rest of the new ground
+    if (!paintNewGround(c, x, z, h, slopes[i]) && h > 0.1) vegTone(c, x, z, true); // the river banks, the locals' land and the rest of the new ground; else the camp's own grass tone
     paintCoastRock(c, x, z, r);
     // Break up the big flat greens: only where the ground is grass (not sand, dirt, rock or water).
     const green = smooth((c.g / Math.max(1e-4, c.r) - 1.2) / 0.2);
@@ -85,7 +87,7 @@ function buildTerrain() {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   // Plain painted colour, no close-up texture: it matches the flat, simple look of everything else.
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  const mat = wetSurface(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 })); // darker when it rains (src/world/weather.js)
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   // Repaints the vertices inside each box [x0, x1, z0, z1].

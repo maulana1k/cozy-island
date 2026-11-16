@@ -260,11 +260,11 @@ export const PALETTE = {
 };
 
 // Day cycle. Time of day is a fraction in [0, 1), 0 = midnight.
-export const DAY_LENGTH = 960; // a 16-minute day at 1×: unhurried
+export const DAY_LENGTH = 1920; // a 32-minute day at 1×: slow and unhurried
 export const START_TIME = 0.64;
 
 // Player and camera
-export const WALK_SPEED = 1.9;
+export const WALK_SPEED = 1.4; // a child's brisk walk on short legs (about 3.3 steps a second); faster than this is a jog
 export const RUN_SPEED = 3.9; // a child's run, not a sprinter's
 export const HOP_VELOCITY = 5;
 export const GRAVITY = 15;

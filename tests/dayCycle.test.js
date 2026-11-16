@@ -3,7 +3,7 @@ import { test, expect } from 'vitest';
 import { advance, phaseAt, nightFactor, sunDirection, skyColors } from '../src/logic/dayCycle.js';
 
 test('advance wraps', () => { expect(advance(0.99, DAY_LENGTH * 0.02)).toBeCloseTo(0.01); });
-test('one full day is DAY_LENGTH seconds', () => { expect(DAY_LENGTH).toBe(960); expect(advance(0.3, DAY_LENGTH)).toBeCloseTo(0.3); });
+test('one full day is DAY_LENGTH seconds', () => { expect(DAY_LENGTH).toBe(1920); expect(advance(0.3, DAY_LENGTH)).toBeCloseTo(0.3); });
 test('phases', () => {
   expect(phaseAt(0.0)).toBe('night'); expect(phaseAt(0.2)).toBe('morning'); expect(phaseAt(0.5)).toBe('day');
   expect(phaseAt(0.58)).toBe('golden'); expect(phaseAt(0.8)).toBe('sunset'); expect(phaseAt(0.95)).toBe('night');

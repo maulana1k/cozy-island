@@ -80,9 +80,12 @@ function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   return m;
 }
 
-// Two builds. Scouts are short and chubby with a big head; staff are taller and slimmer.
-const KID = { thigh: 0.13, shin: 0.13, pelvisY: 0.31, neckY: 0.3, headR: 0.2, headY: 0.165, shX: 0.178, shY: 0.232, upper: 0.115, fore: 0.105, hipX: 0.078, chest: 0.138, belly: 0.168, limb: 1 };
-const GROWN = { thigh: 0.25, shin: 0.25, pelvisY: 0.55, neckY: 0.42, headR: 0.15, headY: 0.15, shX: 0.2, shY: 0.345, upper: 0.2, fore: 0.18, hipX: 0.085, chest: 0.155, belly: 0.15, limb: 0.95 };
+// Two builds. Scouts are small with a big head (about 1.05 m to the crown, legs about a third of
+// that, a child's long-ish trunk); staff are taller and slimmer. `belly` is the waist at the belt,
+// `hips` the seat of the shorts, `chest` the ribcage under the arms.
+const KID = { thigh: 0.168, shin: 0.162, pelvisY: 0.38, neckY: 0.3, headR: 0.2, headY: 0.18, shX: 0.172, shY: 0.232, upper: 0.126, fore: 0.116, hipX: 0.072, chest: 0.15, belly: 0.136, hips: 0.146, limb: 1 };
+const GROWN = { thigh: 0.25, shin: 0.25, pelvisY: 0.55, neckY: 0.42, headR: 0.15, headY: 0.15, shX: 0.2, shY: 0.345, upper: 0.2, fore: 0.18, hipX: 0.085, chest: 0.158, belly: 0.142, hips: 0.152, limb: 0.95 };
+const KID_LEG = KID.thigh + KID.shin - 0.02; // a scout's hip-to-ankle length, the yardstick for every stride
 
 // Hats, neckerchiefs and the like, sized to the build. Coordinates are from the feet up.
 function buildAccent(kind, accentColor, P) {
@@ -114,6 +117,11 @@ function buildAccent(kind, accentColor, P) {
 }
 
 const HEAD_ACCENTS = new Set(['hat', 'cap', 'bow']);
+// Poses and gestures that place the legs themselves (everything else walks on solved legs).
+const LEG_POSES = new Set(['jacks', 'sleep', 'tug', 'bandage', 'hang', 'hammer']);
+const LEG_GESTURES = new Set(['crouch', 'skid', 'pant', 'stumble', 'tapfoot', 'reachUp', 'pull', 'cheer', 'laugh', 'stretch', 'bonk']);
+const LEG_KEYS = new Set(['thL', 'thR', 'knL', 'knR', 'py', 'lean', 'trunk', 'spreadL', 'spreadR', 'fL', 'fR']);
+const ARM_KEYS = new Set(['shLx', 'shRx', 'shLz', 'shRz', 'elL', 'elR']);
 
 // Faces. Each is: how high the brows sit, how far their inner ends tip up (down if negative),
 // the curve of the mouth (1 a smile, -1 a frown) and how wide the eyes are open.
@@ -172,8 +180,8 @@ export function createFigure({
     add(part(new THREE.BoxGeometry(0.05, 0.036, 0.012), brass, 0, 0.035, P.belly * 0.92, false));
     add(part(new THREE.BoxGeometry(0.028, 0.018, 0.014), leather, 0, 0.035, P.belly * 0.92 + 0.002, false));
     // Shorts: a turned hem and two side pockets.
-    const hem = part(new THREE.CylinderGeometry(P.belly * 1.06, P.belly * 1.07, 0.02, 16), mat(new THREE.Color(shortsColor).multiplyScalar(0.8)), 0, -0.066, 0, false); hem.scale.z = 0.88; pelvis.add(hem);
-    for (const sx of [-1, 1]) { const p = part(new THREE.BoxGeometry(0.008, 0.06, 0.05), mat(new THREE.Color(shortsColor).multiplyScalar(0.8)), sx * P.belly * 1.0, -0.02, 0.01, false); p.rotation.x = 0.3; pelvis.add(p); }
+    const hem = part(new THREE.CylinderGeometry(P.hips * 1.035, P.hips * 1.045, 0.02, 16), mat(new THREE.Color(shortsColor).multiplyScalar(0.8)), 0, -0.066, 0, false); hem.scale.z = 0.88; pelvis.add(hem);
+    for (const sx of [-1, 1]) { const p = part(new THREE.BoxGeometry(0.008, 0.06, 0.05), mat(new THREE.Color(shortsColor).multiplyScalar(0.8)), sx * P.hips * 0.99, -0.02, 0.01, false); p.rotation.x = 0.3; pelvis.add(p); }
   }
 
   // Head: a big soft shape with ears, a small nose, oval eyes and a smile.
@@ -278,8 +286,11 @@ export function createFigure({
   };
   if (accent) attach(accent, accentColor);
   if (neckerchief !== null) attach('scarf', neckerchief); // every scout wears one
+  // The backpack hangs from its straps on a bone of its own, so it can jog and swing a little behind the back.
+  const pack = new THREE.Bone(); pack.position.set(0, P.neckY * 0.86, -P.chest * 0.8); torso.add(pack);
   if (backpackColor !== null) {
-    torso.add(part(new THREE.BoxGeometry(P.belly * 1.5, P.neckY * 0.8, 0.13), mat(backpackColor), 0, P.neckY * 0.52, -P.belly * 0.88 - 0.05), part(new THREE.BoxGeometry(P.belly * 1.55, 0.08, 0.14), mat(0xf4e3b5), 0, P.neckY * 0.82, -P.belly * 0.88 - 0.055, false));
+    const bz = -P.chest * 0.88 - 0.05 + P.chest * 0.8, w = P.chest * 1.38;
+    pack.add(part(new THREE.BoxGeometry(w, P.neckY * 0.8, 0.13), mat(backpackColor), 0, P.neckY * (0.52 - 0.86), bz), part(new THREE.BoxGeometry(w * 1.04, 0.08, 0.14), mat(0xf4e3b5), 0, P.neckY * (0.82 - 0.86), bz - 0.005, false));
   }
   if (coat !== null) { // a long coat over the uniform
     const c = part(new THREE.CylinderGeometry(P.chest * 1.06, P.belly * 1.22, P.neckY + 0.2, 14), mat(coat), 0, (P.neckY + 0.2) / 2 - 0.2, 0); c.scale.z = 0.9;
@@ -295,7 +306,7 @@ export function createFigure({
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
 
   // ---- The skin
-  const bones = [inner, pelvis, torso, neck, armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, legL.hip, legL.knee, legL.foot, legR.hip, legR.knee, legR.foot, eyeRig, pupils, mouth, browBoneL, browBoneR, smileBone];
+  const bones = [inner, pelvis, torso, neck, armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, legL.hip, legL.knee, legL.foot, legR.hip, legR.knee, legR.foot, eyeRig, pupils, mouth, browBoneL, browBoneR, smileBone, pack];
   const bi = (b) => bones.indexOf(b);
   group.updateMatrixWorld(true);
   const groupInverse = new THREE.Matrix4().copy(group.matrixWorld).invert();
@@ -304,15 +315,20 @@ export function createFigure({
   bones.forEach((b, i) => collect(b, i));
   {
     const L = P.limb, cShirt = bodyColor, cSkin = skinColor, cShorts = shortsColor, cShade = new THREE.Color(bodyColor).multiplyScalar(0.82);
-    // Trunk: shorts, a barrel of shirt widest at the tummy, rounded shoulders, a neck. Hips and chest share the waist.
+    // Trunk: the seat of the shorts, a waist at the belt, a ribcage that fills out under the arms, shoulders
+    // that slope off to the arms, collarbones under a flatter upper chest, then a slim neck. Hips and chest share the waist.
     const top = bodyH + 0.02, barrel = (f) => P.belly + (P.chest - P.belly) * f, tr = [];
     const T = (y, rx, col, rz = rx * 0.88) => tr.push({ y: PELVIS_Y + y, rx, rz, col, w: smooth((y + 0.02) / 0.09) });
-    T(P.neckY + 0.06, 0.05, cSkin, 0.05);
-    const collar = Math.max(0.052, P.chest * Math.cos(1.19));
-    T(top + P.chest * 0.5 * Math.sin(1.19), collar, cSkin, collar); T(top + P.chest * 0.5 * Math.sin(1.19), collar, cShirt, collar);
-    for (const a of [0.87, 0.56, 0.27]) T(top + P.chest * 0.5 * Math.sin(a), P.chest * Math.cos(a), cShirt);
-    for (const f of [1, 0.75, 0.5, 0.25]) T(0.02 + bodyH * f, barrel(f), cShirt);
-    T(0.035, barrel(0.06), cShirt); T(0.035, barrel(0.06), cShorts); T(-0.005, P.belly * 1.01, cShorts); T(-0.07, P.belly * 1.05, cShorts);
+    const dome = 0.42, cy = top + P.chest * dome * Math.sin(1.19), collar = Math.max(0.052, P.chest * Math.cos(1.19));
+    T(cy + 0.045, 0.047, cSkin, 0.047); T(cy + 0.016, 0.044, cSkin, 0.043);
+    T(cy, collar, cSkin, collar * 0.95); T(cy, collar, cShirt, collar * 0.95);
+    T(top + P.chest * dome * Math.sin(0.87), P.chest * Math.cos(0.87) * 1.04, cShirt, P.chest * Math.cos(0.87) * 0.8);
+    T(top + P.chest * dome * Math.sin(0.56), P.chest * Math.cos(0.56) * 1.02, cShirt, P.chest * Math.cos(0.56) * 0.82);
+    T(top + P.chest * dome * Math.sin(0.27), P.chest * Math.cos(0.27), cShirt, P.chest * Math.cos(0.27) * 0.86);
+    T(0.02 + bodyH, P.chest, cShirt, P.chest * 0.87); T(0.02 + bodyH * 0.72, P.chest * 1.01, cShirt, P.chest * 0.9);
+    T(0.02 + bodyH * 0.45, barrel(0.55), cShirt, barrel(0.55) * 0.92); T(0.02 + bodyH * 0.2, barrel(0.15), cShirt, barrel(0.15) * 0.93);
+    T(0.035, P.belly * 1.01, cShirt, P.belly * 0.9); T(0.035, P.belly * 1.01, cShorts, P.belly * 0.9);
+    T(-0.005, P.hips * 0.99, cShorts, P.hips * 0.86); T(-0.07, P.hips * 1.03, cShorts, P.hips * 0.86);
     geos.push(tube(0, 0, tr, bi(pelvis), bi(torso), { seg: 18, capBottom: true }));
     // Arms: a short flared sleeve with a turned cuff, then one skin from shoulder to wrist, shared at the elbow.
     for (const [A, side] of [[armL, -1], [armR, 1]]) {
@@ -321,17 +337,19 @@ export function createFigure({
       R(0.045, 0.03, cShirt); R(0.03, 0.05, cShirt); R(0, 0.062, cShirt); R(-sl + 0.008, 0.07, cShirt);
       R(-sl + 0.008, 0.071, cShade); R(-sl - 0.006, 0.071, cShade); R(-sl - 0.006, 0.046, cSkin);
       if (-(sl + (U - sl) * 0.5) > -U + b + 0.008) R(-(sl + (U - sl) * 0.5), 0.047, cSkin);
-      for (const d of [b, b / 2, 0, -b / 2, -b]) R(-U + d, 0.042, cSkin);
-      R(-U - F * 0.35, 0.044, cSkin); R(-U - F * 0.75, 0.037, cSkin); R(-U - F, 0.031, cSkin);
+      R(-U + b, 0.042, cSkin); R(-U + b / 2, 0.043, cSkin); R(-U, 0.045, cSkin); R(-U - b / 2, 0.043, cSkin); R(-U - b, 0.042, cSkin);
+      R(-U - F * 0.3, 0.042, cSkin); R(-U - F * 0.7, 0.036, cSkin); R(-U - F, 0.03, cSkin);
       geos.push(tube(side * P.shX, 0, r, bi(A.shoulder), bi(A.elbow), { capTop: true, capBottom: true }));
     }
     // Legs: the leg of the shorts, a thigh, a knee that bends in a curve, a calf, and a sock with two bands.
     for (const [G, side] of [[legL, -1], [legR, 1]]) {
       const Th = P.thigh, S = P.shin, Ls = Math.min(0.1, Th * 0.75), b = Math.min(0.035, Th * 0.3), y0 = PELVIS_Y - 0.04, r = [];
       const R = (y, rad, col) => r.push({ y: y0 + y, rx: rad * L, col, w: smooth((-y - (Th - b)) / (2 * b)) });
-      R(0.02, 0.074, cShorts); R(0.02 - Ls, 0.084, cShorts); R(0.02 - Ls, 0.062, cSkin);
-      for (const d of [b, b / 2, 0, -b / 2, -b]) R(-Th + d, d > 0 ? 0.054 : 0.05, cSkin);
-      R(-Th - S * 0.36, 0.056, cSkin); R(-Th - S + 0.079, 0.043, cSkin);
+      // Linear blending pinches a bent joint by about cos(angle / 2), so the rings at the knee are a little fuller.
+      R(0.02, 0.074, cShorts); R(0.02 - Ls, 0.082, cShorts); R(0.02 - Ls, 0.064, cSkin);
+      R(-(Ls + (Th - b - Ls) * 0.5), 0.059, cSkin);
+      R(-Th + b, 0.053, cSkin); R(-Th + b / 2, 0.055, cSkin); R(-Th, 0.057, cSkin); R(-Th - b / 2, 0.054, cSkin); R(-Th - b, 0.05, cSkin);
+      R(-Th - S * 0.32, 0.055, cSkin); R(-Th - S * 0.62, 0.047, cSkin); R(-Th - S + 0.079, 0.041, cSkin);
       R(-Th - S + 0.078, 0.048, 0x3f8f5a); R(-Th - S + 0.066, 0.048, 0x3f8f5a); R(-Th - S + 0.066, 0.046, 0xfafafa); R(-Th - S + 0.058, 0.046, 0xfafafa);
       R(-Th - S + 0.058, 0.048, 0xe8563f); R(-Th - S + 0.05, 0.048, 0xe8563f); R(-Th - S + 0.05, 0.046, 0xfafafa); R(-Th - S + 0.012, 0.046, 0xfafafa);
       geos.push(tube(side * P.hipX, 0, r, bi(G.hip), bi(G.knee), { capBottom: true }));
@@ -345,7 +363,55 @@ export function createFigure({
   group.scale.setScalar(scale);
   let lod = 0, isFar = false;
 
-  let phase = 0, lastElapsed = null, gait = 0, run = 0, footLift = 0;
+  let lastElapsed = null, footLift = 0;
+  // ---- Gait. A stride is two steps: `phase` runs 0..1 through one, the first leg touching down at 0
+  // and the other at 0.5. Lengths are in the figure's own units (before `scale`).
+  const TH = P.thigh, SH = P.shin - 0.02, LL = TH + SH;                    // thigh, shin to the ankle, the whole leg
+  const ANK = 0.051 * P.limb, HEEL = 0.075 * P.limb, TOE = 0.145 * P.limb; // ankle above the sole; heel and toe either side
+  const legK = (LL * scale) / KID_LEG, sqK = Math.sqrt(legK);              // this person's legs against a scout's
+  const HANG_DROP = P === KID ? 0.31 - KID.pelvisY : 0;                    // keeps the hands on the flying-fox bar
+  let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, bank = 0, locoLegs = 1, locoArms = 1;
+  let wasAir = false, jump = null, landRun = false, lastPy = null, pyVel = 0, pyAcc = 0;
+  const legs = [{ u: 0, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0 }, { u: 0.5, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0 }];
+  const edgeA = { z: 0, y: 0, sg: 0 }, edgeB = { z: 0, y: 0, sg: 0 };
+  // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
+  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0] };
+  const pull = (sp, target, w, z, dt, force = 0) => {
+    if (dt > 0.06 || dt <= 0) { if (dt > 0.06) { sp[0] = target; sp[1] = 0; } return sp[0]; }
+    sp[1] += (-(w * w) * (sp[0] - target) - 2 * z * w * sp[1] + force) * dt; sp[0] += sp[1] * dt; return sp[0];
+  };
+  // Cadence (steps a second) and step length from speed, the way children move: steps get much longer as
+  // they speed up while the legs turn over only a little faster. A leg can only sweep so far under the
+  // body, so past a brisk walk the only way to go faster is a moment in the air between steps: running.
+  function gaitOf(v) {
+    const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
+    const cPref = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : vk < 2.3 ? 3.1 + ((vk - 1.35) / 0.95) * 0.2 : 3.3 + Math.min(1, (vk - 2.3) / 1.7) * 0.15;
+    const Dw = 0.6 - 0.06 * smooth(vk / 1.35);           // share of a stride each foot is down when walking
+    const Cw = 0.44, Cr = 0.47;                           // the longest footprint a scout's leg sweeps walking, running (m)
+    const needD = vk > 0.01 ? (Cw * cPref) / (2 * vk) : 1; // what walking would need at the preferred cadence
+    const r = smooth((0.52 - needD) / 0.16);              // 0 walking .. 1 running
+    const cK = lerp(Math.max(cPref, (vk * 2 * Dw) / Cw), cPref, r);
+    const Sk = vk / cK;
+    const D = lerp(Dw, Math.min(0.45, Cr / (2 * Math.max(Sk, 1e-4))), r);
+    return { r, vk, c: cK / sqK, S: Sk * legK, D };
+  }
+  // Where an ankle is while its foot is down, from the hip's spot on the ground: the foot stays put on the
+  // ground (no skating) and rolls from the heel, flat, onto the toes.
+  function stanceAt(s, C, heel, toe, out) {
+    const zf = C / 2 - s * C, sg = s < 0.2 ? -heel * (1 - s / 0.2) ** 2 : s > 0.5 ? toe * ((s - 0.5) / 0.5) ** 2 : 0;
+    const c = Math.cos(sg), sn = Math.sin(sg);
+    if (sg < 0) { out.z = zf - HEEL + ANK * sn + HEEL * c; out.y = ANK * c - HEEL * sn; } // pivoting on the heel
+    else { out.z = zf + TOE + ANK * sn - TOE * c; out.y = ANK * c + TOE * sn; }         // flat, or pivoting on the toes
+    out.sg = sg; return out;
+  }
+  // Two-bone leg: the thigh and knee angles that put the ankle at (dz forward, dy up) from the hip.
+  const ik = { th: 0, kn: 0 };
+  function legIK(dz, dy) {
+    const d = clamp(Math.hypot(dz, dy), Math.abs(TH - SH) + 1e-3, LL * 0.9995);
+    ik.kn = Math.PI - Math.acos(clamp((TH * TH + SH * SH - d * d) / (2 * TH * SH), -1, 1));
+    ik.th = -(Math.atan2(dz, -dy) + Math.acos(clamp((TH * TH + d * d - SH * SH) / (2 * TH * d), -1, 1)));
+    return ik;
+  }
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
   const soleY = -0.051 * P.limb, SOLE = [[-0.075, 0.004], [0.035, 0], [0.145, 0.004]].map(([z, dy]) => new THREE.Vector3(0, soleY + dy, z * P.limb));
   // The little signs of life: blinking, where the eyes are looking, the mouth, noticing someone come close.
@@ -355,7 +421,7 @@ export function createFigure({
   let blinkIn = 1 + Math.random() * 4, blink = 0, gaze = 0, gazeUp = 0, headLook = 0, mouthOpen = 0, hello = 0, wasNear = false;
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
-  const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0 };
+  const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0, trunk: 0, fL: 0, fR: 0 };
 
   return {
     group,
@@ -364,6 +430,8 @@ export function createFigure({
     seatLift: (top) => top + 0.07 - PELVIS_Y * scale,
     setCarry(on) { if (load) load.visible = on; },
     setTorch(on) { torchProp.visible = on; },
+    // How far one step carries this person at a speed (m), so footfall sounds keep time with the feet.
+    stepLength: (v) => gaitOf(v).S,
     // speed (m/s) drives the stride. opts: sitting, sitGround, wobble 0..1, air (-1 falling .. 1 rising,
     // only while airborne), land 0..1 (just landed), roll, pitch, reach 0..1, wave 0..1,
     // pose: 'clap' | 'jacks' | 'salute' | 'stir' | 'eat' | 'hammer'.
@@ -399,57 +467,125 @@ export function createFigure({
       if (lastYaw !== null && dt > 0) { let dy = yaw - lastYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); turn += (clamp(dy / dt, -4, 4) - turn) * (1 - Math.exp(-dt * 6)); }
       lastYaw = yaw;
       const ease = (k) => 1 - Math.exp(-dt * k);
-      gait += (clamp(speed / 0.7, 0, 1) - gait) * ease(10);
-      run += (clamp((speed - 2.6) / 1.3, 0, 1) - run) * ease(7);
-      // Feet must keep up with the ground: each step covers a set distance, so the legs
-      // turn over exactly as fast as the body is moving. Faster means longer strides.
-      const stepLen = 0.26 + 0.12 * speed;
-      phase += (dt * speed * Math.PI) / stepLen;
-      const s = Math.sin(phase), c2 = Math.cos(phase + 0.6);
-      const t = { ...pose };
-      t.hy = 0; t.hp = 0;
-
-      // ---- Walking and running
-      // The legs open just wide enough to cover that step, whatever the length of leg.
-      const A = Math.min(1.0, Math.asin(Math.min(0.9, stepLen / (2 * LEG * scale)))) * gait;
-      t.thL = -s * A - run * 0.12 * gait; t.thR = s * A - run * 0.12 * gait;
-      t.knL = (0.1 + (0.6 + run * 0.6) * Math.max(0, c2)) * gait;
-      t.knR = (0.1 + (0.6 + run * 0.6) * Math.max(0, -c2)) * gait;
-      const B = (0.45 + run * 0.45) * gait;
-      t.shLx = s * B; t.shRx = -s * B;
-      // Arms flap out a bit when running flat out, like a kid who cannot quite keep them in.
-      t.shLz = -0.14 - run * 0.12; t.shRz = 0.14 + run * 0.12;
-      t.hp = -run * 0.1 + Math.sin(phase * 2) * 0.015 * gait;
-      t.elL = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, -s) * 0.25 * gait;
-      t.elR = -0.15 - (0.2 + run * 1.05) * gait - Math.max(0, s) * 0.25 * gait;
-      t.spreadL = 0; t.spreadR = 0;
-      t.py = -Math.cos(phase * 2) * (0.006 + run * 0.014) * gait - (1 - Math.cos(A)) * LEG * 0.9 * gait + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait);
-      t.lean = 0.04 * gait + run * 0.13;
-      let snap = 14; // how quickly joints chase their targets
-
-      // ---- In the air: tuck on the way up, reach for the ground on the way down
-      if (o.air !== undefined) {
-        const up = clamp((o.air + 1) / 2, 0, 1);
-        t.thL = lerp(-0.1, -0.95, up); t.thR = lerp(-0.3, -0.6, up);
-        t.knL = lerp(0.25, 1.5, up); t.knR = lerp(0.45, 1.1, up);
-        t.shLz = -lerp(0.9, 1.5, up); t.shRz = lerp(0.9, 1.5, up);
-        t.shLx = t.shRx = -0.25; t.elL = t.elR = -0.35;
-        t.py = 0; t.lean = 0.12 * up; snap = 16;
+      const inAir = o.air !== undefined;
+      // ---- Speed, speeding up or slowing down
+      spd += (speed - spd) * ease(14);
+      if (dt > 0) acc += (clamp((spd - lastSpd) / dt, -25, 25) - acc) * ease(10);
+      lastSpd = spd;
+      const G = gaitOf(spd);
+      gait = smooth(spd / (0.45 * sqK));                 // 0 standing .. 1 striding out
+      run += (G.r - run) * ease(10);
+      effort = clamp((spd / sqK - 2.6) / 1.3, 0, 1);      // puffing: only a real run
+      // Leaving the ground: from a run it is one foot, the swinging leg leading; from standing, both feet.
+      if (inAir && !wasAir) {
+        const [a, b] = legs, lead = a.stance && !b.stance ? 1 : b.stance && !a.stance ? 0 : !a.stance && !b.stance ? (a.w > b.w ? 0 : 1) : a.z > b.z ? 0 : 1;
+        jump = { run: G.vk > 1.4, lead };
       }
-      // ---- Landing: knees soak it up
-      const land = o.land || 0;
-      if (land > 0) {
-        t.thL -= 0.55 * land; t.thR -= 0.55 * land; t.knL += 0.95 * land; t.knR += 0.95 * land;
-        t.py -= 0.3 * LEG * land; t.shLz -= 0.4 * land; t.shRz += 0.4 * land; t.lean += 0.15 * land;
+      // Back down: a running jump lands on its lead foot straight into the next stride.
+      if (!inAir && wasAir) { landRun = !!(jump && jump.run); if (landRun) phase = jump.lead === 0 ? 0 : 0.5; jump = null; }
+      wasAir = inAir;
+      if (!inAir) phase = (phase + dt * G.c * 0.5) % 1;
+      const Tst = 2 / G.c, D = G.D, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
+      const heelUp = lerp(0.3, 0.02, run), toeOff = lerp(0.6, 0.75, run);
+      // Leaning: a little into a run, more while speeding up, back while braking (tan(lean) ~ a / g, kept gentle).
+      const accLean = inAir ? 0 : clamp(acc * 0.012, -0.13, 0.15);
+      bank += (clamp(-Math.atan((spd * turn) / 9.8) * 0.85, -0.32, 0.32) - bank) * ease(8); // into a bend, like a cyclist
+      const crouch = o.crouch || 0, land = o.land || 0;
+
+      // ---- Where each foot is: down on the ground, or swinging through
+      for (let i = 0; i < 2; i++) {
+        const L = legs[i];
+        L.u = (phase + i * 0.5) % 1; L.stance = L.u < D; L.lift = 0;
+        if (L.stance) {
+          L.s = L.u / D; stanceAt(L.s, C, heelUp, toeOff, L);
+          const give = Math.sin(Math.PI * L.s);
+          L.kL = lerp(0.99 - 0.035 * give, 0.97 - 0.1 * give, run); // the knee gives a little mid-stance, more at a run
+        } else {
+          const w = (L.u - D) / (1 - D); L.w = w;
+          stanceAt(1, C, heelUp, toeOff, edgeA); stanceAt(0, C, heelUp, toeOff, edgeB);
+          // Walking, the foot skims through; running, the heel kicks up behind and the knee drives through high.
+          const e = lerp(smooth(w), smooth(Math.pow(w, 1.35)), run);
+          L.lift = gait * lerp(0.17 * LL * Math.pow(Math.sin(Math.PI * w), 1.3), LL * (0.3 + 0.3 * smooth((G.vk - 2) / 1.9)) * Math.sin(Math.PI * Math.pow(w, 0.7)), run);
+          L.z = lerp(edgeA.z, edgeB.z, e); L.y = lerp(edgeA.y, edgeB.y, w) + L.lift;
+          L.sg = lerp(edgeA.sg, edgeB.sg, smooth(w)) + run * 0.35 * Math.sin(Math.PI * w);
+        }
+      }
+      // ---- The hips ride over the planted leg like an upturned pendulum: highest straight over the foot,
+      // lowest with both feet down. At a run the knee gives on landing, then there is a little flight.
+      const hOver = (L, kL = L.kL) => Math.sqrt(Math.max(0, (kL * LL) ** 2 - L.z * L.z)) + L.y;
+      let h, clear = 0;
+      if (legs[0].stance || legs[1].stance) h = Math.min(legs[0].stance ? hOver(legs[0]) : 9, legs[1].stance ? hOver(legs[1]) : 9);
+      else {
+        const A = legs[0].w < legs[1].w ? legs[0] : legs[1], kE = lerp(0.99, 0.97, run);
+        const tf = Math.max(1e-3, (0.5 - D) * Tst), tt = clamp((A.u - D) * Tst, 0, tf);
+        const h0 = hOver(stanceAt(1, C, heelUp, toeOff, edgeA), kE), h1 = hOver(stanceAt(0, C, heelUp, toeOff, edgeB), kE);
+        clear = 0.5 * (9 / scale) * tt * (tf - tt); // a ballistic hop between the steps
+        h = lerp(h0, h1, tt / tf) + clear;
+        legs[0].y += clear; legs[1].y += clear;
+      }
+      h += -crouch * 0.36 * LL - land * (landRun ? 0.1 : 0.3) * LL + Math.sin(elapsed * 1.8 + seed) * 0.004 * (1 - gait);
+      const lean = 0.012 + run * 0.06 * smooth(G.vk / 3.9) + accLean + crouch * 0.06 + land * 0.04;
+      const t = { ...pose };
+      t.hy = 0; t.hp = 0; t.lean = lean;
+      t.trunk = 0.03 + run * 0.09 + accLean * 0.6 + crouch * 0.3 + land * (landRun ? 0.08 : 0.22);
+      // ---- Legs: solve each one so its ankle lands exactly there, in the body's leaned frame.
+      const cl = Math.cos(lean), sl = Math.sin(lean), yHip = h / cl;
+      t.py = yHip + 0.04 - PELVIS_Y;
+      for (let i = 0; i < 2; i++) {
+        const L = legs[i], yg = L.y - h;
+        legIK(L.z * cl - yg * sl, yg * cl + L.z * sl);
+        if (i === 0) { t.thL = ik.th; t.knL = ik.kn; t.fL = L.sg - lean - ik.th - ik.kn; } else { t.thR = ik.th; t.knR = ik.kn; t.fR = L.sg - lean - ik.th - ik.kn; }
+      }
+      t.spreadL = run * 0.05; t.spreadR = -run * 0.05; // a running child's feet land nearer the midline
+      // ---- Arms: pendulums from the shoulders, driven by the opposite leg through the twist of the trunk.
+      // Nearly straight and loose at a walk; bent to about a right angle and pumping at a run.
+      const amp = lerp(0.8, 0.6, run) * gait, off = lerp(0.04, -0.12, run) * gait - (lean + t.trunk) * 0.5 + clamp(acc * 0.025, -0.45, 0.3);
+      t.shLx = clamp((t.thR + lean) * amp, -0.75, 0.6) + off; t.shRx = clamp((t.thL + lean) * amp, -0.75, 0.6) + off;
+      const fw = (x) => clamp(-(x - off) / 0.8, 0, 1);
+      t.elL = -(0.15 * (1 - gait) + lerp(0.22, 1.45, run) * gait + fw(t.shLx) * 0.32 * gait);
+      t.elR = -(0.15 * (1 - gait) + lerp(0.22, 1.45, run) * gait + fw(t.shRx) * 0.32 * gait);
+      t.shLz = -(0.12 + 0.07 * run); t.shRz = 0.12 + 0.07 * run;
+      // Winding up for a jump: arms swing back. Landing from a standing jump: arms out for balance.
+      t.shLx += crouch * 0.9; t.shRx += crouch * 0.9; t.elL -= crouch * 0.25; t.elR -= crouch * 0.25;
+      const armsOut = landRun ? 0 : land;
+      t.shLz -= armsOut * 0.55; t.shRz += armsOut * 0.55; t.shLx -= armsOut * 0.45; t.shRx -= armsOut * 0.45;
+      let snap = 14; // how quickly joints chase their targets
+      let legsIK = !o.sitting && !o.sitGround && !inAir;
+
+      // ---- In the air
+      if (inAir) {
+        const a = clamp(o.air, -1, 1), up = Math.max(0, a), down = Math.max(0, -a), top = 1 - up - down;
+        const m3 = (u0, t0, d0) => u0 * up + t0 * top + d0 * down;
+        if (jump && jump.run) {
+          // A leap off one foot: lead knee driven forward, the other leg trailing long behind, the opposite
+          // arm reaching forward; the trailing leg folds up through the top and the lead leg reaches to land.
+          const thLead = m3(-1.05, -1.15, -0.62), knLead = m3(1.3, 0.95, 0.3), thTrail = m3(0.42, 0.15, -0.1), knTrail = m3(0.35, 1.0, 1.2);
+          const fwdArm = m3(-1.2, -1.0, -0.75), backArm = m3(0.65, 0.4, 0.15);
+          if (jump.lead === 0) { t.thL = thLead; t.knL = knLead; t.thR = thTrail; t.knR = knTrail; t.shRx = fwdArm; t.shLx = backArm; }
+          else { t.thR = thLead; t.knR = knLead; t.thL = thTrail; t.knL = knTrail; t.shLx = fwdArm; t.shRx = backArm; }
+          t.elL = t.elR = -m3(1.15, 1.0, 0.7); t.shLz = -0.28; t.shRz = 0.28;
+          t.lean = m3(0.16, 0.1, 0.03); t.trunk = m3(0.12, 0.05, 0.0);
+          t.fL = t.fR = m3(0.55, 0.4, 0.05);
+        } else {
+          // From standing: pushed off long with arms flung high, tucked at the top, legs reaching down and
+          // arms spreading out for balance on the way to the ground.
+          t.thL = t.thR = m3(-0.12, -1.05, -0.42); t.knL = t.knR = m3(0.18, 1.65, 0.5);
+          t.shLx = t.shRx = m3(-2.5, -1.3, -0.5); t.elL = t.elR = m3(-0.25, -0.65, -0.3);
+          t.shLz = -m3(0.2, 0.45, 1.05); t.shRz = m3(0.2, 0.45, 1.05);
+          t.lean = m3(0.0, 0.1, 0.04); t.trunk = m3(-0.06, 0.25, 0.06);
+          t.fL = t.fR = m3(0.65, 0.4, 0.1);
+        }
+        t.spreadL = t.spreadR = 0; t.py = 0; snap = 16;
       }
       if (o.sitting || o.sitGround) {
         t.thL = t.thR = -1.5; t.knL = t.knR = o.sitGround ? 1.9 : 1.35;
         t.spreadL = o.sitGround ? -0.5 : 0; t.spreadR = o.sitGround ? 0.5 : 0;
-        t.shLx = t.shRx = -0.35; t.elL = t.elR = -0.5; t.py = 0; t.lean = 0;
+        t.shLx = t.shRx = -0.35; t.elL = t.elR = -0.5; t.shLz = -0.15; t.shRz = 0.15; t.py = 0; t.lean = 0; t.trunk = 0.05;
       }
 
       // ---- Activities
       const e = elapsed + seed;
+      if (LEG_POSES.has(o.pose)) { legsIK = false; t.trunk = 0; }
       if (o.pose === 'clap') {
         const beat = Math.max(0, Math.sin(e * 5.5));
         t.shLx = t.shRx = -1.0; t.shLz = 0.25 + beat * 0.3; t.shRz = -0.25 - beat * 0.3; t.elL = t.elR = -1.0;
@@ -491,7 +627,7 @@ export function createFigure({
       } else if (o.pose === 'hang') {
         // Hanging from the flying fox: arms straight up, knees tucked, swinging a little.
         t.shLx = t.shRx = -3.0; t.shLz = 0.12; t.shRz = -0.12; t.elL = t.elR = -0.08;
-        t.thL = -0.75 + Math.sin(e * 3) * 0.12; t.thR = -0.55 - Math.sin(e * 3) * 0.12; t.knL = 1.2; t.knR = 0.9; t.py = 0; t.lean = -0.12 + Math.sin(e * 2.2) * 0.06;
+        t.thL = -0.75 + Math.sin(e * 3) * 0.12; t.thR = -0.55 - Math.sin(e * 3) * 0.12; t.knL = 1.2; t.knR = 0.9; t.py = HANG_DROP; t.lean = -0.12 + Math.sin(e * 2.2) * 0.06;
       } else if (o.pose === 'binoculars') {
         t.shLx = t.shRx = -1.5; t.elL = t.elR = -2.0; t.shLz = 0.3; t.shRz = -0.3; t.lean = -0.04;
       } else if (o.pose === 'write') {
@@ -502,10 +638,11 @@ export function createFigure({
         t.shRx = -1.0 + hit * 0.5; t.elR = -0.9 - hit * 0.3; t.shLx = -0.8; t.elL = -0.7;
       }
       // Holding a torch out in front, the beam swinging a little with each step.
-      if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 + Math.sin(phase) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
+      if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 - (t.lean + t.trunk) * 0.6 + Math.sin(phase * Math.PI * 4) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
       // ---- Gestures layered on top
       // ---- One-off gestures layered on top: a different one for each kind of thing you do
       if (o.gesture) {
+        if (LEG_GESTURES.has(o.gesture.name)) legsIK = false;
         const u = clamp(o.gesture.u, 0, 1), env = Math.sin(u * Math.PI), osc = (n) => Math.sin(u * Math.PI * n);
         const mix = (key, v) => { t[key] = lerp(t[key], v, env); };
         switch (o.gesture.name) {
@@ -550,14 +687,31 @@ export function createFigure({
         snap = 20;
       }
 
-      const k = ease(snap);
-      for (const key in pose) pose[key] += (t[key] - pose[key]) * k;
+      // Feet not placed by the legs' own solving: the sole stays level while the leg swings under it, and
+      // the toes drop when the knee lifts.
+      const lying = o.pose === 'sleep';
+      if (!legsIK && !inAir) {
+        const footOf = (th, kn) => lying ? 0.2 : o.pose === 'hang' ? 0.45 : clamp(-(th + kn + t.lean) * 0.92 + Math.max(0, kn - 0.35) * 0.4, -0.9, 1.1);
+        t.fL = footOf(t.thL, t.knL); t.fR = footOf(t.thR, t.knR);
+      }
+      // Walking and running legs go exactly where they were solved (an eased copy would skate), and so do
+      // arms swinging free, since their own springs smooth them. Everything else eases toward its target.
+      const armsFree = !o.pose && !o.gesture && !o.sitting && !o.sitGround;
+      locoLegs += ((legsIK ? 1 : 0) - locoLegs) * ease(10);
+      locoArms += ((armsFree || inAir ? 1 : 0) - locoArms) * ease(10);
+      const k = ease(snap), kl = Math.max(k, locoLegs), ka = Math.max(k, locoArms);
+      for (const key in pose) pose[key] += (t[key] - pose[key]) * (LEG_KEYS.has(key) ? kl : ARM_KEYS.has(key) ? ka : k);
 
-      legL.hip.rotation.set(pose.thL, 0, pose.spreadL); legR.hip.rotation.set(pose.thR, 0, pose.spreadR);
+      // Hips: they turn with the legs (the forward leg's hip comes forward), dip on the side of the swinging
+      // leg and shift over the planted foot at a walk; the shoulders turn against them.
+      const reach = (L) => (C > 1e-3 ? clamp(L.z / (C * 0.5 + 0.02), -1.2, 1.2) : 0);
+      const lift = (L) => (L.stance ? 0 : Math.sin(Math.PI * L.w));
+      const walkW = gait * locoLegs * (inAir ? 0 : 1);
+      const yawP = walkW * lerp(0.1, 0.13, run) * (reach(legs[0]) - reach(legs[1])) * 0.5;
+      const rollP = walkW * (1 - run) * 0.045 * (lift(legs[0]) - lift(legs[1]));
+      legL.hip.rotation.set(pose.thL, 0, pose.spreadL - rollP); legR.hip.rotation.set(pose.thR, 0, pose.spreadR - rollP);
       legL.knee.rotation.x = pose.knL; legR.knee.rotation.x = pose.knR;
-      // Ankles: the sole stays level while the leg swings under it, and the toes drop when the knee lifts.
-      const lying = o.pose === 'sleep', dangling = o.pose === 'hang' || o.air !== undefined;
-      for (const [L, th, kn] of [[legL, pose.thL, pose.knL], [legR, pose.thR, pose.knR]]) L.foot.rotation.x = lying ? 0.2 : dangling ? 0.45 : clamp(-(th + kn) * 0.92 + Math.max(0, kn - 0.35) * 0.4, -0.9, 1.1);
+      legL.foot.rotation.x = pose.fL; legR.foot.rotation.x = pose.fR;
 
       // ---- Signs of life
       // Blinking: every few seconds, quick. Eyes shut when asleep or mid-yawn.
@@ -567,7 +721,7 @@ export function createFigure({
       const gname = o.gesture ? o.gesture.name : '';
       const shut = lying || gname === 'yawn' || gname === 'laugh' ? 1 : Math.sin(Math.min(1, blink) * Math.PI);
       // The face for this moment: asked for outright, or read from what the body is doing.
-      const mood = o.mood || GESTURE_FACE[gname] || POSE_FACE[o.pose] || (hello > 0 ? 'happy' : run > 0.6 ? 'effort' : sleepy > 0.6 && !self ? 'sleepy' : 'neutral');
+      const mood = o.mood || GESTURE_FACE[gname] || POSE_FACE[o.pose] || (hello > 0 ? 'happy' : effort > 0.6 ? 'effort' : sleepy > 0.6 && !self ? 'sleepy' : 'neutral');
       const F = FACES[mood] || FACES.neutral, fk = ease(mood === 'surprised' ? 18 : 7);
       for (let i = 0; i < 4; i++) face[i] += (F[i] - face[i]) * fk;
       const lop = mood === 'puzzled' ? 0.07 : 0; // one brow higher than the other
@@ -606,31 +760,42 @@ export function createFigure({
       else if (o.pose === 'jacks' || o.pose === 'tug') mo = 0.3;
       else if (hello > 0) mo = 0.6 * Math.sin((hello / 0.7) * Math.PI);
       else if (mood === 'surprised') mo = 0.55; else if (mood === 'joy') mo = 0.5;
-      else if (run > 0.5) mo = 0.22;
+      else if (effort > 0.5) mo = 0.22;
       mouthOpen += (mo - mouthOpen) * ease(16);
       mouth.scale.y = 0.1 + 0.9 * mouthOpen; mouth.scale.x = 1 - 0.25 * (gname === 'blow' ? 1 : 0) + 0.1 * mouthOpen;
       // Breathing lifts the chest; faster after a run. Standing still, the weight shifts from foot to foot.
-      const breath = Math.sin(e * (1.5 + run * 2.5)) * (0.012 + run * 0.012);
+      const breath = Math.sin(e * (1.5 + effort * 2.5)) * (0.012 + effort * 0.012);
       torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 1.2);
-      pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
-      armL.shoulder.rotation.set(pose.shLx, 0, pose.shLz); armR.shoulder.rotation.set(pose.shRx, 0, pose.shRz);
-      armL.elbow.rotation.x = pose.elL; armR.elbow.rotation.x = pose.elR;
+      pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1) + rollP;
+      pelvis.position.x = walkW * (1 - run) * 0.012 * (lift(legs[0]) - lift(legs[1])); // weight over the planted foot
       pelvis.position.y = PELVIS_Y + pose.py;
-      // Shoulders counter the hips, the way a real stride twists the body.
-      pelvis.rotation.y = -s * 0.07 * gait; torso.rotation.y = s * 0.17 * gait;
+      pelvis.rotation.y = yawP;
+      torso.rotation.set(pose.trunk, -yawP * 1.8 + clamp(turn * 0.08, -0.25, 0.25) * gait, -rollP * 1.1);
+      // How hard the hips are being lifted and dropped: it jolts the head, the arms and the backpack.
+      if (lastPy !== null && dt > 0 && dt < 0.06) { const v = (pose.py - lastPy) / dt; pyAcc += (clamp((v - pyVel) / dt, -40, 40) - pyAcc) * ease(25); pyVel = v; }
+      lastPy = pose.py;
+      // Arms: damped springs toward their pose, loose while swinging free, firm when doing something.
+      const loose = locoArms * Math.max(gait, inAir ? 0.6 : 0);
+      const wS = lerp(24, 12, loose), zS = lerp(0.8, 0.45, loose), wE = lerp(26, 15, loose);
+      armL.shoulder.rotation.set(pull(spring.shL, pose.shLx, wS, zS, dt), 0, pose.shLz);
+      armR.shoulder.rotation.set(pull(spring.shR, pose.shRx, wS, zS, dt), 0, pose.shRz);
+      armL.elbow.rotation.x = Math.min(0, pull(spring.elL, pose.elL, wE, 0.55, dt, pyAcc * 0.25 * loose));
+      armR.elbow.rotation.x = Math.min(0, pull(spring.elR, pose.elR, wE, 0.55, dt, pyAcc * 0.25 * loose));
+      // The backpack jogs on its straps and swings out a touch when the body is jolted.
+      pack.position.y = P.neckY * 0.86 + pull(spring.bob, 0, 20, 0.35, dt, -pyAcc * 0.4) * 0.5;
+      pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.006, -0.05, 0.12), 11, 0.4, dt, Math.max(0, -pyAcc) * 0.5), 0, 0.3);
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);
-      inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w - turn * 0.045 * gait;
-      const stretch = o.air !== undefined ? Math.abs(o.air) * 0.05 : 0;
-      // A springy little squash on every footfall, more so at a run.
-      const boing = Math.sin(phase * 2 + 0.6) * 0.008 * gait * (1 + run * 0.8);
-      inner.scale.set(1 + land * 0.09 - stretch * 0.5 - boing * 0.5, 1 - land * 0.14 + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.008 + boing, 1 + land * 0.09 - stretch * 0.5 - boing * 0.5);
-      // The head stays level and looks about a little when standing.
-      // The head bobbles from side to side with each step, and looks about when standing.
-      neck.rotation.x = -inner.rotation.x * 0.6 + pose.hp;
-      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) * (headLook ? 0.15 : 1) + pose.hy + headLook + clamp(turn * 0.12, -0.4, 0.4) * gait;
-      neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.03 * gait * (1 + run * 0.5);
+      inner.rotation.z = (o.roll || 0) + bank * (inAir ? 0.4 : 1) + Math.sin(elapsed * 26) * 0.28 * w;
+      const stretch = inAir ? Math.abs(o.air) * 0.035 : 0, sq = land * (landRun ? 0.03 : 0.07);
+      inner.scale.set(1 + sq * 0.6 - stretch * 0.5, 1 - sq + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.006, 1 + sq * 0.6 - stretch * 0.5);
+      // The head steadies itself: it stays near level whatever the body does, nods a moment late when the
+      // hips are jolted, and turns into a bend before the body does.
+      const nod = pull(spring.nod, 0, 13, 0.45, dt, pyAcc * 1.2);
+      neck.rotation.x = -pose.lean * 0.6 - pose.trunk * 0.85 + pose.hp + nod;
+      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) * (headLook ? 0.15 : 1) + pose.hy + headLook + clamp(turn * 0.28, -0.55, 0.55) * Math.max(gait, 0.4) + yawP * 0.8;
+      neck.rotation.z = -inner.rotation.z * 0.6 + rollP * 0.6;
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
       else {
@@ -643,7 +808,7 @@ export function createFigure({
           let pen = -Infinity;
           for (const L of [legL, legR]) for (const pt of SOLE) { solePoint.copy(pt).applyMatrix4(L.foot.matrixWorld); pen = Math.max(pen, groundUnder(solePoint.x, solePoint.z) - (o.sink || 0) - solePoint.y); }
           // Up at once (a foot must never be inside a step); down a touch more gently.
-          const want = clamp(pen, -0.12, 0.7);
+          const want = clamp(pen + clear * scale, -0.12, 0.7); // in a running hop the feet are meant to be off the ground
           footLift = want > footLift || dt <= 0 ? want : footLift + (want - footLift) * ease(30);
         } else if (!groundUnder || o.sitting || o.sitGround || o.air !== undefined || o.pose === 'hang') footLift += (0 - footLift) * ease(20);
         inner.position.set(0, footLift / scale, 0);

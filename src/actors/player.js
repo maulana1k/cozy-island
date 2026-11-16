@@ -5,9 +5,10 @@ import { resolveCollisions } from '../logic/collision.js';
 import { WALK_SPEED, RUN_SPEED, HOP_VELOCITY, GRAVITY, PLAYER_RADIUS, PLAYER_START, PALETTE } from '../config.js';
 
 
-const ACCEL = 18, BRAKE = 22, AIR_ACCEL = 7;   // m/s²: how quickly speed builds up and bleeds off
+const ACCEL = 12, BRAKE = 14, AIR_ACCEL = 7;   // m/s²: how quickly speed builds up and bleeds off (slow enough to see the lean)
 const TURN_RATE = 9;                            // how quickly the body swings round to its direction of travel
 const JUMP_BUFFER = 0.14, COYOTE = 0.1;         // forgiving jump timing
+const WIND_UP = 0.1, WIND_UP_BELOW = 1.6;       // a jump from (nearly) standing starts with a quick crouch (s); faster, you leap straight off the stride
 
 // opts.groundAt lets the world add walkable surfaces (the dock) on top of the terrain.
 // opts.surfaceAt names the kind of ground, and opts.surfaces gives each kind's speed factor.
@@ -22,7 +23,7 @@ export function createPlayer(scene, opts = {}) {
   const facing = { x: 0, z: -1 };
   const vel = { x: 0, z: 0 };
   let vy = 0, airborne = false, heading = Math.PI;
-  let buffer = 0, coyote = 0, land = 0, roll = 0, pitch = 0, sinceStep = 0, lastSpeed = 0;
+  let buffer = 0, coyote = 0, land = 0, sinceStep = 0, windUp = -1;
   let gesture = null, look = null, onGround = false, idleFor = 0, nextFidget = 5, stumbleRest = 0;
   const FIDGETS = [['scratch', 1.3], ['stretch', 1.6], ['yawn', 1.6], ['tapfoot', 1.8], ['lookabout', 1.8], ['lookabout', 1.8]];
 
@@ -123,7 +124,7 @@ export function createPlayer(scene, opts = {}) {
         }
         const speed = Math.hypot(vel.x, vel.z);
         // One footfall per step, in time with the legs (same step length as the animation).
-        const stride = 0.26 + 0.12 * speed;
+        const stride = Math.max(0.2, figure.stepLength(speed));
         if (sinceStep >= stride && !airborne) {
           sinceStep = 0; if (player.onStep) player.onStep(surface, speed > 3.1);
           // Now and then a running scout trips over their own feet, more often on slippery ground.
@@ -137,7 +138,10 @@ export function createPlayer(scene, opts = {}) {
 
         const ground = groundAt(position.x, position.z);
         coyote = airborne ? coyote - dt : COYOTE;
-        if (buffer > 0 && coyote > 0) { vy = HOP_VELOCITY; airborne = true; buffer = 0; coyote = 0; }
+        // Jumping: from standing, crouch for a moment first (the push comes from the legs); from a run, go at once.
+        if (buffer > 0 && coyote > 0 && windUp < 0) { buffer = 0; windUp = speed < WIND_UP_BELOW ? 0 : WIND_UP; }
+        if (windUp >= 0) { windUp += dt; if (airborne && coyote <= 0) windUp = -1; }
+        if (windUp >= WIND_UP) { vy = HOP_VELOCITY; airborne = true; coyote = 0; windUp = -1; }
         if (airborne) {
           vy -= GRAVITY * (vy > 0 ? 1 : 1.7) * dt; // falls a little faster than it rises
           position.y += vy * dt;
@@ -168,12 +172,6 @@ export function createPlayer(scene, opts = {}) {
         }
       }
       if (look) look.t -= dt;
-      const turnSpeed = dt > 0 ? turned / dt : 0;
-      const k = 1 - Math.exp(-dt * 8);
-      roll += (Math.max(-0.3, Math.min(0.3, -turnSpeed * 0.035 * Math.min(1, speed / 4))) - roll) * k;
-      const accel = dt > 0 ? (speed - lastSpeed) / dt : 0;
-      pitch += (Math.max(-0.16, Math.min(0.16, accel * 0.009)) - pitch) * k;
-      lastSpeed = speed;
       land = Math.max(0, land - dt / 0.3);
       if (gesture) { gesture.t += dt; if (gesture.t >= gesture.dur) gesture = null; }
       // Left standing about, a scout soon starts to fidget.
@@ -187,9 +185,11 @@ export function createPlayer(scene, opts = {}) {
       figure.group.position.copy(position);
       if (act && act.sit) figure.group.position.y -= figure.sitDrop;
       figure.group.rotation.y = heading;
-      figure.animate(airborne ? 0 : speed, elapsed, {
+      // The figure leans into bends and speeding up from how it is moving, so only the jump is spelled out.
+      figure.animate(speed, elapsed, {
         pose: act ? act.pose : undefined,
-        sitting: player.sitting && !onGround, sitGround: (player.sitting && onGround) || !!(act && act.sit), air: airborne ? vy / HOP_VELOCITY : undefined, land, roll, pitch,
+        sitting: player.sitting && !onGround, sitGround: (player.sitting && onGround) || !!(act && act.sit), air: airborne ? vy / HOP_VELOCITY : undefined, land,
+        crouch: windUp >= 0 ? Math.sin(Math.min(1, windUp / WIND_UP) * Math.PI * 0.5) : 0,
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
         sink: player.surface === 'mud' ? 0.05 : 0,
         hold: player.torch ? 'torch' : null,

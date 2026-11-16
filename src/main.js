@@ -621,7 +621,7 @@ function step() {
   if (hintTarget) hintList.push(['E', hintTarget, true]);
   if ((vitals.hungry || vitals.thirsty) && !player.asleep && !player.riding) hintList.push(['B', vitals.hungry ? 'eat something' : 'have a drink', false]);
   if (player.asleep) hintList.push(['W A S D', 'get up', true]);
-  else if (player.riding) hintList.push(['', 'hold on tight!', true]);
+  else if (player.riding) hintList.push(['', player.riding.hint || 'hold on tight!', true]);
   else {
     if (join) hintList.push(['F', player.act ? `${join.verb} (move to stop)` : join.verb, false]);
     hintList.push(['X', player.sitting ? 'stand up' : 'sit down', false]);
@@ -741,7 +741,7 @@ function step() {
     if (journal.has('place-lookout') && !filmsSeen.has('summit') && !filming) { if (!film('summit')) filmsSeen.add('summit'); tip('fox', 'The flying fox starts here: climb the launch tower and press E.'); }
   }
   const ground = SURFACES[player.riding ? 'wood' : player.surface] || SURFACES.grass;
-  hud.setGround(player.riding ? 'Flying fox' : ground.label, ground.color);
+  hud.setGround(player.riding ? player.riding.label || 'Flying fox' : ground.label, ground.color);
   hud.setClock(clockText(timeOfDay), phaseLabel(phaseAt(timeOfDay)), night > 0.5, dayNumber);
   hud.setWeather(weather.kind, weather.kind === 'sun' && night > 0.5 ? 'Clear' : weather.label);
   hud.setSteps(stepCount);
@@ -762,7 +762,7 @@ function step() {
     hud.setWaypoint((sx * 0.5 + 0.5) * window.innerWidth, (-sy * 0.5 + 0.5) * window.innerHeight, Math.hypot(goal.x - playerXZ.x, goal.z - playerXZ.z), off);
   } else hud.setWaypoint(null);
 
-  if (!director.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) { rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
+  if (!director.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) { rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? player.riding.camSpeed ?? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
   weather.update(dt, timeOfDay, camera, player.position, night);
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);

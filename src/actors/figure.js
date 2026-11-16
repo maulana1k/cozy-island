@@ -253,7 +253,7 @@ export function createFigure({
   for (const seg of [pelvis, torso, neck, legL.hip, legL.knee, legR.hip, legR.knee]) weld(seg, true);
   for (const seg of [legL.foot, legR.foot, whites, pupils, mouth]) weld(seg, false);
   // A torch for the right hand, shown only while it is switched on.
-  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore - 0.03, 0.02); torchProp.rotation.x = -Math.PI / 2 + 0.25; torchProp.visible = false;
+  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; // lies along the forearm, lens leading torchProp.visible = false;
   { const barrel = part(new THREE.CylinderGeometry(0.02, 0.02, 0.13, 10), mat(0x3a3f47), 0, 0.035, 0, false), headT = part(new THREE.CylinderGeometry(0.036, 0.024, 0.05, 12), mat(0x8a9099), 0, 0.12, 0, false);
     const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false })); lens.position.y = 0.147;
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
@@ -389,7 +389,7 @@ export function createFigure({
         t.shRx = -1.0 + hit * 0.5; t.elR = -0.9 - hit * 0.3; t.shLx = -0.8; t.elL = -0.7;
       }
       // Holding a torch out in front, the beam swinging a little with each step.
-      if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -1.05 + Math.sin(phase) * 0.06 * gait; t.elR = -0.55; t.shRz = -0.12; }
+      if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 + Math.sin(phase) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
       // ---- Gestures layered on top
       // ---- One-off gestures layered on top: a different one for each kind of thing you do
       if (o.gesture) {

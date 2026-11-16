@@ -2,7 +2,7 @@ INTERNAL
 
 # Story, quests and characters: design
 
-Date: 2026-11-17. Status: draft for the owner's review. The builder check has not run yet (see the end).
+Date: 2026-11-17. Status: owner answers in (section 10); builder check done (section 10b). Awaiting owner approval to build Phase 1.
 
 ## 1. Intent
 
@@ -101,7 +101,7 @@ Why (owner's words, summarised): a child-growth game about learning many skills,
 
 ### 5.2 Conversation screen
 - E on a person with something to say opens a conversation panel in the paper/notebook style of the HUD: portrait, name, text, and 2–4 answer buttons (keys 1–4 or a click).
-- The camera eases to a two-shot. The world keeps running; the person keeps facing you, using the existing pause logic.
+- The camera eases to a two-shot. Game time pauses while the panel is open (BUILDER CALL, so time gates cannot expire mid-conversation); the person keeps facing you, using the existing pause logic.
 - People with nothing new to say keep today's one-line greeting.
 - Every learned fact or clue is written to the journal's new **Notes** tab, so it can be found again.
 
@@ -132,7 +132,7 @@ Each piece of gear comes from the story or a badge, opens up places or puzzles, 
 ### 5.6 Kid-level danger and safety
 - **Hazards:** slippery rocks (slower movement, a slip animation), dark caves (no entry without a headlamp), a rising tide (a timed path, with water pushing you back), storms (shelter or turn back), steep drops (fenced or rope only), getting lost (glow sticks and the tracker).
 - **Preparation as play:** some places need "told a staff member", "headlamp", "glow sticks" or "buddy" before the story lets you in.
-- **Soft failure:** if energy runs out or you get stuck, a ranger or buddy helps you back, you wake at camp with a short lesson, and no progress is lost.
+- **Soft failure:** if energy runs out or you get stuck, a ranger or buddy helps you back, you wake at camp the next morning (the day advances, so repeatable quests refresh) with a short lesson, and no story progress is lost.
 
 ### 5.7 Wildlife field guide
 A journal tab that fills as you spot or photograph animals and plants, with simple facts:
@@ -208,13 +208,23 @@ Exact layout, sizes and how far the island grows are **left to the builder** and
 - Exact dialogue text, puzzle sequences, quest counts, gear numbers, friendship values, and art for the new buildings and characters.
 - The data file format details and UI styling, within the HUD's paper style.
 
-## 10. Open questions for the owner (to settle next session)
+## 10. Owner decisions (2026-11-17)
 
-1. **Player identity:** keep one fixed scout, or let the player pick a name and look at the start?
-2. **The shell's ownership moment:** should the player be offered a real choice (keep it, give it to the scientist's museum, give it to the village), with the village as the "best" ending? Or is giving it to the village fixed?
-3. **Time:** does the story use in-game days, so some steps wait for a tide, night or weather, or can everything be done any time?
-4. **Language:** English only, or should the game also offer Bahasa Indonesia?
-5. **First vertical slice:** confirm Phase 1 = engine + saving + conversations + cast in the current map + Chapters 1–2.
+1. **Player identity:** name + pick a look at New game (a few choices of skin tone, hair, cap colour), on the current body/cap/backpack rig. Dialogue uses the chosen name and stays gender-neutral.
+2. **Shell ownership:** fixed. The shell becomes the village mascot. The player can persuade the scientist and archaeologist to agree; their friendship only changes small after-story extras.
+3. **Time:** light gating. A few steps need low tide, night or clear weather; each shows a hint and offers "wait / sleep until then" so nobody is stuck.
+4. **Language:** English only, no translation plan. Text may live in plain JS data modules; no i18n layer.
+5. **First slice (Phase 1):** confirmed: story engine + saving + conversation screen + name/look picker + cast on today's map + Chapters 1-2.
+
+## 10b. Builder check results (settled as BUILDER CALLs; owner may override)
+
+1. **Save compatibility:** save has a `version`. Quest and node ids are treated as stable once shipped. On load, unknown ids are dropped and missing ones start fresh; no migration code until a breaking change actually happens.
+2. **Canoe and cave (phase 2):** scripted transitions (fade, short ride, arrive), not paddling. The cave is its own culled zone with headlamp lighting. Phase 1 adds no hooks for them.
+3. **Saved fields:** flags, quests and stages, friendship, gear, badges, notes, field guide, bag, position, day count, time of day, weather. Conversations are not saved mid-node; reloading puts you back outside the conversation.
+4. **Time in conversations:** paused (see 5.2). Sleep and soft failure advance the day.
+5. **Phase 1 content bar:** camp and village cast only (camp leader, buddy scout, younger scout, village elder, old fisherman, shopkeeper, 2 village kids). Ranger, scientist and archaeologist arrive in phase 2. At least 3 sequence puzzles, 4 repeatable side-quest templates, and every chapter 1-2 step from section 7.
+6. **Testing:** the story engine is pure logic, runnable headless. The scripted run is a repeatable `tools/story-run.mjs` (like `ev.mjs`), not a new unit-test file, keeping the owner's "no new test files" rule.
+7. **Journal and journey guide:** the journey guide's steps become the Chapter 1 "New scout" quest inside a new quest log; the camp badge goal stays. Journal gains Quests, Notes, Field guide and People tabs.
 
 ## 11. How it will be checked
 
@@ -223,4 +233,3 @@ Exact layout, sizes and how far the island grows are **left to the builder** and
 - Save, reload and Continue restore everything.
 - Screenshots of the conversation screen, each new building, and the journal Notes, field guide and people pages.
 - `node tools/prof.mjs` at all spots stays within budget.
-- The builder check (a fresh reviewer reading this document) runs next session before planning.

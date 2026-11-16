@@ -7,7 +7,12 @@ import { createRng } from '../logic/rng.js';
 import { PALETTE, SEED } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
-const SHAKE_TIME = 0.8;
+const SHAKE_TIME = 1.1;
+// Tilt (radians, at the base) of a shaken tree: amplitude falls off with the square of its real height, so the
+// top moves ~1/height. 2.5 m saplings sway ~9 cm; a 10 m banyan moves a couple of cm (leaves do the rest).
+export const shakeAmp = (height) => Math.min(0.05, 0.035 / Math.max(0.6, (height / 2.5) ** 2));
+// A short damped oscillation: ~3.2 Hz, dying away within SHAKE_TIME.
+export const shakeWave = (since) => Math.exp(-since * 4.2) * Math.sin(since * 20);
 const GRASS_TUFTS = 7000;
 const FERNS = 260;
 
@@ -305,8 +310,8 @@ export function createScatter(scene) {
         let tiltX = Math.sin(elapsed * 0.8 + t.phase) * 0.012, tiltZ = Math.cos(elapsed * 0.6 + t.phase) * 0.012;
         const since = elapsed - t.shakeStart;
         if (since >= 0 && since < SHAKE_TIME) {
-          const fade = 1 - since / SHAKE_TIME;
-          tiltX += Math.sin(since * 34) * 0.07 * fade; tiltZ += Math.cos(since * 29) * 0.055 * fade;
+          const a = shakeAmp(TREE_KINDS[t.kind].top * t.scale), w = shakeWave(since);
+          tiltX += w * a; tiltZ += w * a * 0.7;
         }
         placeTree(t, tiltX, tiltZ);
       }

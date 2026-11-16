@@ -3,7 +3,7 @@
 // about and hauling on a tug-of-war rope.
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
-import { liftFor } from './schedule.js';
+import { liftFor, talkTo } from './schedule.js';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, groundAt, SALUTE_LINE, CAMPFIRE, PLAY } from '../logic/layout.js';
 import { stick, ball, shared } from '../world/build.js';
@@ -95,7 +95,7 @@ export function createCampLife(scene, deps) {
     id: `staff-${k}`, kind: 'villager', speaker: ['Chief Scout', 'Trainer', 'Stores Teacher', 'Logistics Teacher', 'Medical Teacher'][k], position: p, get markerY() { return groundAt(p.x, p.z) + 1.95; },
     get enabled() { return !p.member.hidden; },
     prompt: () => `E — greet ${p.name}`,
-    interact() { react(p, k === 0 ? 'salute' : 'wave', 1.2); emote(p, 'heart'); audio.play('squeak'); },
+    interact() { react(p, k === 0 ? 'salute' : 'wave', 1.2); emote(p, 'heart'); audio.play('squeak'); talkTo(p.member, player.position); },
   }));
   const solids = people.filter((p) => p.solid);
   const colliders = [];
@@ -136,7 +136,7 @@ export function createCampLife(scene, deps) {
       }
 
       // First aid
-      patient.opts = { sitting: true }; medic.opts = { pose: 'bandage' }; doctor.opts = { pose: 'explain' }; helper.opts = {}; // the helper stands by (no empty-handed carry pose)
+      patient.member.restOpts = { sitting: true }; patient.opts = { sitting: true }; medic.opts = { pose: 'bandage' }; doctor.opts = { pose: 'explain' }; helper.opts = {}; // the helper stands by (no empty-handed carry pose)
 
       // Tag
       tag.freeze -= dt; tag.grace -= dt;
@@ -216,7 +216,7 @@ export function createCampLife(scene, deps) {
         if (p.ctl) { p.x = m.x; p.z = m.z; p.rot = m.rot; p.speed = m.speed; p.opts = m.opts; } else { m.x = p.x; m.z = p.z; m.rot = p.rot; }
         p.figure.group.visible = !m.hidden;
         if (p.react) { p.react.t += dt; if (p.react.t >= p.react.dur) p.react = null; }
-        const y = groundAt(p.x, p.z) + (p.ctl ? liftFor(p.figure, p.opts) : p.opts.sitting ? p.figure.seatLift(0.42) : 0);
+        const y = groundAt(p.x, p.z) + (p.opts.sitting ? p.figure.seatLift(0.42) : p.ctl ? liftFor(p.figure, p.opts) : 0);
         p.figure.group.position.set(p.x, y, p.z);
         // Turn smoothly rather than snapping round.
         let diff = p.rot - p.figure.group.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));

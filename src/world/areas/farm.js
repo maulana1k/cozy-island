@@ -16,6 +16,7 @@ import { AREAS } from '../../config.js';
 import { groundKind } from '../../logic/terrain.js';
 import { resolveCollisions } from '../../logic/collision.js';
 import { paintGround } from '../ground.js';
+import { shakeAmp, shakeWave } from '../scatter.js';
 import { buildVegPlot, buildGoatPen, buildHayShelter, buildScarecrow, buildWallow, buildOrchardTree, buildDuckPond, buildGoat, buildBuffalo } from '../../kit/farm.js';
 import { buildStoneWall, buildHedge, buildFenceSection, buildGate } from '../../kit/yard.js';
 import { buildHeron, buildButterflies } from '../../kit/critters.js';
@@ -480,7 +481,7 @@ export function create(scene, deps) {
   });
   const tm = new THREE.Matrix4(), tq = new THREE.Quaternion(), te = new THREE.Euler(), tv = new THREE.Vector3(), ts = new THREE.Vector3();
   const writeTree = (k, t, i) => {
-    const s = t.shake > 0 ? t.shake : 0, amp = Math.sin(t.shake * 30) * 0.05 * Math.min(1, s * 2.5);
+    const amp = t.shake > 0 ? shakeWave(1.1 - t.shake) * shakeAmp([2.5, 3.3, 2.8][k.kind] * t.scale) : 0;
     te.set(amp, t.rot, amp * 0.7, 'YXZ'); tq.setFromEuler(te); tv.set(t.x, t.y, t.z); ts.setScalar(t.scale); k.im.setMatrixAt(i, tm.compose(tv, tq, ts));
   };
   treeKinds.forEach((k) => { k.spots.forEach((t, i) => writeTree(k, t, i)); k.im.instanceMatrix.needsUpdate = true; });
@@ -492,7 +493,7 @@ export function create(scene, deps) {
       id, kind: 'tree', position: { x: t.x, z: t.z }, markerY: t.y + TREE_TOP[k.kind] * t.scale + 0.3,
       prompt: () => 'E — shake tree',
       interact() {
-        t.shake = 0.9; audio.play('rustle');
+        t.shake = 1.1; audio.play('rustle');
         effects.puff(t.x, t.y + TREE_TOP[k.kind] * t.scale * 0.8, t.z, 6, k.kind === 2 ? 0x6fbf5a : 0x5aa655, 0.45, 0.9);
         deps.shakeFruit({ id, kind: 1, x: t.x, y: t.y, z: t.z }); // the island's tree rule: now and then an apple, one go per tree every 90 s
       },

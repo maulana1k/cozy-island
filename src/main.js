@@ -91,7 +91,7 @@ const props = createProps(scene, { scatter, player, ui, audio, now: () => elapse
 setGround(groundAt); // every figure plants its feet on this
 const crowd = createCrowd(); // the camp timetable everyone follows
 const villagers = createVillagers(scene, { ui, audio, player, crowd });
-const activities = createActivities(scene, { ui, audio, crowd });
+const activities = createActivities(scene, { ui, audio, crowd, player });
 const campLife = createCampLife(scene, { ui, audio, player, crowd });
 const animals = createAnimals(scene, { ui, audio, player });
 const wildlife = createWildlife(scene, { ui, audio });

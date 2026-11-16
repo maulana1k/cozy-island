@@ -80,6 +80,18 @@ const bedSpot = (b) => ({ x: b.x, z: b.z, rot: b.rot, via: b.door, pose: 'sleep'
 // How far to raise or lower someone for what they are doing: sitting on the ground, or lying on a bed.
 export const liftFor = (figure, opts) => (opts.sitGround ? -figure.sitDrop : opts.lie ? 0.2 : 0);
 
+// ---- Pressing E on a person: they stop, turn to you, wait a while, then carry on ---------------
+// `talkTo(member, player.position)` starts it; crowd.drive then holds the member still (and returns true so the
+// owner skips its own movement) until the time is up. Nothing else about the member changes, so the schedule
+// spot, the half-finished walk and the activity are all picked up again where they were.
+export const talkTime = (chars = 0) => 2.5 + Math.random() * 1.5 + Math.min(2.5, chars / 40); // 2.5-4 s, longer for a speech bubble
+export function talkTo(m, toward, dur = talkTime()) { m.talk = { t: 0, dur, to: toward }; m.go = 0; }
+const talkOpts = (m) => {
+  const s = m.arrived && m.spot;
+  if (s) return s.lie ? { pose: 'sleep', lie: true } : s.sitGround ? { sitGround: true } : { pose: 'explain' };
+  return m.restOpts || { pose: 'explain' };
+};
+
 const GAMES = new Set(['tag', 'catch', 'tug']);
 const ALWAYS_AT_WORK = { exercise: new Set(['cook']), lunch: new Set(['cook', 'eater']), campfire: new Set(['firecircle', 'watch']), sleep: new Set(['watch']) };
 
@@ -160,6 +172,14 @@ export function createCrowd() {
     // Moves one member for this frame. Returns true while the timetable is in charge of them.
     drive(m, dt) {
       m.speed = 0; m.opts = {};
+      if (m.talk) {
+        if ((m.talk.t += dt) < m.talk.dur) {
+          m.go = 0; m.opts = talkOpts(m);
+          if (!m.opts.lie) { let d = Math.atan2(m.talk.to.x - m.x, m.talk.to.z - m.z) - m.rot; d = Math.atan2(Math.sin(d), Math.cos(d)); m.rot += d * (1 - Math.exp(-dt * 8)); }
+          return true;
+        }
+        m.talk = null;
+      }
       if (m.spot) {
         m.controlled = true;
         if (!m.arrived) { m.hidden = false; m.arrived = walk(m, m.spot, dt, block.id === 'ceremony' || block.id === 'exercise'); if (m.arrived) m.rot = m.spot.rot; }

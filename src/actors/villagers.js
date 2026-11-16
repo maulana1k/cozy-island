@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
-import { liftFor } from './schedule.js';
+import { liftFor, talkTo } from './schedule.js';
 import { createVillager, stepVillager, nudgeVillager, hearBell, waitAMoment } from '../logic/villagerBrain.js';
 import { createRng } from '../logic/rng.js';
 import { heightAt } from '../logic/terrain.js';
@@ -46,7 +46,7 @@ export function createVillagers(scene, deps) {
     id: v.brain.id, kind: 'villager', position: v.position,
     get markerY() { return heightAt(v.brain.x, v.brain.z) + 1.5; },
     prompt: () => 'E — nudge',
-    interact() { nudge(v, { x: deps.player.position.x, z: deps.player.position.z }); },
+    interact() { nudge(v, { x: deps.player.position.x, z: deps.player.position.z }); talkTo(v.member, deps.player.position); },
   }));
 
   const circles = villagers.map(() => ({ x: 0, z: 0, r: 0.3 }));
@@ -64,7 +64,7 @@ export function createVillagers(scene, deps) {
         if (!m.controlled) { m.x = b.x; m.z = b.z; m.rot = v.heading; }
         if (crowd.drive(m, dt)) {
           // Called away by the timetable: walk there and join in, then wander again afterwards.
-          b.x = m.x; b.z = m.z; b.state = 'idle'; b.timer = 1 + (m.index % 3); v.position.x = b.x; v.position.z = b.z;
+          b.x = m.x; b.z = m.z; if (!m.talk || m.controlled) { b.state = 'idle'; b.timer = 1 + (m.index % 3); } v.position.x = b.x; v.position.z = b.z;
           let diff = m.rot - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); v.heading += diff * (1 - Math.exp(-dt * 10));
           v.figure.group.visible = !m.hidden;
           v.figure.group.position.set(b.x, groundAt(b.x, b.z) + liftFor(v.figure, m.opts), b.z);

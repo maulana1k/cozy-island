@@ -2,7 +2,7 @@
 // cooking, eating, and lashing a bamboo tripod. They stay put; you can say hello.
 import * as THREE from 'three';
 import { createFigure } from './figure.js';
-import { liftFor } from './schedule.js';
+import { liftFor, talkTo } from './schedule.js';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, groundAt, VILLAGE_FIRE, SALUTE_LINE, FLAGPOLE, PICNIC_TABLES, PIONEER_SITE, CAMPFIRE, SUMMIT, VILLAGE_CENTER } from '../logic/layout.js';
 
@@ -14,7 +14,7 @@ const SHORTS = [0x5f7fa6, 0x8a6a4a, 0x6f8f6a, 0x4f5f7a];
 const CAPS = [null, 'cap', 'bow', null, 'cap'];
 
 export function createActivities(scene, deps) {
-  const { ui, audio, crowd } = deps;
+  const { ui, audio, crowd, player } = deps;
   const facingTo = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
   const spots = [];
 
@@ -52,6 +52,7 @@ export function createActivities(scene, deps) {
     scene.add(figure.group);
     // Each scout has a place in the camp timetable; `member` is where they are right now.
     const member = crowd.join({ home: { x: s.x, z: s.z, rot: s.rot }, role: s.role });
+    if (s.sitting) member.restOpts = { sitting: true };
     return { ...s, figure, y, member, react: null, hellos: i, i };
   });
 
@@ -59,7 +60,7 @@ export function createActivities(scene, deps) {
     id: `scout-${s.i}`, kind: 'villager', position: s.member, get markerY() { return groundAt(s.member.x, s.member.z) + 1.5; },
     get enabled() { return !s.member.hidden; },
     prompt: () => 'E — say hello',
-    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.member.x, groundAt(s.member.x, s.member.z) + 1.6, s.member.z), s.i % 2 ? 'note' : 'heart'); },
+    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.member.x, groundAt(s.member.x, s.member.z) + 1.6, s.member.z), s.i % 2 ? 'note' : 'heart'); if (player) talkTo(s.member, player.position); },
   }));
   const colliders = [];
 
@@ -75,11 +76,12 @@ export function createActivities(scene, deps) {
         if (crowd.drive(m, dt)) {
           // The timetable has them somewhere else: walking there, or joining in.
           g.visible = !m.hidden;
-          g.position.set(m.x, groundAt(m.x, m.z) + liftFor(s.figure, m.opts), m.z);
+          g.position.set(m.x, groundAt(m.x, m.z) + (m.opts.sitting ? s.figure.seatLift(0.42) : liftFor(s.figure, m.opts)), m.z);
           let diff = m.rot - g.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); g.rotation.y += diff * (1 - Math.exp(-dt * 10));
           s.figure.animate(m.speed, elapsed, { ...m.opts, gesture });
         } else {
-          g.visible = true; g.position.set(s.x, s.y, s.z); g.rotation.y = s.rot;
+          g.visible = true; g.position.set(s.x, s.y, s.z);
+          { let d = s.rot - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * (1 - Math.exp(-dt * 10)); } // turns back smoothly after a chat
           s.figure.animate(0, elapsed, { pose: s.pose, sitGround: s.sitGround, sitting: s.sitting, gesture });
         }
       }

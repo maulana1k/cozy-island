@@ -17,6 +17,7 @@ import { AREAS } from '../../config.js';
 import { resolveCollisions } from '../../logic/collision.js';
 import { onTerraceFace } from '../../logic/terrain.js';
 import { createFigure } from '../../actors/figure.js';
+import { talkTime } from '../../actors/schedule.js';
 import {
   buildStiltHouse, buildMeetingHall, buildEarthFill, buildMarketStall, buildWell, buildShadeTree, buildWashingLine, buildPathLamp, SHADE_TREE_BENCH,
 } from '../../kit/hamlet.js';
@@ -367,8 +368,11 @@ export function create(scene, deps) {
     prompt: () => 'E — say hello',
     interact() {
       const lines = p.def.role === 'kid' && Math.random() < 0.6 ? KID_LINES : LINES;
-      deps.say(lines[(p.line++ + p.k * 5) % lines.length], p.def.role === 'kid' ? '😄' : '👋');
-      p.react = { t: 0, dur: 1.6, turnTo: { x: deps.player.position.x, z: deps.player.position.z } };
+      const line = lines[(p.line++ + p.k * 5) % lines.length];
+      deps.say(line, p.def.role === 'kid' ? '😄' : '👋');
+      // Stop, face the player (live), and wait a while: longer for a longer line. Then the walk carries on.
+      p.react = { t: 0, dur: talkTime(line.length), turnTo: deps.player.position };
+      p.go = 0;
       if (deps.audio) deps.audio.play('squeak');
     },
   }));
@@ -394,7 +398,7 @@ export function create(scene, deps) {
         p.think -= dt;
         if (p.think <= 0 || first) { p.think = 1; decide(p, t, !shown || first); }
         p.speed = 0;
-        if (p.react) { p.react.t += dt; p.rot = turnToward(p.rot, face(p, p.react.turnTo), dt * 6); if (p.react.t > p.react.dur) p.react = null; }
+        if (p.react) { p.react.t += dt; p.rot = turnToward(p.rot, face(p, p.react.turnTo), dt * 6); p.go = 0; if (p.react.t > p.react.dur) p.react = null; }
         else if (p.path) walk(p, dt, px, pz);
         const vis = shown && !p.hidden;
         p.figure.group.visible = vis;
@@ -408,8 +412,8 @@ export function create(scene, deps) {
         if (dist > ANIMATE_WITHIN) continue;
         const busy = !p.path && !p.react;
         p.figure.animate(p.speed, elapsed, {
-          sitting, pose: busy && s.pose ? s.pose : undefined,
-          gesture: p.react ? { name: 'wave', u: Math.min(1, p.react.t / p.react.dur) } : null,
+          sitting, pose: busy && s.pose ? s.pose : p.react && !sitting ? 'explain' : undefined,
+          gesture: p.react && p.react.t < 1.6 ? { name: 'wave', u: p.react.t / 1.6 } : null,
           look: p.react ? player.position : undefined, mood: p.react ? 'happy' : undefined,
         });
       }

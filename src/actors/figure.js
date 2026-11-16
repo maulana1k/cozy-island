@@ -563,7 +563,7 @@ export function createFigure({
   const WK_D0 = -HEEL * (1 - Math.cos(WK_HU)) - ANK * Math.sin(WK_HU);      // the ankle against the flat foot's spot, heel down and toes up
   const WK_A = 0.45;                                                       // the share of the footprint ahead of the hip as the heel lands
   const walkC = (A) => (TH * Math.sin(A) + SH * Math.sin(A - WK_K0) - WK_D0) / WK_A;
-  const A_NOM = 0.42, A_MAX = 0.53, C_LO = 1.8, C_HI = 3.0;               // 24 and 30 degrees; a natural cadence band (steps a second on a scout's legs)
+  const A_NOM = 0.42, A_MAX = 0.72, C_LO = 1.8, C_HI = 3.5;               // 24 and up to 41 degrees (2.1 m/s walks on ~0.55 m steps, ~3.7 a second); a natural cadence band (steps a second on a scout's legs)
   const gaitOut = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 }, gaitAsk = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 };
   let gDw = 0.6;
   const sOf = (A) => (walkC(A) * scale) / (2 * gDw);                      // a walking step at this angle (m)

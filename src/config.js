@@ -268,7 +268,7 @@ export const DAY_LENGTH = 1920; // a 32-minute day at 1×: slow and unhurried
 export const START_TIME = 0.64;
 
 // Player and camera
-export const WALK_SPEED = 1.5; // a child's brisk, long-stepping walk (about 3.2 steps a second); RUN_SPEED adds a moment in the air
+export const WALK_SPEED = 2.1; // a child's brisk, long-stepping walk (about 3.7 steps a second); RUN_SPEED adds a moment in the air
 export const RUN_SPEED = 3.9; // a child's run, not a sprinter's
 export const HOP_VELOCITY = 5;
 export const GRAVITY = 15;

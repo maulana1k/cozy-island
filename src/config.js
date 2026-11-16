@@ -260,7 +260,7 @@ export const PALETTE = {
 };
 
 // Day cycle. Time of day is a fraction in [0, 1), 0 = midnight.
-export const DAY_LENGTH = 480;
+export const DAY_LENGTH = 960; // a 16-minute day at 1×: unhurried
 export const START_TIME = 0.64;
 
 // Player and camera

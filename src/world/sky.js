@@ -6,7 +6,9 @@ import { SEED } from '../config.js';
 const SUN_SCALE = 1.0;
 const AMBIENT_SCALE = 1.25;
 const FOG_DENSITY = 0.0046; // far things fade into haze
-const SHADOW_HALF = 42;
+// Shadows are drawn only near the player, where you can see them, so the map's texels stay small and
+// edges stay smooth. SHADOW_TEXELS is the map size; one texel is 2 * SHADOW_HALF / SHADOW_TEXELS metres.
+const SHADOW_HALF = 30, SHADOW_TEXELS = 4096;
 
 function buildDome() {
   const mat = new THREE.ShaderMaterial({
@@ -79,7 +81,7 @@ function buildDisc(color, size) {
 export function createSky(scene, renderer) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.autoUpdate = false; // main.js asks for a fresh one when it is due
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap; // (PCFSoftShadowMap blanks the ground in this three.js build)
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;
 
@@ -92,13 +94,14 @@ export function createSky(scene, renderer) {
 
   const sunLight = new THREE.DirectionalLight(0xffffff, 1);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.mapSize.set(SHADOW_TEXELS, SHADOW_TEXELS);
   const cam = sunLight.shadow.camera;
   cam.left = -SHADOW_HALF; cam.right = SHADOW_HALF; cam.top = SHADOW_HALF; cam.bottom = -SHADOW_HALF;
   cam.near = 1; cam.far = 260;
   sunLight.shadow.bias = -0.0006;
   sunLight.shadow.normalBias = 0.06;
-  sunLight.shadow.radius = 1; // a plain, clean-edged shadow
+  sunLight.shadow.radius = 1; // a clean edge, filtered a little so it is smooth rather than stair-stepped
+  if ('intensity' in sunLight.shadow) sunLight.shadow.intensity = 0.75; // one even shadow tone everywhere
 
   const ambient = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
   scene.fog = new THREE.FogExp2(0xffffff, FOG_DENSITY);
@@ -107,7 +110,7 @@ export function createSky(scene, renderer) {
   const tmp = new THREE.Color();
   const waterLight = new THREE.Color();
   const fogColor = new THREE.Color();
-  const dir = new THREE.Vector3();
+  const dir = new THREE.Vector3(), snapRight = new THREE.Vector3(), snapUp = new THREE.Vector3();
   let lastElapsed = 0;
 
   return {
@@ -132,7 +135,18 @@ export function createSky(scene, renderer) {
       if (sunUp) dir.set(s.x, s.y, s.z); else dir.set(-s.x, -s.y, s.z).normalize();
       // Keep the light from going fully horizontal so shadows never streak across the island.
       if (dir.y < 0.22) { dir.y = 0.22; dir.normalize(); }
-      const fx = focus ? focus.x : 0, fz = focus ? focus.z : 0;
+      // Follow the player, but only in whole shadow-map texels as seen from the sun, so shadow edges
+      // stay still instead of crawling and shimmering as you walk or turn.
+      let fx = focus ? focus.x : 0, fz = focus ? focus.z : 0;
+      {
+        const texel = (2 * SHADOW_HALF) / SHADOW_TEXELS;
+        snapRight.set(dir.z, 0, -dir.x); if (snapRight.lengthSq() < 1e-6) snapRight.set(1, 0, 0); snapRight.normalize();
+        snapUp.crossVectors(dir, snapRight).normalize();
+        const r = Math.round((fx * snapRight.x + fz * snapRight.z) / texel) * texel, u = Math.round((fx * snapUp.x + fz * snapUp.z) / texel) * texel;
+        // Back to the ground plane: solve for the point whose light-space coordinates are (r, u).
+        const a = snapRight.x, b = snapRight.z, c = snapUp.x, d = snapUp.z, det = a * d - b * c;
+        if (Math.abs(det) > 1e-4) { fx = (r * d - b * u) / det; fz = (a * u - r * c) / det; }
+      }
       sunLight.target.position.set(fx, 0, fz);
       sunLight.position.set(fx + dir.x * 120, dir.y * 120, fz + dir.z * 120);
       sunLight.color.setHex(c.sun);

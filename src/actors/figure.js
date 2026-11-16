@@ -97,10 +97,13 @@ function buildAccent(kind, accentColor, P) {
     g.add(part(new THREE.CylinderGeometry(R * 0.8, R * 1.0, R * 0.75, 16), m, 0, R * 0.38, 0));
     g.add(part(new THREE.CylinderGeometry(R * 1.02, R * 1.03, 0.035, 16), mat(0xe0704f), 0, 0.03, 0, false));
     g.position.y = headC + R * 0.55; g.rotation.x = -0.07;
-  } else if (kind === 'cap') {
-    const dome = part(new THREE.SphereGeometry(R * 1.07, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), m);
-    g.add(dome, part(new THREE.CylinderGeometry(R * 0.78, R * 0.78, 0.022, 12, 1, false, -Math.PI / 2, Math.PI), m, 0, 0.012, R * 0.85));
-    g.position.y = headC + R * 0.2; g.rotation.x = -0.12;
+  } else if (kind === 'cap') { // a baseball cap: a low crown sitting clear of the hair, a short bill, a button on top
+    // The crown stays a good few millimetres outside the hair everywhere (never nearly touching it, which
+    // would flicker), and its rim sits above the brows so the face is not hidden.
+    const dome = part(new THREE.SphereGeometry(R * 1.1, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2), m); dome.scale.y = 0.72;
+    const bill = part(new THREE.CylinderGeometry(R * 0.72, R * 0.72, 0.016, 14, 1, false, -Math.PI / 2, Math.PI), m, 0, 0.004, R * 0.82); bill.scale.x = 1.12; bill.rotation.x = 0.16;
+    g.add(dome, bill, part(new THREE.SphereGeometry(R * 0.09, 8, 6), m, 0, R * 0.79, 0, false));
+    g.position.y = headC + R * 0.38;
   } else if (kind === 'scarf') { // neckerchief: a roll round the collar and a point hanging down the front
     const r = P.chest * 0.62;
     const ring = part(new THREE.TorusGeometry(r, 0.03, 8, 16), m, 0, 0, 0, false); ring.rotation.x = Math.PI / 2;
@@ -370,9 +373,17 @@ export function createFigure({
   const ANK = 0.051 * P.limb, HEEL = 0.075 * P.limb, TOE = 0.145 * P.limb; // ankle above the sole; heel and toe either side
   const legK = (LL * scale) / KID_LEG, sqK = Math.sqrt(legK);              // this person's legs against a scout's
   const HANG_DROP = P === KID ? 0.31 - KID.pelvisY : 0;                    // keeps the hands on the flying-fox bar
-  let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, bank = 0, locoLegs = 1, locoArms = 1;
+  let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, locoLegs = 1, locoArms = 1;
   let wasAir = false, jump = null, landRun = false, lastPy = null, pyVel = 0, pyAcc = 0;
-  const legs = [{ u: 0, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0 }, { u: 0.5, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0 }];
+  // The body's own level over uneven ground (world m, eased so steps and slopes never jolt it) and the
+  // little correction that keeps the soles on the ground, eased too: both critically damped [value, velocity].
+  let bodyY = null, bodyV = 0, liftV = 0;
+  const BODY_W = 10, LIFT_W = 22;
+  // g: the ground under the foot (world m), g0: where it last pushed off, gO: g against the body's level (own units)
+  const legs = [{ u: 0, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, g: 0, g0: 0, gO: 0 }, { u: 0.5, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, g: 0, g0: 0, gO: 0 }];
+  // The ground at a spot given in the body's own frame (x across, z forward, in metres), with no allocation.
+  let gX = 0, gZ = 0, gCos = 1, gSin = 0, gSink = 0;
+  const groundLocal = (lx, lz) => groundUnder(gX + lx * gCos + lz * gSin, gZ - lx * gSin + lz * gCos) - gSink;
   const edgeA = { z: 0, y: 0, sg: 0 }, edgeB = { z: 0, y: 0, sg: 0 };
   // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
   const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0] };
@@ -387,7 +398,7 @@ export function createFigure({
     const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
     const cPref = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : vk < 2.3 ? 3.1 + ((vk - 1.35) / 0.95) * 0.2 : 3.3 + Math.min(1, (vk - 2.3) / 1.7) * 0.15;
     const Dw = 0.6 - 0.06 * smooth(vk / 1.35);           // share of a stride each foot is down when walking
-    const Cw = 0.44, Cr = 0.47;                           // the longest footprint a scout's leg sweeps walking, running (m)
+    const Cw = 0.44, Cr = 0.40;                           // the longest footprint a scout's leg sweeps walking, running (m)
     const needD = vk > 0.01 ? (Cw * cPref) / (2 * vk) : 1; // what walking would need at the preferred cadence
     const r = smooth((0.52 - needD) / 0.16);              // 0 walking .. 1 running
     const cK = lerp(Math.max(cPref, (vk * 2 * Dw) / Cw), cPref, r);
@@ -484,12 +495,13 @@ export function createFigure({
       // Back down: a running jump lands on its lead foot straight into the next stride.
       if (!inAir && wasAir) { landRun = !!(jump && jump.run); if (landRun) phase = jump.lead === 0 ? 0 : 0.5; jump = null; }
       wasAir = inAir;
-      if (!inAir) phase = (phase + dt * G.c * 0.5) % 1;
+      // The stride only turns over while actually going somewhere: standing, both feet stay planted.
+      const going = smooth(spd / 0.18);
+      if (!inAir) phase = (phase + dt * G.c * 0.5 * going) % 1;
       const Tst = 2 / G.c, D = G.D, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
-      const heelUp = lerp(0.3, 0.02, run), toeOff = lerp(0.6, 0.75, run);
-      // Leaning: a little into a run, more while speeding up, back while braking (tan(lean) ~ a / g, kept gentle).
-      const accLean = inAir ? 0 : clamp(acc * 0.012, -0.13, 0.15);
-      bank += (clamp(-Math.atan((spd * turn) / 9.8) * 0.85, -0.32, 0.32) - bank) * ease(8); // into a bend, like a cyclist
+      const heelUp = 0.3 * gait, toeOff = lerp(0.6, 0.75, run) * gait;   // no rolling heel-to-toe when standing
+      // Leaning: forward into a run, a touch more while speeding up, back a little while braking. Never into bends.
+      const accLean = inAir ? 0 : clamp(acc * 0.008, -0.08, 0.08);
       const crouch = o.crouch || 0, land = o.land || 0;
 
       // ---- Where each foot is: down on the ground, or swinging through
@@ -499,7 +511,7 @@ export function createFigure({
         if (L.stance) {
           L.s = L.u / D; stanceAt(L.s, C, heelUp, toeOff, L);
           const give = Math.sin(Math.PI * L.s);
-          L.kL = lerp(0.99 - 0.035 * give, 0.97 - 0.1 * give, run); // the knee gives a little mid-stance, more at a run
+          L.kL = lerp(0.99 - 0.035 * give * gait, 0.97 - 0.1 * give, run); // the knee gives a little mid-stance, more at a run
         } else {
           const w = (L.u - D) / (1 - D); L.w = w;
           stanceAt(1, C, heelUp, toeOff, edgeA); stanceAt(0, C, heelUp, toeOff, edgeB);
@@ -510,21 +522,49 @@ export function createFigure({
           L.sg = lerp(edgeA.sg, edgeB.sg, smooth(w)) + run * 0.35 * Math.sin(Math.PI * w);
         }
       }
-      // ---- The hips ride over the planted leg like an upturned pendulum: highest straight over the foot,
-      // lowest with both feet down. At a run the knee gives on landing, then there is a little flight.
-      const hOver = (L, kL = L.kL) => Math.sqrt(Math.max(0, (kL * LL) ** 2 - L.z * L.z)) + L.y;
-      let h, clear = 0;
-      if (legs[0].stance || legs[1].stance) h = Math.min(legs[0].stance ? hOver(legs[0]) : 9, legs[1].stance ? hOver(legs[1]) : 9);
-      else {
-        const A = legs[0].w < legs[1].w ? legs[0] : legs[1], kE = lerp(0.99, 0.97, run);
-        const tf = Math.max(1e-3, (0.5 - D) * Tst), tt = clamp((A.u - D) * Tst, 0, tf);
-        const h0 = hOver(stanceAt(1, C, heelUp, toeOff, edgeA), kE), h1 = hOver(stanceAt(0, C, heelUp, toeOff, edgeB), kE);
-        clear = 0.5 * (9 / scale) * tt * (tf - tt); // a ballistic hop between the steps
-        h = lerp(h0, h1, tt / tf) + clear;
+      // ---- The hips: a small, smooth rise and fall twice a stride, on top of the highest level from which
+      // both ends of the footprint can still be reached. Walking they rise a little over the planted foot;
+      // running they sink a little into it and float through the moment both feet are off the ground.
+      // (A curve, not the planted leg's own arc: that arc has a corner at every footfall and read as a jiggle.)
+      const hOver = (L, kL) => Math.sqrt(Math.max(0, (kL * LL) ** 2 - L.z * L.z)) + L.y;
+      const kE = lerp(0.99, 0.97, run);
+      const hLow = Math.min(hOver(stanceAt(1, C, heelUp, toeOff, edgeA), kE), hOver(stanceAt(0, C, heelUp, toeOff, edgeB), kE));
+      const beat = 0.5 + 0.5 * Math.cos(4 * Math.PI * (phase - D / 2)); // 1 over the middle of each footfall
+      // Running, the dip happens only while a foot is down (zero at touchdown, so the leg lands long).
+      const dip = (legs[0].stance ? Math.sin(Math.PI * legs[0].s) ** 2 : 0) + (legs[1].stance ? Math.sin(Math.PI * legs[1].s) ** 2 : 0);
+      let h = hLow + gait * going * ((1 - run) * 0.05 * beat - run * 0.03 * dip) * LL;
+      if (!legs[0].stance && !legs[1].stance) { // running: between steps both feet lift clear for a moment
+        const A = legs[0].w < legs[1].w ? legs[0] : legs[1];
+        const tf = Math.max(1e-3, (0.5 - D) * Tst), sn = Math.sin((Math.PI * clamp((A.u - D) * Tst, 0, tf)) / tf);
+        const clear = ((1.2 / scale) * tf * tf + 0.012 * LL) * sn * sn;
         legs[0].y += clear; legs[1].y += clear;
       }
       h += -crouch * 0.36 * LL - land * (landRun ? 0.1 : 0.3) * LL + Math.sin(elapsed * 1.8 + seed) * 0.004 * (1 - gait);
-      const lean = 0.012 + run * 0.06 * smooth(G.vk / 3.9) + accLean + crouch * 0.06 + land * 0.04;
+      // ---- The ground under each foot. A planted foot stands on the ground where it is; a swinging one
+      // heads from where it pushed off to where it will come down. The body's level follows the lower
+      // of them through a critically damped spring, so it rides smoothly up and down steps and slopes
+      // while the legs reach for the treads.
+      const lean = 0.012 + run * 0.09 * smooth(G.vk / 3.9) + accLean + crouch * 0.06 + land * 0.04;
+      const hz = hLow * Math.tan(lean); // the leaned body carries the hips, and so the feet, this far forward
+      const planted = groundUnder && !far && !o.sitting && !o.sitGround && !inAir && o.pose !== 'hang' && o.pose !== 'sleep';
+      if (planted) {
+        gX = group.position.x; gZ = group.position.z; gCos = Math.cos(group.rotation.y); gSin = Math.sin(group.rotation.y); gSink = o.sink || 0;
+        if (bodyY === null) legs[0].g0 = legs[1].g0 = group.position.y - gSink;
+        let target = Infinity;
+        for (let i = 0; i < 2; i++) {
+          const L = legs[i], lx = (i === 0 ? -P.hipX : P.hipX) * scale;
+          const z = (L.z + hz) * scale, heel = groundLocal(lx, z - HEEL * scale), toe = groundLocal(lx, z + TOE * scale);
+          if (L.stance) { L.g = L.g0 = Math.max(heel, toe); target = Math.min(target, L.g); } // a sole over a step's edge rests on the higher tread
+          else {
+            // Heading for where it will come down; rising early for a step up; never through the ground it passes over.
+            const down = groundLocal(lx, (edgeB.z + hz + 0.03) * scale + spd * (1 - L.w) * (1 - D) * Tst);
+            L.g = Math.max(lerp(L.g0, down, smooth(down > L.g0 ? Math.min(1, L.w * 1.8) : L.w)), heel, toe); target = Math.min(target, down);
+          }
+        }
+        if (bodyY === null || Math.abs(target - bodyY) > 1.5) { bodyY = target; bodyV = 0; } // first step, or moved far at once
+        else if (dt > 0) { const db = Math.min(dt, 0.05); bodyV += (BODY_W * BODY_W * (target - bodyY) - 2 * BODY_W * bodyV) * db; bodyY += bodyV * db; }
+        legs[0].gO = (legs[0].g - bodyY) / scale; legs[1].gO = (legs[1].g - bodyY) / scale;
+      } else { bodyY = null; bodyV = 0; legs[0].gO = legs[1].gO = 0; }
       const t = { ...pose };
       t.hy = 0; t.hp = 0; t.lean = lean;
       t.trunk = 0.03 + run * 0.09 + accLean * 0.6 + crouch * 0.3 + land * (landRun ? 0.08 : 0.22);
@@ -532,18 +572,22 @@ export function createFigure({
       const cl = Math.cos(lean), sl = Math.sin(lean), yHip = h / cl;
       t.py = yHip + 0.04 - PELVIS_Y;
       for (let i = 0; i < 2; i++) {
-        const L = legs[i], yg = L.y - h;
+        const L = legs[i], yg = L.y + L.gO - h;
         legIK(L.z * cl - yg * sl, yg * cl + L.z * sl);
         if (i === 0) { t.thL = ik.th; t.knL = ik.kn; t.fL = L.sg - lean - ik.th - ik.kn; } else { t.thR = ik.th; t.knR = ik.kn; t.fR = L.sg - lean - ik.th - ik.kn; }
       }
       t.spreadL = run * 0.05; t.spreadR = -run * 0.05; // a running child's feet land nearer the midline
       // ---- Arms: pendulums from the shoulders, driven by the opposite leg through the twist of the trunk.
       // Nearly straight and loose at a walk; bent to about a right angle and pumping at a run.
-      const amp = lerp(0.8, 0.6, run) * gait, off = lerp(0.04, -0.12, run) * gait - (lean + t.trunk) * 0.5 + clamp(acc * 0.025, -0.45, 0.3);
-      t.shLx = clamp((t.thR + lean) * amp, -0.75, 0.6) + off; t.shRx = clamp((t.thL + lean) * amp, -0.75, 0.6) + off;
-      const fw = (x) => clamp(-(x - off) / 0.8, 0, 1);
-      t.elL = -(0.15 * (1 - gait) + lerp(0.22, 1.45, run) * gait + fw(t.shLx) * 0.32 * gait);
-      t.elR = -(0.15 * (1 - gait) + lerp(0.22, 1.45, run) * gait + fw(t.shRx) * 0.32 * gait);
+      // Each arm goes with the opposite leg's place in its stride (+1 forward). Angles are aimed in the world,
+      // so a body leaning into a run does not carry the arms up with it. Walking: a loose swing of about 15
+      // degrees each way. Running: elbows at about a right angle, the hand coming forward to the chest and
+      // back past the hip (further back than forward), not an athlete's punch.
+      const fR = C > 1e-3 ? clamp(legs[0].z / (C * 0.5 + 0.02), -1, 1) : 0, fL = C > 1e-3 ? clamp(legs[1].z / (C * 0.5 + 0.02), -1, 1) : 0;
+      const aSw = lerp(0.27, 0.58, run) * gait * going, aOff = lerp(0.025, 0.13, run) * gait - (lean + t.trunk) * 0.85 + clamp(acc * 0.012, -0.15, 0.12);
+      t.shLx = aOff - aSw * fL; t.shRx = aOff - aSw * fR;
+      const elOf = (f) => -(0.15 * (1 - gait) + gait * (lerp(0.2, 1.45, run) + lerp(0.15 * Math.max(0, f), 0.12 * f, run) * going));
+      t.elL = elOf(fL); t.elR = elOf(fR);
       t.shLz = -(0.12 + 0.07 * run); t.shRz = 0.12 + 0.07 * run;
       // Winding up for a jump: arms swing back. Landing from a standing jump: arms out for balance.
       t.shLx += crouch * 0.9; t.shRx += crouch * 0.9; t.elL -= crouch * 0.25; t.elR -= crouch * 0.25;
@@ -776,7 +820,7 @@ export function createFigure({
       lastPy = pose.py;
       // Arms: damped springs toward their pose, loose while swinging free, firm when doing something.
       const loose = locoArms * Math.max(gait, inAir ? 0.6 : 0);
-      const wS = lerp(24, 12, loose), zS = lerp(0.8, 0.45, loose), wE = lerp(26, 15, loose);
+      const wS = lerp(24, 19, loose), zS = lerp(0.8, 0.7, loose), wE = lerp(26, 20, loose);
       armL.shoulder.rotation.set(pull(spring.shL, pose.shLx, wS, zS, dt), 0, pose.shLz);
       armR.shoulder.rotation.set(pull(spring.shR, pose.shRx, wS, zS, dt), 0, pose.shRz);
       armL.elbow.rotation.x = Math.min(0, pull(spring.elL, pose.elL, wE, 0.55, dt, pyAcc * 0.25 * loose));
@@ -787,7 +831,7 @@ export function createFigure({
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);
-      inner.rotation.z = (o.roll || 0) + bank * (inAir ? 0.4 : 1) + Math.sin(elapsed * 26) * 0.28 * w;
+      inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w; // no banking into bends
       const stretch = inAir ? Math.abs(o.air) * 0.035 : 0, sq = land * (landRun ? 0.03 : 0.07);
       inner.scale.set(1 + sq * 0.6 - stretch * 0.5, 1 - sq + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.006, 1 + sq * 0.6 - stretch * 0.5);
       // The head steadies itself: it stays near level whatever the body does, nods a moment late when the
@@ -799,19 +843,25 @@ export function createFigure({
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }
       else {
-        // Feet on the ground: find the lowest point of either shoe and move the body so that it
-        // rests exactly on the ground under it. A foot can never sink in, and never hovers.
-        const planted = groundUnder && !far && !o.sitting && !o.sitGround && o.air === undefined && o.pose !== 'hang';
+        // Feet on the ground: the legs were solved onto the ground under each foot, so this is only a
+        // small correction for what they could not reach (or a pose that places the legs itself): find how
+        // far the planted soles are in or above the ground and ease the body by that much. Eased, never
+        // snapped, so it can not put a jolt into the body's rise and fall.
+        const base = planted ? (bodyY - group.position.y) / scale : 0;
+        let liftT = 0;
         if (planted) {
-          inner.position.set(0, 0, 0);
+          inner.position.set(0, base, 0);
           group.updateMatrixWorld(true);
           let pen = -Infinity;
-          for (const L of [legL, legR]) for (const pt of SOLE) { solePoint.copy(pt).applyMatrix4(L.foot.matrixWorld); pen = Math.max(pen, groundUnder(solePoint.x, solePoint.z) - (o.sink || 0) - solePoint.y); }
-          // Up at once (a foot must never be inside a step); down a touch more gently.
-          const want = clamp(pen + clear * scale, -0.12, 0.7); // in a running hop the feet are meant to be off the ground
-          footLift = want > footLift || dt <= 0 ? want : footLift + (want - footLift) * ease(30);
-        } else if (!groundUnder || o.sitting || o.sitGround || o.air !== undefined || o.pose === 'hang') footLift += (0 - footLift) * ease(20);
-        inner.position.set(0, footLift / scale, 0);
+          for (let i = 0; i < 2; i++) {
+            if (legsIK && !legs[i].stance) continue; // a swinging foot is meant to be off the ground
+            const F = i === 0 ? legL : legR;
+            for (const pt of SOLE) { solePoint.copy(pt).applyMatrix4(F.foot.matrixWorld); pen = Math.max(pen, groundUnder(solePoint.x, solePoint.z) - (o.sink || 0) - solePoint.y); }
+          }
+          liftT = pen > -Infinity ? clamp(pen + 0.003, -0.12, 0.4) : footLift; // a hair of clearance, so an eased sole never dips in
+        }
+        if (dt > 0) { const db = Math.min(dt, 0.05); liftV += (LIFT_W * LIFT_W * (liftT - footLift) - 2 * LIFT_W * liftV) * db; footLift += liftV * db; }
+        inner.position.set(0, base + footLift / scale, 0);
       }
     },
   };

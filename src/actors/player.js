@@ -16,13 +16,13 @@ export function createPlayer(scene, opts = {}) {
   const groundAt = opts.groundAt || heightAt;
   const surfaceAt = opts.surfaceAt || (() => 'grass');
   const surfaces = opts.surfaces || {};
-  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'hat', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x6f9a5a });
+  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'cap', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a });
   scene.add(figure.group);
 
   const position = new THREE.Vector3(PLAYER_START.x, groundAt(PLAYER_START.x, PLAYER_START.z), PLAYER_START.z);
   const facing = { x: 0, z: -1 };
   const vel = { x: 0, z: 0 };
-  let vy = 0, airborne = false, heading = Math.PI;
+  let vy = 0, airborne = false, heading = Math.PI, yVel = 0;
   let buffer = 0, coyote = 0, land = 0, sinceStep = 0, windUp = -1;
   let gesture = null, look = null, onGround = false, idleFor = 0, nextFidget = 5, stumbleRest = 0;
   const FIDGETS = [['scratch', 1.3], ['stretch', 1.6], ['yawn', 1.6], ['tapfoot', 1.8], ['lookabout', 1.8], ['lookabout', 1.8]];
@@ -146,13 +146,14 @@ export function createPlayer(scene, opts = {}) {
           vy -= GRAVITY * (vy > 0 ? 1 : 1.7) * dt; // falls a little faster than it rises
           position.y += vy * dt;
           if (position.y <= ground && vy <= 0) {
-            position.y = ground; airborne = false; land = Math.min(1, -vy / HOP_VELOCITY + 0.3); vy = 0;
+            position.y = ground; yVel = 0; airborne = false; land = Math.min(1, -vy / HOP_VELOCITY + 0.3); vy = 0;
             if (player.onLand) player.onLand(surface);
           }
         } else {
-          // Follow the ground smoothly so small bumps do not jitter. Feet sink a little into mud.
-          const sink = surface === 'mud' ? 0.06 : 0;
-          position.y += (ground - sink - position.y) * Math.min(1, dt * 18);
+          // Follow the ground smoothly (critically damped, so steps and bumps never jolt). Feet sink a little into mud.
+          const sink = surface === 'mud' ? 0.06 : 0, gap = ground - sink - position.y, h = Math.min(dt, 0.05);
+          if (Math.abs(gap) > 1.2) { position.y += gap; yVel = 0; }
+          else { yVel += (100 * gap - 20 * yVel) * h; position.y += yVel * h; if (position.y < ground - sink - 0.35) { position.y = ground - sink - 0.35; yVel = Math.max(0, yVel); } }
         }
       } else {
         vel.x = vel.z = 0;

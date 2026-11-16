@@ -38,7 +38,7 @@ const SPOTS = {
 const only = process.argv[2];
 for (const [name, q] of Object.entries(SPOTS)) {
   if (only && only !== name) continue;
-  await send('Page.navigate', { url: `http://localhost:5173/?play&t=0.45&${q}&dbg&nolimit${process.argv[3] || ""}` });
+  await send('Page.navigate', { url: `http://localhost:5173/?play&t=${process.env.T || '0.45'}&${q}&dbg&nolimit${process.argv[3] || ""}` });
   await sleep(6000);
   await send('Profiler.enable'); await send('Profiler.setSamplingInterval', { interval: 200 }); await send('Profiler.start');
   const frames = await evalJs(`new Promise((res) => { const t = []; let last = performance.now(); const f = () => { const n = performance.now(); t.push(n - last); last = n; if (t.length < 400) requestAnimationFrame(f); else { t.sort((a, b) => a - b); res({ median: t[200], p95: t[380] }); } }; requestAnimationFrame(f); })`);

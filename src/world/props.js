@@ -13,6 +13,9 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   return m;
 }
 
+const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
+const SHADOW_LAMP = 512;  // and for the nearest lit lamp
+
 export function createProps(scene, deps) {
   let lampDark = 0; // 0 in daylight .. 1 at night: how much a lit lamp shows against the day
   const { scatter, player, ui, audio } = deps;
@@ -256,6 +259,16 @@ export function createProps(scene, deps) {
       flames.scale.setScalar(1.25); flames.position.y = 0.25;
       g.scale.setScalar(1.9);
       light.distance = 34; light.position.y = 1.3;
+      // The bonfire throws real shadows, radially away from itself. Its cube map is not redrawn every
+      // frame: it is rebuilt on its own slow schedule (see the updater below). The logs and stones round
+      // the flame must not cast, or they would shadow everything from a light that sits inside the stack.
+      g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+      light.castShadow = true;
+      light.shadow.mapSize.set(SHADOW_FIRE, SHADOW_FIRE);
+      light.shadow.bias = -0.004; light.shadow.normalBias = 0.12; light.shadow.radius = 1.5;
+      light.shadow.camera.near = 0.6;
+      light.shadow.autoUpdate = false; light.shadow.needsUpdate = false;
+      light.shadow.intensity = 1;
     }
     g.position.set(f.x, y - 0.02, f.z);
     // The ring of stones and the logs never move: weld them (the flames and the light stay apart).
@@ -274,8 +287,17 @@ export function createProps(scene, deps) {
       interact() { if (scheduled) return; fire.lit = !fire.lit; audio.play('fire'); },
     });
     fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 9 : 5, loud: big ? 1 : 0.55 });
+    let shadowAge = 99, shadowWas = false;
     updaters.push((dt, elapsed) => {
       if (scheduled) fire.lit = burning();
+      if (big) {
+        // Redraw the shadow cube a little over once a second while it can be seen (lit, player near);
+        // the redraw itself happens in main.js's alternate-frame shadow pass, never as an extra pass.
+        const on = fire.level > 0.3 && Math.hypot(player.position.x - f.x, player.position.z - f.z) < 40;
+        shadowAge += dt;
+        if (on && (!shadowWas || shadowAge > 1.2)) { light.shadow.needsUpdate = true; shadowAge = 0; }
+        shadowWas = on;
+      }
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       flames.visible = fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
@@ -302,6 +324,9 @@ export function createProps(scene, deps) {
   // A few real lights follow the lamps nearest you, so the ground and walls round them are lit; every
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
   const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
+  // The nearest lit lamp also casts a cube shadow, rebuilt on a slow schedule or when another lamp becomes nearest.
+  { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.004; sh.normalBias = 0.1; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; }
+  let lampShadowTarget = null, lampShadowAge = 99;
   const outside = [];
   const byDistance = [];
 
@@ -338,6 +363,12 @@ export function createProps(scene, deps) {
       for (const l of outside) { l.glow = dusk; if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
       const dark = lampDark = Math.min(1, Math.max(0, (nightF - 0.1) / 0.5)); // in daylight a lamp casts no light on its surroundings, whether or not it is switched on
+      { // the first lamp light's shadow: rebuilt when it moves to another lamp, else about every 1.5 s
+        const l0 = dark > 0.3 ? byDistance[0] : null, sh = lampLights[0].shadow;
+        lampShadowAge += dt;
+        if (l0 && (l0 !== lampShadowTarget || lampShadowAge > 1.5)) { sh.needsUpdate = true; lampShadowAge = 0; }
+        lampShadowTarget = l0;
+      }
       lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && dark > 0.01) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * dark; } else light.intensity = 0; });
 
       for (let i = particles.length - 1; i >= 0; i--) {

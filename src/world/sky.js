@@ -151,6 +151,7 @@ export function createSky(scene, renderer) {
       sunLight.position.set(fx + dir.x * 120, dir.y * 120, fz + dir.z * 120);
       sunLight.color.setHex(c.sun);
       sunLight.intensity = c.sunIntensity * SUN_SCALE;
+      sunLight.shadow.intensity = 0.75 * (1 - 0.65 * night); // the moon's shadow fades so the fire's and lamps' read
 
       ambient.color.setHex(c.ambient);
       ambient.groundColor.setHex(c.ambient).lerp(tmp.setHex(c.horizon), 0.5);

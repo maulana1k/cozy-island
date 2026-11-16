@@ -33,6 +33,7 @@ import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector } from './cutscene.js';
 import { createStoryRuntime } from './story/runtime.js';
+import { createScope } from './scope.js';
 import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
 import { createWilds, keepClear } from './world/wilds.js';
 // ---- Areas of the bigger island: one file each under src/world/areas/. To add one, import it
@@ -103,6 +104,21 @@ const animals = createAnimals(scene, { ui, audio, player });
 const wildlife = createWildlife(scene, { ui, audio });
 const zipline = createZipline(scene, { ui, audio, player });
 props.onBell((pos) => villagers.hearBell(pos));
+// ---- Looking through a telescope (the guard tower's, src/scope.js): names what is under the crosshair.
+const NAMED = { villager: 'Scout', local: 'Villager', goat: 'Goat', buffalo: 'Water buffalo', ducks: 'River ducks', monkey: 'Monkeys', chickens: 'Chickens', sheep: 'Sheep', cat: 'Camp cat', zipline: 'Flying fox', campfire: 'Campfire', telescope: 'Telescope', water: 'Water barrel', bell: 'Camp bell', flag: 'Flagpole' };
+const LANDMARKS = () => [['Summit camp', LOOKOUT, 1], ['Windmill', WINDMILL, 6], ['Dock', dockEnd, 0.5], ['Pond', POND, 0], ['Beach camp', CAMPFIRE, 0.5], ['Village', AREAS.village, 4], ['Waterfall', AREAS.waterfall.foot, 6],
+  ['Cliff lookout', AREAS.lookout, 1], ['Plank bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 1], ['Rice fields', AREAS.paddies, 0], ['Fishing jetty', AREAS.jetty, 0.5]];
+const scope = createScope({
+  camera, input, groundAt,
+  candidates: () => {
+    const out = [];
+    for (const t of interactables) { if (t.enabled === false || t.kind === 'pickup' || t.kind === 'ladder') continue; const name = t.speaker || NAMED[t.kind]; if (name) out.push({ id: t.id, name, x: t.position.x, y: (t.markerY || groundAt(t.position.x, t.position.z)) - 0.6, z: t.position.z, far: 180 }); }
+    for (const [name, p, up] of LANDMARKS()) out.push({ id: `land-${name}`, name, x: p.x, y: groundAt(p.x, p.z) + up, z: p.z, far: 400 });
+    return out;
+  },
+  onSpot: (name) => { say(`Spotted: ${name}`, '🔭'); progress('spot'); },
+  onClose: () => syncLook(),
+});
 
 // ---- Backpack and how you feel ------------------------------------------------
 const bag = createBag(12);
@@ -263,6 +279,7 @@ const areaDeps = {
   addPlatform, removePlatform,             // register a walkable deck, stone or gangway (see PLATFORMS in layout.js)
   keepClear,                               // keepClear(x, z, r): no streamed palms or bushes here (call it in create)
   give,                                    // give(id, n, at): put things in the backpack, returns how many fitted
+  scope,                                   // scope.open(eye, heading): look through a telescope (src/scope.js)
   say: (text, pic) => say(text, pic),      // a short note at the bottom of the screen
   tip: (id, text) => tip(id, text),        // a one-line tip, shown once per id
   discover: (id) => discover(id),          // tick a journal entry or journey step by id (unknown ids are ignored)
@@ -360,6 +377,7 @@ function film(id, opts = {}) {
   return true;
 }
 const idleInput = { move: { x: 0, z: 0 }, run: false, consumeHop: () => false };
+const climbLook = new THREE.Vector3(); let hadRideCam = false; // the climbing camera's eased aim
 
 // ---- Interface: journal, ranks, clock, minimap, menu -----------------------
 const journal = createJournal();
@@ -494,6 +512,7 @@ window.addEventListener('keydown', (e) => {
   // A conversation or the name picker takes the keys while it is open (1-4 answer, Esc leaves).
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }
+  if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
   if (e.repeat) return;
   // During a film any of these keys skips it; nothing else works until it is over.
   if (director.active) { if (['Space', 'Enter', 'Escape', 'KeyE'].includes(e.code)) { director.skip(); input.consumeHop(); input.consumeInteract(); } return; }
@@ -607,7 +626,7 @@ function step() {
   setSleepy(night);
   // The scout's face shows how they are doing.
   player.mood = params.get('mood') || (vitals.hungry || vitals.thirsty ? 'sad' : vitals.winded ? 'effort' : vitals.cheer >= 85 ? 'happy' : null); // ?mood= is a debug aid
-  setViewer(camera.position.x, camera.position.z, player.position.x, player.position.z); // detail is judged from the camera, so the films look right
+  { const vp = scope.active ? scope.viewer() : camera.position; setViewer(vp.x, vp.z, player.position.x, player.position.z); } // detail is judged from the camera (through a telescope, from where it looks), so the films look right
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
   // F joins in with whatever the camp is doing right now.
@@ -643,7 +662,7 @@ function step() {
     const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders);
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
-    player.update(dt, (filming || talking) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
+    player.update(dt, (filming || talking || scope.active) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
     buildings.update(dt, elapsed, player);
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
@@ -703,7 +722,7 @@ function step() {
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
-  const target = paused || filming || talking || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
+  const target = paused || filming || talking || scope.active || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
   const said = target ? storyRt.prompt(target) || target.prompt() : '';
   hintTarget = target ? said.split(' — ').slice(1).join(' — ') : null;
   player.focus = target ? target.position : null;
@@ -762,7 +781,12 @@ function step() {
     hud.setWaypoint((sx * 0.5 + 0.5) * window.innerWidth, (-sy * 0.5 + 0.5) * window.innerHeight, Math.hypot(goal.x - playerXZ.x, goal.z - playerXZ.z), off);
   } else hud.setWaypoint(null);
 
-  if (!director.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) { rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? player.riding.camSpeed ?? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
+  const rideCam = player.riding && player.riding.cam; // a climb that brings its own camera (src/world/areas/lifeguard.js)
+  if (!director.update(clampDt(raw)) && !scope.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) {
+    if (rideCam) { if (!hadRideCam) climbLook.copy(rideCam.look); camera.position.lerp(rideCam.pos, 1 - Math.exp(-clampDt(raw) * 4)); climbLook.lerp(rideCam.look, 1 - Math.exp(-clampDt(raw) * 8)); camera.lookAt(climbLook); }
+    else { if (hadRideCam) storyRt.blendFrom(); rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? player.riding.camSpeed ?? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
+  }
+  hadRideCam = !!rideCam;
   weather.update(dt, timeOfDay, camera, player.position, night);
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);

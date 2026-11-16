@@ -250,6 +250,8 @@ export function createStoryRuntime(io) {
     // The picker is open on the title screen: the world runs (people move) but you stand still.
     get previewing() { return ui.picking; },
     get busy() { return busy; },
+    // Blend the follow camera in from wherever the camera is now (after a climb's own camera lets go).
+    blendFrom() { shot.pos.copy(camera.position); shot.q.copy(camera.quaternion); shot.out = 0.6; },
     prompt, tryTalk, close, cameraStep, cameraAfter, update, goal, card, event, waitFor, softFail, onSleep, onWake, save, openPicker, continueGame, titleKey, ensureStarted,
     hasSave, sessionOnly,
     newDay: (d) => story.newDay(d),

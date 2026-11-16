@@ -155,6 +155,8 @@ const gatePosts = [-1, 1].map((s) => ({ x: GATE.x + Math.cos(GATE.rot) * GATE.ha
 export const GATE_POSTS = gatePosts;
 
 // Dirt paths: from the square to every door, the dock, the campfire and the lookout.
+// The trail on from the first-aid tent's path to the windmill knoll (where it meets the knoll-to-bridge trail).
+const AID_TRAIL = [{ x: 17.2, z: -2.0 }, { x: 22.5, z: -3.6 }, { x: 26.2, z: -6.6 }, { x: 31, z: -11 }, { x: 36.5, z: -15.6 }, { x: 42.5, z: -19 }];
 export const PATHS = [
   ...COTTAGES.map((c) => {
     // The far-off barn and guard post branch off the dock path instead of crossing the camp.
@@ -171,6 +173,8 @@ export const PATHS = [
   [VILLAGE_CENTER, ...HILL_TRAIL],
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
+  // From the first-aid tent out past the patrol hut, across the meadow to the windmill knoll and on to the bridge.
+  AID_TRAIL,
   // The trail to the village: off the dock path past the canoes, up the open beach side of the meadow to the bridge landing.
   [{ x: 52, z: 17.1 }, { x: 54.6, z: 14.6 }, { x: 55.4, z: 9.5 }, { x: 55, z: 3.5 }, { x: 54.2, z: -3 }, { x: 52.8, z: -9.5 }, { x: 51.2, z: -15 }, { x: 51.8, z: -19 }, { x: 53.4, z: -21.2 }],
 ];
@@ -227,9 +231,8 @@ function distanceToSegment(x, z, a, b) {
 
 // The camp-to-bridge trail (the last path): trees and bushes keep their crowns off it.
 export function distanceToTrail(x, z) {
-  const t = PATHS[PATHS.length - 1];
   let best = Infinity;
-  for (let i = 0; i < t.length - 1; i++) best = Math.min(best, distanceToSegment(x, z, t[i], t[i + 1]));
+  for (const t of [PATHS[PATHS.length - 1], AID_TRAIL]) for (let i = 0; i < t.length - 1; i++) best = Math.min(best, distanceToSegment(x, z, t[i], t[i + 1]));
   return best;
 }
 export function distanceToPath(x, z) {

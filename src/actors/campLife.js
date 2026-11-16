@@ -57,11 +57,13 @@ export function createCampLife(scene, deps) {
   const carrier = person(4.2, -4.6, 0, { adult: true, accent: null, shirt: 0x8fa678, scarf: null, shorts: 0x5b5340, carry: 0xc79a62, solid: false, name: 'the logistics teacher' });
   const haul = { route: [{ x: 4.2, z: -4.6 }, { x: 4.6, z: 1.5 }, { x: 6.0, z: 6.0 }, { x: 5.6, z: 12.2 }, { x: 8.5, z: 17 }, { x: 12.6, z: 20.6 }], leg: 1, dir: 1, wait: 0, loaded: true };
 
-  // ---- First aid: a medical teacher explains while a student bandages a patient ---
+  // ---- First aid, inside the medical tent: the patient sits on the edge of the right-hand camp bed, a student kneels
+  // in the gap between the beds to bandage them, the medical teacher explains from the foot of the left bed and a
+  // helper waits by the cabinet (the beds and cabinet are in src/world/buildings.js; the door is at +z).
   const aid = COTTAGES.find((c) => c.type === 'aid');
-  const bench = toWorld(aid, -1.4, 3.0), kneel = toWorld(aid, -1.4, 3.85), docSpot = toWorld(aid, -0.2, 4.1), helperSpot = toWorld(aid, 0.9, 3.5);
-  const patient = person(bench.x, bench.z, aid.rot, { lift: -0.16, accent: null });
-  const medic = person(kneel.x, kneel.z, aid.rot + Math.PI, { armband: true, accent: 'cap', accentColor: 0xffffff });
+  const bench = toWorld(aid, 0.78, -0.45), kneel = toWorld(aid, 0.05, -0.45), docSpot = toWorld(aid, -0.55, 0.6), helperSpot = toWorld(aid, -0.3, -1.15);
+  const patient = person(bench.x, bench.z, face(bench, kneel), { lift: -0.16, accent: null });
+  const medic = person(kneel.x, kneel.z, face(kneel, bench), { armband: true, accent: 'cap', accentColor: 0xffffff });
   const doctor = person(docSpot.x, docSpot.z, face(docSpot, bench), { adult: true, coat: 0xfbfbf7, armband: true, accent: null, scarf: null, shorts: 0x4f5f7a, hair: 0x3d3230, name: 'the medical teacher' });
   const helper = person(helperSpot.x, helperSpot.z, face(helperSpot, bench), { armband: true, accent: null, carry: 0xfafafa });
 

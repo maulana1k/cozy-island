@@ -14,6 +14,7 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 }
 
 export function createProps(scene, deps) {
+  let lampDark = 0; // 0 in daylight .. 1 at night: how much a lit lamp shows against the day
   const { scatter, player, ui, audio } = deps;
   const group = new THREE.Group();
   scene.add(group);
@@ -64,7 +65,7 @@ export function createProps(scene, deps) {
     updaters.push((dt, elapsed) => {
       lantern.glow += ((lantern.on ? 1 : 0) - lantern.glow) * Math.min(1, dt * 8);
       const flicker = 1 + Math.sin(elapsed * 11 + l.x) * 0.04;
-      glassMat.emissiveIntensity = lantern.glow * 2.4 * flicker;
+      glassMat.emissiveIntensity = lantern.glow * (0.25 + 2.15 * lampDark) * flicker; // a lit lamp at noon is only a faint glow
       lantern.flicker = flicker;
     });
     return lantern;
@@ -336,7 +337,8 @@ export function createProps(scene, deps) {
       const dusk = Math.min(1, Math.max(0, (nightF - 0.3) / 0.4));
       for (const l of outside) { l.glow = dusk; if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
-      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker; } else light.intensity = 0; });
+      const dark = lampDark = Math.min(1, Math.max(0, (nightF - 0.1) / 0.5)); // in daylight a lamp casts no light on its surroundings, whether or not it is switched on
+      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && dark > 0.01) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * dark; } else light.intensity = 0; });
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];

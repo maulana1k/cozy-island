@@ -80,7 +80,7 @@ const island = createIsland(scene);
 const sky = createSky(scene, renderer);
 const village = createVillage(scene);
 const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(bed) });
-createCampProps(scene);
+const campProps = createCampProps(scene);
 const scatter = createScatter(scene);
 const pond = createPond(scene);
 const wilds = createWilds(scene);
@@ -596,7 +596,7 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders);
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
     player.update(dt, filming && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);

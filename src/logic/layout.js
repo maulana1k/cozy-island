@@ -452,7 +452,7 @@ export function getColliders() {
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, hw: c.width / 2, hd: c.depth / 2, rot: c.rot, tall: true, building: true })),
     ...FENCES.map(fenceBox), ...RAILINGS.map(fenceBox),
     ...s.trees.map((t) => ({ x: t.x, z: t.z, r: 0.4 * t.scale })),
-    ...s.rocks.map((r) => ({ x: r.x, z: r.z, r: 0.5 * r.scale })),
+    ...s.rocks.map((r) => ({ x: r.x, z: r.z, r: 0.75 * r.scale })), // the block is about 0.86 by 0.68 across at scale 1
     ...LANTERNS.map((l) => ({ x: l.x, z: l.z, r: 0.15 })),
     ...SEATS.map((st) => (st.kind === 'bench'
       ? { x: st.x, z: st.z, hw: 0.85, hd: 0.3, rot: st.rot }

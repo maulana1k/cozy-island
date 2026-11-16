@@ -5,7 +5,8 @@ import { resolveCollisions } from '../logic/collision.js';
 import { WALK_SPEED, RUN_SPEED, HOP_VELOCITY, GRAVITY, PLAYER_RADIUS, PLAYER_START, PALETTE } from '../config.js';
 
 
-const ACCEL = 12, BRAKE = 14, AIR_ACCEL = 7;   // m/s²: how quickly speed builds up and bleeds off (slow enough to see the lean)
+const ACCEL = 12, BRAKE = 7, AIR_ACCEL = 7;    // m/s²: steering, and slowing down (a run winds down over about half a second, a few shortening steps)
+const SET_OFF = 3.2, RUN_UP = 5.5;              // m/s²: how fast the pace builds from standing to a walk, then from a walk to a run
 const TURN_RATE = 9;                            // how quickly the body swings round to its direction of travel
 const JUMP_BUFFER = 0.14, COYOTE = 0.1;         // forgiving jump timing
 const WIND_UP = 0.1, WIND_UP_BELOW = 1.6;       // a jump from (nearly) standing starts with a quick crouch (s); faster, you leap straight off the stride
@@ -16,7 +17,7 @@ export function createPlayer(scene, opts = {}) {
   const groundAt = opts.groundAt || heightAt;
   const surfaceAt = opts.surfaceAt || (() => 'grass');
   const surfaces = opts.surfaces || {};
-  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'cap', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a });
+  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'cap', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x77804a }); // a small olive day pack
   scene.add(figure.group);
 
   const position = new THREE.Vector3(PLAYER_START.x, groundAt(PLAYER_START.x, PLAYER_START.z), PLAYER_START.z);
@@ -107,23 +108,36 @@ export function createPlayer(scene, opts = {}) {
         if (dv <= rate) { vel.x = tx; vel.z = tz; } else { vel.x += (dvx / dv) * rate; vel.z += (dvz / dv) * rate; }
 
         if (Math.hypot(vel.x, vel.z) > 0.01) {
+        const was = Math.hypot(vel.x, vel.z);
           const prev = { x: position.x, z: position.z };
-          let next = { x: position.x + vel.x * dt, z: position.z + vel.z * dt };
-          next = resolveCollisions(next, PLAYER_RADIUS, colliders);
+        // Setting off, the pace builds over the first two or three steps (gently to a walk, then on to a run);
+        // the direction still follows the keys at once.
+        const now = Math.hypot(vel.x, vel.z), cap = was + (airborne ? AIR_ACCEL : was < WALK_SPEED ? SET_OFF : RUN_UP) * dt;
+        if (now > cap && now > 1e-6) { vel.x *= cap / now; vel.z *= cap / now; }
+          // In short hops (at most 12 cm), so a run on a long frame cannot carry you clean through a fence or a post.
+          const n = Math.max(1, Math.ceil((Math.hypot(vel.x, vel.z) * dt) / 0.12));
+          let next = prev;
+          for (let k = 0; k < n; k++) next = resolveCollisions({ x: next.x + (vel.x * dt) / n, z: next.z + (vel.z * dt) / n }, PLAYER_RADIUS, colliders);
           next = constrainToShore(prev, next, groundAt);
           position.x = next.x; position.z = next.z;
           // Whatever a wall took away is gone from the speed too, so you slide along it.
           const before = Math.hypot(vel.x, vel.z);
           if (dt > 0) { vel.x = (next.x - prev.x) / dt; vel.z = (next.z - prev.z) / dt; }
           // Running flat out into something: bounce off with a silly recoil.
-          if (before > 3.5 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture) {
+          if (before > 3.5 && Math.hypot(vel.x, vel.z) < before * 0.3 && !airborne && !gesture && !intoPerson) {
             vel.x = -Math.sin(heading) * 1.6; vel.z = -Math.cos(heading) * 1.6;
+          // Walking into someone you just come to a stop against them (and slip round them), never a bounce.
+          const intoPerson = colliders.some((c) => c.person && c.r > 0 && Math.hypot(c.x - next.x, c.z - next.z) < c.r + PLAYER_RADIUS + 0.04);
             gesture = { name: 'bonk', t: 0, dur: 0.7 }; if (player.onOops) player.onOops('bonk');
           }
           sinceStep += Math.hypot(next.x - prev.x, next.z - prev.z);
         }
         const speed = Math.hypot(vel.x, vel.z);
         // One footfall each time a foot touches down in the animation (a long way without one, say after a
+        } else if (!airborne) {
+          // Standing still, someone walking into you eases you aside rather than walking through you.
+          const next = resolveCollisions(position, PLAYER_RADIUS, colliders);
+          if (Math.hypot(next.x - position.x, next.z - position.z) < 0.2) { position.x = next.x; position.z = next.z; }
         // pose that held the legs, counts too).
         const stride = Math.max(0.2, figure.stepLength(speed));
         const fell = figure.steps !== lastSteps; lastSteps = figure.steps;
@@ -135,8 +149,7 @@ export function createPlayer(scene, opts = {}) {
             gesture = { name: 'stumble', t: 0, dur: 0.75 }; vel.x *= 0.5; vel.z *= 0.5; stumbleRest = 14; if (player.onOops) player.onOops('stumble');
           }
         }
-        // Letting go of the keys at a run: skid to a stop.
-        if (!wantsMove && speed > 3.5 && !airborne && !gesture) { gesture = { name: 'skid', t: 0, dur: 0.45 }; if (player.onOops) player.onOops('skid'); }
+        // (Letting go of the keys at a run just winds down: run, jog, walk and a last step in, no skid.)
 
         const ground = groundAt(position.x, position.z);
         coyote = airborne ? coyote - dt : COYOTE;

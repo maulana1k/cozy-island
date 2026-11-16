@@ -291,8 +291,10 @@ export function createScatter(scene) {
   scene.add(...kinds.flatMap((k) => [k.trunk, k.canopy]), bushes, rocks, stems, heads, grass);
 
   let swayFrame = 0;
+  // The boulders along the waterline are solid (the ones laid out on land are in logic/layout.js's colliders).
+  const colliders = shore.map((r) => ({ x: r.x, z: r.z, r: 0.75 * r.scale }));
   return {
-    trees,
+    trees, colliders,
     // Position of a tree's canopy, for leaf particles.
     treeTop(id) { const t = treeById.get(id); return t ? new THREE.Vector3(t.x, t.y + TREE_KINDS[t.kind].top * t.scale, t.z) : null; },
     shakeTree(id, elapsed) { const t = treeById.get(id); if (t) t.shakeStart = elapsed; },

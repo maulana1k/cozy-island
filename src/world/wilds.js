@@ -211,7 +211,7 @@ export function createWilds(scene) {
       if (d < NEAR + TILE) {
         const closeBy = (b) => Math.hypot(b.x - px, b.z - pz) < UNDER;
         for (const b of tile.bushes) if (nBush < 2400 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
-        for (const b of tile.rocks) if (nRock < 700 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
+        for (const b of tile.rocks) if (nRock < 700 && Math.hypot(b.x - px, b.z - pz) < NEAR) { colliders.push({ x: b.x, z: b.z, r: 0.75 * b.s * 1.2 }); put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
         for (const b of tile.ferns) if (nFern < 3600 && closeBy(b)) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
         for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.6 ? 0xd9c46a : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
       }

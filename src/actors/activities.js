@@ -67,7 +67,7 @@ export function createActivities(scene, deps) {
   return {
     interactables,
     // Whoever is up and about is solid, wherever they happen to be standing.
-    colliders() { colliders.length = 0; for (const s of scouts) if (!s.member.hidden) colliders.push({ x: s.member.x, z: s.member.z, r: 0.3 }); return colliders; },
+    colliders() { colliders.length = 0; for (const s of scouts) if (!s.member.hidden) colliders.push({ x: s.member.x, z: s.member.z, r: 0.3, person: true }); return colliders; },
     update(dt, elapsed) {
       for (const s of scouts) {
         if (s.react) { s.react.t += dt; if (s.react.t >= s.react.dur) s.react = null; }

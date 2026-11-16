@@ -102,7 +102,7 @@ export function createCampLife(scene, deps) {
 
   return {
     interactables,
-    colliders() { colliders.length = 0; for (const p of solids) if (!p.member.hidden) colliders.push({ x: p.x, z: p.z, r: 0.32 }); return colliders; },
+    colliders() { colliders.length = 0; for (const p of solids) if (!p.member.hidden) colliders.push({ x: p.x, z: p.z, r: 0.32, person: true }); return colliders; },
     update(dt, elapsed) {
       // First ask the timetable who it needs elsewhere; the rest carry on with their own thing.
       for (const p of people) { p.speed = 0; p.opts = {}; p.ctl = crowd.drive(p.member, dt); }

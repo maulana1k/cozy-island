@@ -104,6 +104,17 @@ export function setSleepy(v) { sleepy = v; }
 // Past these distances a person holding still, and then anyone at all, keeps the last pose.
 const FAR_IN = 46, FAR_OUT = 42, FAR_ANY = 70;
 
+// A rounded box swept up through rings [y, half width, half depth] (a superellipse, so soft corners), closed top and bottom.
+function roundLoft(rings, seg = 16) {
+  const pos = [], idx = [], e = 0.5; // |sin|^e: squarer than an ellipse
+  const sq = (v) => Math.sign(v) * Math.abs(v) ** e;
+  for (const [y, a, b] of rings) for (let k = 0; k < seg; k++) { const t = (k / seg) * Math.PI * 2; pos.push(a * sq(Math.sin(t)), y, b * sq(Math.cos(t))); }
+  const n = rings.length; pos.push(0, rings[0][0], 0, 0, rings[n - 1][0], 0);
+  for (let i = 0; i < n - 1; i++) for (let k = 0; k < seg; k++) { const p0 = i * seg + k, q0 = i * seg + (k + 1) % seg; idx.push(p0, q0, p0 + seg, q0, q0 + seg, p0 + seg); }
+  for (let k = 0; k < seg; k++) { idx.push(n * seg, (k + 1) % seg, k); idx.push(n * seg + 1, (n - 1) * seg + k, (n - 1) * seg + (k + 1) % seg); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  const f = g.toNonIndexed(); f.computeVertexNormals(); return f;
+}
 function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z); m.castShadow = shadow;
@@ -321,9 +332,21 @@ export function createFigure({
   if (neckerchief !== null) attach('scarf', neckerchief); // every scout wears one
   // The backpack hangs from its straps on a bone of its own, so it can jog and swing a little behind the back.
   const pack = new THREE.Bone(); pack.position.set(0, P.neckY * 0.86, -P.chest * 0.8); torso.add(pack);
+  // A child's small scout day pack (about three quarters of a grown-up one): a rounded body, a little narrower
+  // at the top, its front resting on the back between the shoulder blades; a domed lighter flap over the top
+  // that hangs down the outside with a buckle, a front pocket, side pockets and a grab loop. Its padded straps
+  // are part of the skin (built with the trunk below), so they stay on the body however it moves.
+  const PACK = { zc: -0.045, top: P.neckY * (0.84 - 0.86), H: 0.186, flap: 0xcdbb88, strap: 0x4b5130, buckle: 0x2e2c26 };
   if (backpackColor !== null) {
-    const bz = -P.chest * 0.88 - 0.05 + P.chest * 0.8, w = P.chest * 1.38;
-    pack.add(part(new THREE.BoxGeometry(w, P.neckY * 0.8, 0.13), mat(backpackColor), 0, P.neckY * (0.52 - 0.86), bz), part(new THREE.BoxGeometry(w * 1.04, 0.08, 0.14), mat(0xf4e3b5), 0, P.neckY * (0.82 - 0.86), bz - 0.005, false));
+    const { zc, top, H } = PACK, yb = top - H, body = mat(backpackColor), flapM = mat(PACK.flap), dk = mat(new THREE.Color(backpackColor).multiplyScalar(0.82));
+    pack.add(part(roundLoft([[0, 0.054, 0.03], [0.01, 0.073, 0.045], [0.03, 0.08, 0.05], [0.11, 0.077, 0.05], [0.158, 0.069, 0.047], [0.176, 0.06, 0.04], [H, 0.04, 0.025]]), body, 0, yb, zc));
+    const dome = part(new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), flapM, 0, top - 0.024, zc - 0.002, false); dome.scale.set(0.071, 0.034, 0.055); pack.add(dome);
+    pack.add(part(roundLoft([[0, 0.056, 0.006], [0.012, 0.066, 0.007], [0.072, 0.07, 0.008]]), flapM, 0, top - 0.088, zc - 0.051, false)); // the flap's front, over the outside
+    pack.add(part(new THREE.BoxGeometry(0.02, 0.022, 0.008), mat(PACK.buckle), 0, top - 0.088, zc - 0.059, false)); // buckle
+    pack.add(part(new THREE.BoxGeometry(0.012, 0.045, 0.004), mat(PACK.strap), 0, top - 0.11, zc - 0.052, false)); // the buckle's strap down to the pocket
+    pack.add(part(roundLoft([[0, 0.04, 0.008], [0.008, 0.05, 0.014], [0.055, 0.052, 0.015], [0.062, 0.046, 0.011]]), dk, 0, yb + 0.022, zc - 0.05, false)); // front pocket
+    for (const sx of [-1, 1]) { const sp = part(new THREE.SphereGeometry(1, 10, 8), dk, sx * 0.077, yb + 0.062, zc + 0.002, false); sp.scale.set(0.017, 0.045, 0.032); pack.add(sp); } // side pockets
+    pack.add(part(new THREE.TorusGeometry(0.014, 0.0042, 5, 10, Math.PI), mat(PACK.strap), 0, top + 0.004, zc + 0.03, false)); // grab loop
   }
   if (coat !== null) { // a long coat over the uniform
     const c = part(new THREE.CylinderGeometry(P.chest * 1.06, P.belly * 1.22, P.neckY + 0.2, 14), mat(coat), 0, (P.neckY + 0.2) / 2 - 0.2, 0); c.scale.z = 0.9;
@@ -338,6 +361,73 @@ export function createFigure({
     const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false })); lens.position.y = 0.147;
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
 
+  // The pack's shoulder straps, as skin: from the bottom corners of the pack round the sides of the ribs, up the
+  // front of the chest (over the pockets), over the shoulders inside the sleeves and down the back into the top
+  // of the pack, following the shirt's own shape. They ride the trunk, and blend onto the pack bone where they
+  // go into it, so the pack can bounce on them without a gap. A thin chest strap with a buckle joins them.
+  function packStraps(tr) {
+    const half = (x, y) => { // how far the shirt reaches forward (and back) at x across and y up (torso frame)
+      for (let i = 0; i < tr.length - 1; i++) {
+        const ya = tr[i].y - PELVIS_Y, yb = tr[i + 1].y - PELVIS_Y;
+        if (y <= ya && y >= yb) { const f = ya - yb < 1e-6 ? 0 : (ya - y) / (ya - yb), rx = lerp(tr[i].rx, tr[i + 1].rx, f), rz = lerp(tr[i].rz, tr[i + 1].rz, f); return Math.abs(x) >= rx ? 0 : rz * Math.sqrt(1 - (x / rx) ** 2); }
+      }
+      return 0;
+    };
+    const ringXZ = (y) => { for (let i = 0; i < tr.length - 1; i++) { const ya = tr[i].y - PELVIS_Y, yb = tr[i + 1].y - PELVIS_Y; if (y <= ya && y >= yb) { const f = ya - yb < 1e-6 ? 0 : (ya - y) / (ya - yb); return [lerp(tr[i].rx, tr[i + 1].rx, f), lerp(tr[i].rz, tr[i + 1].rz, f)]; } } return [0.1, 0.1]; };
+    const out = [], packY = P.neckY * 0.86, packZ = -P.chest * 0.8, tS = bi(torso), tP = bi(pack);
+    const ribbon = (pts, col) => { // pts: { p: [x, y, z], n: unit normal out, w: width, th: thickness, o: gap off the shirt }
+      const pos = [], c = new THREE.Color(col), V = THREE.Vector3, cs = [];
+      for (let i = 0; i < pts.length; i++) {
+        const A = pts[Math.max(0, i - 1)].p, B = pts[Math.min(pts.length - 1, i + 1)].p, q = pts[i];
+        const t = new V(B[0] - A[0], B[1] - A[1], B[2] - A[2]).normalize(), n = new V(...q.n), sd = new V().crossVectors(t, n).normalize();
+        const at = (o, w) => new V(...q.p).addScaledVector(n, o).addScaledVector(sd, w);
+        cs.push([at(q.o, -q.w / 2), at(q.o, q.w / 2), at(q.o + q.th, q.w / 2), at(q.o + q.th, -q.w / 2), q.wp]);
+      }
+      const si = [], sw = [], put = (v, wp) => { pos.push(v.x, v.y + PELVIS_Y, v.z); si.push(tS, tP, 0, 0); sw.push(1 - wp, wp, 0, 0); };
+      for (let i = 0; i < cs.length - 1; i++) for (let f = 0; f < 4; f++) {
+        const a0 = cs[i][f], a1 = cs[i][(f + 1) % 4], b0 = cs[i + 1][f], b1 = cs[i + 1][(f + 1) % 4], wa = cs[i][4], wb = cs[i + 1][4];
+        put(a0, wa); put(b0, wb); put(a1, wa); put(a1, wa); put(b0, wb); put(b1, wb);
+      }
+      const g = new THREE.BufferGeometry(), n = pos.length / 3, col3 = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col3[i * 3] = c.r; col3[i * 3 + 1] = c.g; col3[i * 3 + 2] = c.b; }
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+      g.setAttribute('color', new THREE.BufferAttribute(col3, 3));
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+      return g;
+    };
+    // How much of a strap point is held by the pack: where it goes into it, low on the back.
+    const onPack = (y, z) => smooth((-z - 0.1) / 0.03) * smooth((0.27 - y) / 0.02);
+    // Over the pockets on the chest the padding stands a little proud of the shirt.
+    const gap = (y, nz) => 0.003 + 0.011 * smooth((nz - 0.3) / 0.3) * smooth((y - 0.1) / 0.03) * smooth((0.26 - y) / 0.03);
+    for (const sx of [-1, 1]) {
+      const pts = [];
+      // Low: from the pack's bottom corner, round the side of the ribs to the front.
+      const yL = packY - 0.17, xs = 0.07, [rx, rz] = ringXZ(yL), thB = Math.PI - Math.asin(Math.min(0.99, xs / rx)), thF = Math.asin(Math.min(0.99, xs / rx));
+      for (let k = 0; k <= 8; k++) {
+        const th = lerp(thB, thF, k / 8), x = sx * rx * Math.sin(th), z = rz * Math.cos(th), y = yL + 0.004 * k / 8;
+        const n = new THREE.Vector3(x / (rx * rx), 0, z / (rz * rz)).normalize();
+        pts.push({ p: [x, y, z], n: n.toArray(), w: 0.016, th: 0.0035, o: 0.003, wp: onPack(y, z) });
+      }
+      // High: up the front, over the shoulder and down the back into the top of the pack (a slice front to back,
+      // found by marching out from inside the chest to the shirt).
+      const y0 = 0.19, f0 = Math.atan2(0.13, -(y0 - (yL + 0.004))), f1 = Math.atan2(-0.13, packY - 0.02 - y0);
+      for (let k = 1; k <= 22; k++) {
+        const f = lerp(f0, f1, k / 22), x = sx * lerp(0.072, 0.045, smooth(k / 22)), dy = Math.cos(f), dz = Math.sin(f);
+        let r = 0.01; while (r < 0.3 && Math.abs(r * dz) < half(x, y0 + r * dy)) r += 0.0015;
+        const y = y0 + r * dy, z = r * dz, pad = smooth(Math.min(k / 4, (22 - k) / 3, 1));
+        pts.push({ p: [x, y, z], n: [0, dy, dz], w: lerp(0.016, 0.026, pad), th: lerp(0.0035, 0.008, pad), o: gap(y, dz), wp: onPack(y, z) });
+      }
+      out.push(ribbon(pts, PACK.strap));
+    }
+    // The chest strap: taut across between the two, just proud of the buttons, with a buckle in the middle.
+    const yC = 0.2, zC = half(0, yC) + 0.016, chest = [];
+    for (let k = 0; k <= 4; k++) { const x = lerp(-0.074, 0.074, k / 4); chest.push({ p: [x, yC, Math.max(zC, half(x, yC) + 0.014)], n: [0, 0, 1], w: 0.009, th: 0.003, o: 0, wp: 0 }); }
+    out.push(ribbon(chest, PACK.strap));
+    const bk = ribbon([{ p: [-0.011, yC, zC + 0.002], n: [0, 0, 1], w: 0.016, th: 0.005, o: 0, wp: 0 }, { p: [0.011, yC, zC + 0.002], n: [0, 0, 1], w: 0.016, th: 0.005, o: 0, wp: 0 }], PACK.buckle);
+    out.push(bk);
+    void packZ;
+    return out;
+  }
   // ---- The skin
   const bones = [inner, pelvis, torso, neck, armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, legL.hip, legL.knee, legL.foot, legR.hip, legR.knee, legR.foot, eyeRig, pupils, mouth, browBoneL, browBoneR, smileBone, pack];
   const bi = (b) => bones.indexOf(b);
@@ -363,6 +453,7 @@ export function createFigure({
     T(0.035, P.belly * 1.01, cShirt, P.belly * 0.9); T(0.035, P.belly * 1.01, cShorts, P.belly * 0.9);
     T(-0.005, P.hips * 0.99, cShorts, P.hips * 0.86); T(-0.07, P.hips * 1.03, cShorts, P.hips * 0.86);
     geos.push(tube(0, 0, tr, bi(pelvis), bi(torso), { seg: 18, capBottom: true }));
+    if (backpackColor !== null) geos.push(...packStraps(tr));
     // Arms: a short flared sleeve with a turned cuff, then one skin from shoulder to wrist, shared at the elbow.
     for (const [A, side] of [[armL, -1], [armR, 1]]) {
       const U = P.upper, F = P.fore, b = Math.min(0.03, U * 0.3), sl = Math.min(0.055, U * 0.5), y0 = PELVIS_Y + P.shY, r = [];
@@ -404,7 +495,7 @@ export function createFigure({
   const legK = (LL * scale) / KID_LEG, sqK = Math.sqrt(legK);              // this person's legs against a scout's
   const HANG_DROP = P === KID ? 0.31 - KID.pelvisY : 0;                    // keeps the hands on the flying-fox bar
   let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, locoLegs = 1, locoArms = 1;
-  let steps = 0, bounce = 0, fly = 0; // footfalls so far; the running bounce of the hips (own units)
+  let steps = 0, bounce = 0, fly = 0, hurry = 1, gD = null; // footfalls so far; the running bounce of the hips (own units); the stride catching up with the body
   // The walking hips follow the planted leg's height; where one leg hands over to the next (a corner in that
   // height) they round it off through a critically damped follower that keeps up with its slope: hT0 the
   // last height, hTd its rate, hErr and hErrV how far the hips are from it [value, rate] (never above it).
@@ -437,7 +528,8 @@ export function createFigure({
   const groundLocal = (lx, lz) => groundUnder(gX + lx * gCos + lz * gSin, gZ - lx * gSin + lz * gCos) - gSink;
   const edgeT = { z: 0, y: 0, sg: 0, zf: 0 }, edgeA = { z: 0, y: 0, sg: 0, zf: 0 }, edgeB = { z: 0, y: 0, sg: 0, zf: 0 };
   // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
-  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0] };
+  const PACK_W = 26, PACK_K = 0.2, PACK_S = 2.5; // the backpack on its straps: how tightly it follows the hops, how far it lifts, how far it swings out
+  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0], packY: [0, 0] };
   const pull = (sp, target, w, z, dt, force = 0) => {
     if (dt > 0.06 || dt <= 0) { if (dt > 0.06) { sp[0] = target; sp[1] = 0; } return sp[0]; }
     // In steps of at most 0.01 s, so it is stable however long the frame (w * step stays well under 1).
@@ -640,8 +732,21 @@ export function createFigure({
       wasAir = inAir;
       // The stride only turns over while actually going somewhere: standing, both feet stay planted.
       const going = smooth(spd / 0.18);
-      if (!inAir && spd >= 0.04) phase = (phase + dt * G.c * 0.5 * going) % 1; // (stopped: see the settling step below)
-      const Tst = 2 / G.c, D = G.D, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
+      // The share of the stride each foot is down eases between walking and running, so slowing from a run
+      // the steps lengthen their contact over a step or two instead of a foot in the middle of a short running
+      // contact suddenly finding itself in a long walking one, well behind the hips (which then dropped).
+      gD = gD === null || dt <= 0 ? (gD === null ? G.D : gD) : gD + (G.D - gD) * ease(8);
+      const Tst = 2 / G.c, D = gD, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
+      // Setting off (or speeding up) the body can get ahead of the planted foot, which stays put on the ground
+      // while the stride's clock still has it under the hips: then the stride turns over faster, so the next foot
+      // comes down sooner and nearer, instead of the planted leg being left stretched out behind.
+      hurry = 1;
+      if (!inAir && spd >= 0.04 && fly < 0.999 && C > 1e-3) {
+        const A0 = legs[0].stance && legs[0].anc && !legs[0].held, A1 = legs[1].stance && legs[1].anc && !legs[1].held;
+        const Ls = A0 && A1 ? (legs[0].s < legs[1].s ? legs[0] : legs[1]) : A0 ? legs[0] : A1 ? legs[1] : null;
+        if (Ls) hurry = 1 + clamp((C * (WK_A - Ls.s) - anchorRel(Ls) - 0.015 - (1.5 * spd * dt) / scale) / 0.05, 0, 2) * (1 - fly); // (a frame's travel is no lag)
+      }
+      if (!inAir && spd >= 0.04) phase = (phase + dt * G.c * 0.5 * going * hurry) % 1; // (stopped: see the settling step below)
       // How much of a real run this is: a moment in the air between steps (none walking, so walking is untouched).
       fly = run * smooth((0.5 - D) / 0.12);
       const heelUp = lerp(WK_HU, 0.3, run) * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
@@ -719,8 +824,10 @@ export function createFigure({
             const hNow = (pose.py + PELVIS_Y - 0.04) * Math.cos(l0);
             stZ0 = ay * Math.sin(l0) + az * Math.cos(l0); stY0 = ay * Math.cos(l0) - az * Math.sin(l0) + hNow; stSg0 = f0 + l0 + th0 + kn0; stX = 0;
           } else if (!(legs[0].stance && legs[1].stance)) {
-            // Both feet down side by side: put the stride where both are down, ready to set off again.
-            phase = D > 0.5 ? (D - 0.5) / 2 : 0; legs[0].held = legs[1].held = false;
+            // Both feet down side by side: put the stride just before one foot's toe-off, so setting off is the
+            // weight going onto the other foot and this one stepping out (the planted one is not half a step
+            // ahead of where the stride thinks it is, which used to leave it stretched out behind).
+            phase = D > 0.5 ? D - 0.5 - 0.03 : 0; legs[0].held = legs[1].held = false;
             for (let i = 0; i < 2; i++) { const L = legs[i]; L.u = (phase + i * 0.5) % 1; L.stance = true; L.s = L.u / D; L.fresh = false; }
           }
         }
@@ -750,7 +857,9 @@ export function createFigure({
       const sway = Math.sin((elapsed + seed) * 0.55) * 0.015 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
       const yawS = P.hipX * Math.sin(yawP), rollS = P.hipX * Math.sin(rollP + sway); // leg 0's hip joint forward, and down; leg 1's the other way
       const lead = legs[0].u < 0.5 ? legs[0] : legs[1], sLd = Math.min(lead.u / D, wkSH), ld = lead === legs[0] ? 1 : -1;
-      let hT = wkH(sLd, wkRoll(sLd), ld * yawS, -ld * rollS, lead.anc ? anchorRel(lead) : wkC * (WK_A - sLd));
+      // (Between a run and a walk, in a moment off the ground there is no planted leg for the walking hips to
+      // ride: they are where a landing heel would put them, not on the leg still trailing in the air.)
+      let hT = lead.stance ? wkH(sLd, wkRoll(sLd), ld * yawS, -ld * rollS, lead.anc ? anchorRel(lead) : wkC * (WK_A - sLd)) : H0;
       if (legs[0].held || legs[1].held || stLeg >= 0) { // stopping: on whichever feet are down
         hT = Infinity;
         for (let i = 0; i < 2; i++) { const L = legs[i]; if (L.stepping) continue; const dz = i === 0 ? yawS : -yawS, dy = i === 0 ? -rollS : rollS, e = effAt(wkKnee(L.held ? 0.5 : L.s)), z = L.z - dz; hT = Math.min(hT, Math.sqrt(Math.max(0, e * e - z * z)) + L.y - dy); }
@@ -878,7 +987,7 @@ export function createFigure({
         legIK(L.z * cl - yg * sl - hipDz, yg * cl + L.z * sl - hipDy);
         let th = ik.th, kn = ik.kn, f = L.sg - lean - th - kn, ws = L.w, wkEnd = 0, wkLand = 0;
         // Where a swinging foot comes down (walking, running, or between the two): the same spot its stance starts on.
-        const tSw = (spd * (1 - D) * Tst) / scale;
+        const tSw = (spd * (1 - D) * Tst) / (scale * hurry);
         rollAt(C * WK_A, -wkHu, wkP);
         const landZ = lerp(wkP.z + tSw * (1 - L.w), edgeB.z, fly), landY = lerp(wkP.y, edgeB.y, fly);
         const swinging = !L.stance && !inAir, gS = planted ? (L.g0 - bodyY) / scale : 0, gE = planted ? (L.gd - bodyY) / scale : 0;
@@ -1209,9 +1318,12 @@ export function createFigure({
       armR.shoulder.rotation.set(pull(spring.shR, pose.shRx, wS, zS, dt), 0, pose.shRz + flap);
       armL.elbow.rotation.x = Math.min(0, pull(spring.elL, pose.elL, wE, 0.55, dt, pyAcc * 0.25 * loose) - Math.abs(flap) * 1.5);
       armR.elbow.rotation.x = Math.min(0, pull(spring.elR, pose.elR, wE, 0.55, dt, pyAcc * 0.25 * loose) - Math.abs(flap) * 1.5);
-      // The backpack jogs on its straps and swings out a touch when the body is jolted.
-      pack.position.y = P.neckY * 0.86 + pull(spring.bob, 0, 20, 0.35, dt, -pyAcc * 0.4) * 0.5;
-      pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.006, -0.05, 0.12), 11, 0.4, dt, Math.max(0, -pyAcc) * 0.5), 0, 0.3);
+      // The backpack hangs on its straps: running, it follows the hops a beat late (a loosely damped spring), so
+      // it lifts off the back as the body drops, bumps down as it rises, and swings out a little at each
+      // landing. Walking it barely stirs; standing it is still.
+      const packLag = pull(spring.bob, bounce, PACK_W, 0.22, dt), packRel = clamp(packLag - bounce, -0.12, 0.12);
+      pack.position.y = P.neckY * 0.86 + packRel * PACK_K + pull(spring.packY, 0, 18, 0.5, dt, -pyAcc * 0.15 * (1 - fly)) * 0.3;
+      pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.004, -0.04, 0.08) + Math.max(0, packRel) * PACK_S, 12, 0.3, dt), 0, 0.22);
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);

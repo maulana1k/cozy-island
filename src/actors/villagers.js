@@ -55,7 +55,7 @@ export function createVillagers(scene, deps) {
     interactables,
     villagers,
     // Villagers are solid for the player.
-    colliders() { villagers.forEach((v, i) => { circles[i].x = v.brain.x; circles[i].z = v.brain.z; circles[i].r = v.member.hidden ? 0 : 0.3; }); return circles; },
+    colliders() { villagers.forEach((v, i) => { circles[i].x = v.brain.x; circles[i].z = v.brain.z; circles[i].r = v.member.hidden ? 0 : 0.3; circles[i].person = true; }); return circles; },
     hearBell(pos) { villagers.forEach((v) => hearBell(v.brain, pos)); },
     update(dt, elapsed, player) {
       for (const v of villagers) {

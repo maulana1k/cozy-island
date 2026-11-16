@@ -86,7 +86,7 @@ const ALWAYS_AT_WORK = { exercise: new Set(['cook']), lunch: new Set(['cook', 'e
 export function createCrowd() {
   const members = [];
   const colliders = getColliders();
-  let block = BLOCKS[4], progress = 0;
+  let block = BLOCKS[4], progress = 0, started = false;
 
   // Decides where a member should be for the current block: a spot, or null for "your own activity".
   function assign() {
@@ -149,7 +149,13 @@ export function createCrowd() {
     },
     tick(nextBlock, nextProgress) {
       progress = nextProgress;
-      if (nextBlock !== block) { block = nextBlock; assign(); }
+      if (nextBlock !== block) {
+        block = nextBlock; assign();
+        // The game opened part-way through a block (a saved clock, ?t=): everyone has "already" taken
+        // their place, rather than strolling in from home while the block is half over.
+        if (!started && progress > 0.15) for (const m of members) if (m.spot) { m.x = m.spot.x; m.z = m.spot.z; m.rot = m.spot.rot; m.arrived = true; m.pastDoor = true; m.controlled = true; }
+      }
+      started = true;
     },
     // Moves one member for this frame. Returns true while the timetable is in charge of them.
     drive(m, dt) {

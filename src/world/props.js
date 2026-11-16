@@ -18,7 +18,7 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
 const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
-const FIRE_SHADOW_EVERY = 0, LAMP_SHADOW_EVERY = 0; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
+const FIRE_SHADOW_EVERY = 0.025, LAMP_SHADOW_EVERY = 0.045; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
 
 export function createProps(scene, deps) {
   const shadowFires = [];

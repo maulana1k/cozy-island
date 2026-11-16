@@ -38,7 +38,12 @@ import { createWilds, keepClear } from './world/wilds.js';
 // here and add it to AREA_LIST; nothing else in this file needs to change.
 import * as crossings from './world/areas/crossings.js';
 import * as signpost from './world/areas/signpost.js';
-const AREA_LIST = [crossings, signpost];
+import * as riverside from './world/areas/riverside.js';
+import * as cliffs from './world/areas/cliffs.js';
+import * as village from './world/areas/village.js';
+import * as farm from './world/areas/farm.js';
+import * as harbour from './world/areas/harbour.js';
+const AREA_LIST = [crossings, signpost, riverside, cliffs, village, farm, harbour];
 import { nearestSafe, wildness, shoreR } from './logic/terrain.js';
 import { WILD } from './config.js';
 import { ITEMS, FLASK_SIPS, SIP } from './logic/items.js';

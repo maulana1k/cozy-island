@@ -27,9 +27,9 @@ import { AREAS } from '../config.js';
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
 const C = (hex) => new THREE.Color(hex);
 const bankSand = C(0xead6a4), bankWet = C(0xcdb688), bed = C(0x8f8462), trail = C(0xedd2a0);
-const campGrass = C(0xd9be66), rockLedge = C(0xb4a690), rockFace = C(0x8f8173), rockDark = C(0x7a6e63), moss = C(0x8e9a5e);
+const campGrass = C(0x7f9a4e), rockLedge = C(0xb4a690), rockFace = C(0x8f8173), rockDark = C(0x7a6e63), moss = C(0x8e9a5e);
 // The hillside's palette.
-const dry = C(0xe4c46c), dryPale = C(0xecd28e), olive = C(0xc6c26a), green = C(0xa2bc60), lush = C(0x88b055);
+const dry = C(0xa9a25c), dryPale = C(0xb9b177), olive = C(0x8f9d50), green = C(0x7a984a), lush = C(0x5f8640); // natural, slightly muted greens
 const dirt = C(0xd3a46c), clay = C(0xcc8a5c), clayDark = C(0xb87250), damp = C(0x97794f), mud = C(0x7d6246);
 const litter = C(0x8f8a52), forestGreen = C(0x7d9a4c), streamBed = C(0x8b7a5a);
 const STAMP = {

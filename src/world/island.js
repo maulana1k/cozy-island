@@ -24,9 +24,9 @@ function buildTerrain() {
   const C = (hex) => new THREE.Color(hex);
   const grass = C(PALETTE.grass), grassDark = C(PALETTE.grassDark), grassHill = C(PALETTE.grassHill);
   const sand = C(PALETTE.sand), sandWet = C(PALETTE.sandWet);
-  const soil = C(0xc4914f), meadow = C(0x9cc468), meadowDark = C(0x7fae56);
-  const forest = C(0xc9b866), forestSoil = C(0xb39a58), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xdcc08c);
-  const wildFloor = C(0x55793f), edgeGreen = C(0xb9bf68), edgeDry = C(0xe9cf86), edgeDirt = C(0xcfa266);
+  const soil = C(0xc4914f), meadow = C(0x7fa04c), meadowDark = C(0x67893f);
+  const forest = C(0x6f8e45), forestSoil = C(0x7d7a48), mud = C(0x86654a), mudWet = C(0x5f4a38), bed = C(0x6f6a52), rock = C(0xdcc08c);
+  const wildFloor = C(0x47683a), edgeGreen = C(0x8aa04f), edgeDry = C(0xa9a35e), edgeDirt = C(0xcfa266);
   const c = new THREE.Color();
   const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
   const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);

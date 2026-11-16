@@ -281,7 +281,7 @@ export function createWeather(scene, params, audio) {
     nextKind: 'sun', hoursLeft: 0, blend: 1, blendTime: 1,
     label: LABEL.sun,
     flash: 0, flashClock: -1, strike,
-    setKind, update,
+    setKind, update, force,
   };
   let thunderIn = -1;
   let windAngle = 0.6, windClock = 0, clock = 0, baseY = 0, lastT = -1, hasBase = false;
@@ -298,6 +298,12 @@ export function createWeather(scene, params, audio) {
     let hours = HOURS_MIN + rng() * (HOURS_MAX - HOURS_MIN);
     if (kind === 'fog') hours = Math.min(hours, Math.max(1.5, 10.5 - hour)); // the fog burns off by about 10:30
     w.hoursLeft = hours;
+  }
+
+  // Pause-menu override: a chosen kind blends in over a few seconds and stays; 'auto' hands back to the director.
+  function force(kind, hour = 12) {
+    if (!kind || kind === 'auto' || !LOOK[kind]) { w.forced = false; w.hoursLeft = 0; return; } // the director picks on the next update
+    w.forced = true; setKind(kind, hour); w.blendTime = 4; w.hoursLeft = 1e9;
   }
 
   const forced = params && params.get('weather');

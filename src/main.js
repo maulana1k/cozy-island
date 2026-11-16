@@ -419,6 +419,7 @@ const hud = createHUD({
   onDropItem: (id) => dropItem(id),
   describeItem: (id) => describeItem(id),
   onSetTime: (t) => { timeOfDay = t; },
+  onSetWeather: (k) => weather.force(k, timeOfDay * 24),
   onDaySpeed: () => cycleDaySpeed(),
 });
 refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setDaySpeed(daySpeed);

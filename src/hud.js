@@ -7,6 +7,7 @@ import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
 
+const WEATHERS = [['Auto', 'auto'], ['Sunny', 'sun'], ['Windy', 'wind'], ['Rainy', 'rain'], ['Foggy', 'fog']];
 const TIMES = [['Morning', 0.2], ['Midday', 0.45], ['Afternoon', 0.64], ['Sunset', 0.78], ['Night', 0.95]];
 
 const ICONS = {
@@ -377,11 +378,18 @@ export function createHUD(handlers) {
   const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map'), lookRow = el('button', 'word'), soundRow = el('button', 'word'), guideRow = el('button', 'word'), filmRow = el('button', 'word'), saverRow = el('button', 'word'), speedRow = el('button', 'word');
   const timeRow = el('div', 'times'); timeRow.append(el('span', 'label', 'Time of day'));
   for (const [name, t] of TIMES) { const b = el('button', 'word small', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
+  // Weather: pick one to make it stay, or Auto for the random weather.
+  const weatherRow = el('div', 'times wx'); weatherRow.append(el('span', 'label', 'Weather'));
+  for (const [name, k] of WEATHERS) {
+    const b = el('button', 'word small' + (k === 'auto' ? ' on' : ''), name);
+    b.addEventListener('click', () => { for (const o of weatherRow.querySelectorAll('.word')) o.classList.toggle('on', o === b); handlers.onSetWeather && handlers.onSetWeather(k); });
+    weatherRow.append(b);
+  }
   const controls = el('div', 'keys');
   for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Journey guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, timeRow, controls);
+  menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, timeRow, weatherRow, controls);
   guideRow.addEventListener('click', () => handlers.onToggleGuide());
   filmRow.addEventListener('click', () => handlers.onToggleFilms());
   saverRow.addEventListener('click', () => handlers.onToggleSaver());

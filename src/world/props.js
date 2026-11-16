@@ -278,7 +278,7 @@ export function createProps(scene, deps) {
       g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
       light.castShadow = true;
       light.shadow.mapSize.set(SHADOW_FIRE, SHADOW_FIRE);
-      light.shadow.bias = -0.004; light.shadow.normalBias = 0.12; light.shadow.radius = 1.5;
+      light.shadow.bias = -0.0008; light.shadow.normalBias = 0.02; light.shadow.radius = 1.5;
       light.shadow.camera.near = 0.6;
       light.shadow.autoUpdate = false; light.shadow.needsUpdate = false;
       light.shadow.intensity = 1;
@@ -349,7 +349,7 @@ export function createProps(scene, deps) {
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
   const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
   // The nearest lit lamp also casts a cube shadow, rebuilt on a slow schedule or when another lamp becomes nearest.
-  { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.004; sh.normalBias = 0.1; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; sh.camera.layers.set(NEAR_CASTERS); }
+  { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.0008; sh.normalBias = 0.02; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; sh.camera.layers.set(NEAR_CASTERS); }
   let lampShadowTarget = null, lampShadowAge = 99;
   // A few times a second, mark which shadow casters stand near a lit fire or the shadowing lamp, so the
   // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.

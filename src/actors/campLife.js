@@ -136,7 +136,7 @@ export function createCampLife(scene, deps) {
       }
 
       // First aid
-      patient.opts = { sitting: true }; medic.opts = { pose: 'bandage' }; doctor.opts = { pose: 'explain' }; helper.opts = { pose: 'carry' };
+      patient.opts = { sitting: true }; medic.opts = { pose: 'bandage' }; doctor.opts = { pose: 'explain' }; helper.opts = {}; // the helper stands by (no empty-handed carry pose)
 
       // Tag
       tag.freeze -= dt; tag.grace -= dt;

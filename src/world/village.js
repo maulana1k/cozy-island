@@ -53,8 +53,8 @@ function buildField(mats) {
 // The small camp tents: modern hiking domes and backpacking tents in mixed colours, some with the door rolled up.
 // All of them are welded into ONE mesh (the kit's vertex-coloured material is shared).
 const TENT_MIX = [
-  [domeTent, TENT_COLORS.mustard, 1.0, false], [backpackTent, TENT_COLORS.forest, 1.45, true], [domeTent, TENT_COLORS.slate, 1.05, true],
-  [backpackTent, TENT_COLORS.orange, 1.5, false], [domeTent, TENT_COLORS.brick, 1.0, false], [backpackTent, TENT_COLORS.slate, 1.45, true], [domeTent, TENT_COLORS.forest, 1.1, true],
+  [domeTent, TENT_COLORS.mustard, 1.35, false], [backpackTent, TENT_COLORS.forest, 1.8, true], [domeTent, TENT_COLORS.slate, 1.4, true],
+  [backpackTent, TENT_COLORS.orange, 1.9, false], [domeTent, TENT_COLORS.brick, 1.35, false], [backpackTent, TENT_COLORS.slate, 1.85, true], [domeTent, TENT_COLORS.forest, 1.45, true],
 ];
 function buildTents() {
   const geos = []; let material = null;

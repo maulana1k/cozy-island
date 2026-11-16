@@ -176,21 +176,118 @@ export function tunnelTent(o = {}) {
   });
 }
 
+// ==== 3b. Family tunnel tent: the big patrol dormitory tent =================================================
+// 4.8 m wide, 6.1 m of body plus a 1.3 m porch (7.4 m), 2.85 m at the tallest hoop. Four hoops step down toward
+// the back, panels bow gently between them, a charcoal skirt runs round the bottom, side windows have a rolled
+// flap, two roof vents have hoods, every hoop has a raised sleeve, reflective tab and pegged guylines.
+// The front is the door (grey inner, `open` rolls the door panel up) under a porch awning on two poles.
+export function familyTunnelTent(o = {}) {
+  const color = o.color ?? TENT_COLORS.forest, accent = o.accent ?? autoAccent(color), open = !!o.open;
+  const seamC = dark(color, 0.36), accSeam = dark(accent, 0.3), SKIRT = 0x2f3236, gap = 0.08, d = 0.05;
+  const keys = [
+    { z: -3.7, W: 1.1, H: 1.45 }, { z: -2.75, W: 1.8, H: 1.95, hoop: 1 }, { z: -1.25, W: 2.15, H: 2.35, hoop: 1 },
+    { z: 0.25, W: 2.35, H: 2.65, hoop: 1 }, { z: 1.6, W: 2.4, H: 2.85, hoop: 1 }, { z: 2.4, W: 2.0, H: 2.1 },
+  ];
+  const first = keys[0], last = keys[keys.length - 1], b = new Mesher();
+  const env = (z) => {
+    let i = 0; while (i < keys.length - 2 && z > keys[i + 1].z) i++;
+    const a = keys[i], c = keys[i + 1], t = clamp((z - a.z) / (c.z - a.z), 0, 1), bu = 1 + 0.025 * Math.sin(PI * t); // panels bow out between hoops
+    return { W: lerp(a.W, c.W, t) * bu, H: lerp(a.H, c.H, t) * bu };
+  };
+  const sec = (z, th) => { const { W, H } = env(z); return [W * Math.cos(th), gap + (H - gap) * Math.abs(Math.sin(th)) ** 0.7, z]; };
+  const outN = (z, th) => { const { W, H } = env(z); return nrm([Math.cos(th) / W, Math.sin(th) / (H - gap), 0]); };
+  // rows: each bay is split so the middle of a side bay can hold a window
+  const zs = [first.z], cells = []; let prev = first.z, kd = 'rear';
+  const bay = (z1) => {
+    const L = z1 - prev, fr = L > 1 ? [0, 0.12, 0.5, 0.88, 1] : [0, 0.5, 1];
+    fr.slice(1).forEach((f, q) => { zs.push(prev + L * f); cells.push({ kd, win: kd === 'bay' && fr.length === 5 && (q === 1 || q === 2) }); });
+    prev = z1;
+  };
+  for (let i = 1; i < keys.length; i++) {
+    const k = keys[i];
+    if (k.hoop) { bay(k.z - d); zs.push(k.z + d); cells.push({ kd: 'seam' }); prev = k.z + d; kd = i === keys.length - 2 ? 'front' : 'bay'; } else bay(k.z);
+  }
+  const th = [0, 0.13, 0.45, 0.95, PI / 2 - 0.07, PI / 2 + 0.07, PI - 0.95, PI - 0.45, PI - 0.13, PI];
+  b.grid(th, zs, (t, z) => sec(z, t), (i, j) => {
+    const c = cells[j];
+    if (i === 0 || i === 8) return SKIRT;
+    if (c.win && (i === 2 || i === 6)) return GLASS;
+    if (c.kd === 'seam') return cells[j + 1] && cells[j + 1].kd === 'front' || cells[j - 1] && cells[j - 1].kd === 'front' ? accSeam : seamC;
+    if (i === 4) return c.kd === 'front' ? accSeam : seamC;
+    return c.kd === 'front' ? accent : color;
+  });
+  // end caps: closed rear; the front ring is the door
+  const ringAt = (z) => th.map((t) => sec(z, t)), centre = (z) => [0, gap + (env(z).H - gap) * 0.4, z];
+  b.fan(centre(first.z), ringAt(first.z), color);
+  const fr = ringAt(last.z), fc = centre(last.z), fz = last.z;
+  if (open) {
+    b.fan(fc, fr, INNER);
+    b.fan([fc[0], fc[1] - 0.1, fz + 0.012], [1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1] - 0.1, fz + 0.012]; }), GLASS); // the dark doorway
+    b.tube([2, 3, 4, 5, 6, 7].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.84)); return [p[0], p[1], fz + 0.05]; }), 0.05, accent, 4); // the rolled-up door
+    for (const x of [-0.6, 0.6]) b.quad([x - 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.8, fz + 0.1], [x + 0.02, fc[1] + 0.45, fz + 0.06], [x - 0.02, fc[1] + 0.45, fz + 0.06], ZIP); // its ties
+  } else {
+    b.fan(fc, fr, accent);
+    b.tube([1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const p = add(fc, mul(sub(fr[i], fc), 0.8)); return [p[0], p[1], fz + 0.012]; }), 0.008, ZIP, 3);
+  }
+  // raised pole sleeves, one per hoop, running over the roof and down to the ground
+  const pth = [0, 0.45, 0.95, PI / 2, PI - 0.95, PI - 0.45, PI], hoops = keys.filter((q) => q.hoop);
+  for (const k of hoops) {
+    const pts = pth.map((t) => { const p = sec(k.z, t), n = outN(k.z, t); return [p[0] + n[0] * 0.015, p[1] + n[1] * 0.015, k.z]; });
+    b.tube([[pts[0][0], 0.02, k.z], ...pts, [pts[pts.length - 1][0], 0.02, k.z]], 0.022, seamC, 3);
+  }
+  // side windows get a rolled flap above them
+  const flapRows = []; for (let j = 0; j < cells.length; j++) if (cells[j].win) flapRows.push(zs[j], zs[j + 1]);
+  for (const sgn of [1, -1]) {
+    const t0 = sgn > 0 ? 0.95 : PI - 0.95;
+    for (let q = 0; q < flapRows.length; q += 4) { const za = flapRows[q], zb = flapRows[q + 3]; b.tube([za, (za + zb) / 2, zb].map((z) => { const p = sec(z, t0), n = outN(z, t0); return [p[0] + n[0] * 0.02, p[1] + n[1] * 0.02, z]; }), 0.028, accent, 4); }
+  }
+  // two roof vents with small hoods, one each side
+  const vent = (z, t) => {
+    const p = sec(z, t), n = outN(z, t), u = nrm(cross(n, [0, 0, 1])), U = mul(u, 0.17), V = [0, 0, 0.13];
+    b.patch(p, n, 0.3, 0.2, GLASS, 0.008);
+    const base = (sx, sz, h) => add(add(add(p, mul(n, h)), mul(U, sx)), mul(V, sz));
+    b.quad(base(-1, -1, 0.025), base(1, -1, 0.025), base(1, 1, 0.1), base(-1, 1, 0.1), accent);
+    b.tri(base(-1, -1, 0.025), base(-1, 1, 0.1), base(-1, 1, 0.0), accSeam); b.tri(base(1, -1, 0.025), base(1, 1, 0.1), base(1, 1, 0.0), accSeam);
+  };
+  vent(-2.0, 1.25); vent(-0.5, PI - 1.25);
+  // groundsheet edge
+  b.band([...keys.map((k) => [k.W * 0.96, k.z]), ...keys.slice().reverse().map((k) => [-k.W * 0.96, k.z])], 0, gap + 0.05, TUB);
+  // porch awning on two poles, with a valance
+  const xb = 1.15, yb = sec(fz, Math.acos(xb / last.W))[1] + 0.03, xf = 1.75, yf = 1.62, zf = fz + 1.3;
+  const awn = (u, v) => [lerp(xb, xf, v) * u, lerp(yb, yf, v) - 0.05 * Math.sin(PI * v) * (1 - u * u), fz + 0.02 + (zf - fz - 0.02) * v];
+  b.grid([-1, -0.5, 0.5, 1], [0, 0.5, 1], awn, (i) => (i === 1 ? accSeam : accent));
+  const e0 = awn(-1, 1), e1 = awn(1, 1); b.quad(e0, e1, add(e1, [0, -0.1, 0]), add(e0, [0, -0.1, 0]), accSeam);
+  for (const sx of [-1, 1]) {
+    const top = [sx * xf, yf, zf], a0 = awn(sx, 0), a1 = awn(sx, 1);
+    b.tri(a0, a1, [a0[0], a1[1], a0[2]], accSeam);
+    b.tube([top, [sx * xf, 0.02, zf]], 0.02, POLE, 4);
+    b.guy(add(top, [0, 0, -0.01]), [sx * 0.8, 1], 1.4, 0.1);
+  }
+  // pegged guylines: both ends, and a pair per hoop leaning to the nearer end
+  b.guy(sec(first.z, PI / 2), [0, -1], 1.3, 0.1);
+  const mid = (first.z + last.z) / 2;
+  for (const k of hoops) for (const sx of [1, -1]) b.guy(sec(k.z, sx > 0 ? 0.95 : PI - 0.95), [sx, 0.3 * Math.sign(k.z - mid)], 1.2, 0.1);
+  // reflective tabs at each hoop, and the brand patch
+  for (const k of hoops) for (const sx of [1, -1]) { const t = sx > 0 ? 0.3 : PI - 0.3; b.patch(sec(k.z + 0.12, t), outN(k.z, t), 0.07, 0.22, REFL); }
+  b.patch(sec(-0.5, PI - 0.7), outN(-0.5, PI - 0.7), 0.6, 0.18, LOGO);
+  return finish(b, 'familyTunnelTent', [4.8, 2.85, 7.4], o.scale);
+}
+
 // ==== 2. Dome tent: two crossing poles, fly stops short of the ground ====================================
 export function domeTent(o = {}) {
   const color = o.color ?? TENT_COLORS.mustard, accent = o.accent ?? autoAccent(color), open = !!o.open;
-  const Rx = 1.05, Rz = 1.05, H = 1.3, gap = 0.14, sag = 0.05, seam = dark(color, 0.38), skirtSeam = dark(accent, 0.3);
+  const Rx = 1.05, Rz = 1.05, H = 1.3, gap = 0.14, sag = 0.03, seam = dark(color, 0.38), skirtSeam = dark(accent, 0.3);
   const b = new Mesher();
   const pt = (phi, t, sc = 1) => {
-    const a = (t * PI) / 2, ne = lerp(2.5, 2, t), r = Math.cos(a) * (1 - sag * Math.cos(2 * phi) ** 2 * Math.sin(PI * t)) * sc;
+    const a = (t * PI) / 2, ne = lerp(3.2, 2.2, t), r = Math.cos(a) * (1 - sag * Math.cos(2 * phi) ** 2 * Math.sin(PI * t)) * sc;
     return [Rx * sgnpow(Math.cos(phi), 2 / ne) * r, gap + (H - gap) * Math.sin(a), Rz * sgnpow(Math.sin(phi), 2 / ne) * r];
   };
   const out = (p, dd) => add(p, mul(nrm([p[0] / (Rx * Rx), (p[1] - gap) / (H - gap) ** 2, p[2] / (Rz * Rz)]), dd));
   const dl = 0.03, phis = [];
   for (let k = 0; k < 4; k++) for (let m = 0; m < 4; m++) phis.push(PI / 4 + (k * PI) / 2 + dl + ((PI / 2 - 2 * dl) * m) / 3);
   phis.push(phis[0] + TAU);
-  const ts = [0, 0.16, 0.5, 0.8, 1];
-  b.grid(phis, ts, (ph, t) => pt(ph, t), (i, j) => (i % 4 === 3 ? (j === 0 ? skirtSeam : seam) : j === 0 ? accent : color));
+  const ts = [0, 0.16, 0.42, 0.75, 1];
+  b.grid(phis, ts, (ph, t) => pt(ph, t), (i, j) => (i % 4 === 3 ? (j <= 1 ? skirtSeam : seam) : j <= 1 ? accent : color)); // two-tone fly: accent lower panels
   // two crossing poles over the top
   for (const p0 of [PI / 4, (3 * PI) / 4]) {
     const seq = [...ts.map((t) => [p0, t]), ...ts.slice(0, -1).reverse().map((t) => [p0 + PI, t])];
@@ -348,6 +445,7 @@ export function utilityTent(o = {}) {
 }
 
 // ==== Preview helpers ====================================================================================
+export const familyTunnelTentOpen = () => familyTunnelTent({ open: true });
 export const domeTentOpen = () => domeTent({ open: true });
 export const tunnelTentOpen = () => tunnelTent({ open: true });
 export const utilityTentAid = () => utilityTent({ cross: true, open: true });
@@ -356,11 +454,11 @@ function lineup(variants) {
   const g = new THREE.Group();
   const lawn = new THREE.Mesh(new THREE.CircleGeometry(24, 48), new THREE.MeshStandardMaterial({ color: 0x7f9a4e, roughness: 1 }));
   lawn.rotation.x = -PI / 2; lawn.position.y = 0.01; lawn.receiveShadow = true; g.add(lawn);
-  const list = [[backpackTent, 1.3], [domeTent, 2.1], [tunnelTent, 2.6], [geodesicTent, 3.1], [groupShelter, 4], [utilityTent, 2.4]];
+  const list = [[backpackTent, 1.3], [domeTent, 2.1], [tunnelTent, 2.6], [familyTunnelTent, 4.8], [geodesicTent, 3.1], [groupShelter, 4], [utilityTent, 2.4]];
   const gapX = 1.5, total = list.reduce((s, [, w]) => s + w, 0) + gapX * (list.length - 1);
   let x = -total / 2;
   list.forEach(([fn, w], i) => { const t = fn(variants[i] || {}); t.position.x = x + w / 2; x += w + gapX; g.add(t); });
   return g;
 }
 export const tentLineup = () => lineup([]);
-export const tentLineupOpen = () => lineup([{ open: true }, { open: true }, { open: true }, { open: true }, {}, { open: true, cross: true }]);
+export const tentLineupOpen = () => lineup([{ open: true }, { open: true }, { open: true }, { open: true }, { open: true }, {}, { open: true, cross: true }]);

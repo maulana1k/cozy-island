@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, floorHeight, BED_PLAN } from '../logic/layout.js';
 import { box, cyl, ball, stick, roofGeometry, shared, texture, mergeStatic } from './build.js';
-import { tunnelTent, geodesicTent, groupShelter, utilityTent, TENT_COLORS } from '../kit/tents.js';
+import { familyTunnelTent, geodesicTent, groupShelter, utilityTent, TENT_COLORS } from '../kit/tents.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
 const DOOR_W = 1.1, DOOR_H = 1.85;
@@ -26,7 +26,7 @@ const STYLES = {
 const PATROL_TENT_COLORS = [TENT_COLORS.forest, TENT_COLORS.orange, TENT_COLORS.slate, TENT_COLORS.mustard];
 const TENT_PLAN = {
   hall: { make: groupShelter, o: { color: TENT_COLORS.brick, backWall: true }, s: [2, 1.2, 1.5], legs: [3.64, 2.73], back: -2.73 },
-  patrol: { make: tunnelTent, o: { open: true }, s: [1.85, 1.26, 1.333], door: { w: 1.8, h: 0.95, z: 3.0 } },
+  patrol: { make: familyTunnelTent, o: {}, s: [1, 1, 1], door: { w: 2.0, h: 1.75, z: 2.45 } },
   staff: { make: geodesicTent, o: { open: true, color: 0x7a5a86 }, s: [1.5, 1.4, 1.5], door: { w: 0.95, h: 0.85, z: 2.46 } },
   mess: { make: groupShelter, o: { color: TENT_COLORS.orange, backWall: true }, s: [1.5, 1.15, 1.25], legs: [2.73, 2.28], back: -2.28 },
   aid: { make: utilityTent, o: { open: true, cross: true, color: 0xd8dccf, accent: 0xb53a32 }, s: [1.5, 1.1, 1.667], door: { w: 1.45, h: 1.55, z: 2.0 } },
@@ -73,7 +73,7 @@ export function createBuildings(scene, deps) {
     const sideW = (W - dw) / 2;
     let tentGroup = null;
     if (T) {
-      tentGroup = T.make({ ...T.o, ...(tentColor ? { color: tentColor } : {}) });
+      tentGroup = T.make({ ...T.o, ...(tentColor ? { color: tentColor, open: index % 2 === 0 } : {}) });
       tentGroup.scale.set(...T.s);
       const mesh = tentGroup.children[0];
       mesh.material = sliced(0xffffff, { vertexColors: true, roughness: 0.85, emissive: 0xffb86b, emissiveIntensity: 0 }); // the kit's own look, now sliceable
@@ -107,7 +107,7 @@ export function createBuildings(scene, deps) {
       hinge.add(use(box(dw - 0.04, dh - 0.04, 0.045, 0, dw / 2, dh / 2, 0), doorMat));
       hinge.add(use(box(dw - 0.04, 0.12, 0.06, 0, dw / 2, dh * 0.55, 0), trim));
       g.add(hinge);
-      doorSpot = toWorld(c, 0, front + 0.35);
+      doorSpot = toWorld(c, 0, T ? Math.min(front + 0.35, doorZ + 0.9) : front + 0.35);
       interactables.push({
         id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + (T ? Math.max(1.6, dh + 0.5) : 2.25),
         prompt: () => (door.open ? 'E — close flap' : 'E — open flap'),
@@ -124,8 +124,9 @@ export function createBuildings(scene, deps) {
     } else {
       wall(-(W / 2 + 0.12), 0, 0.2, front + 0.3); wall(W / 2 + 0.12, 0, 0.2, front + 0.3);
       wall(0, -(front + 0.12), W / 2 + 0.3, 0.2);
-      for (const s of [-1, 1]) wall(s * (dw / 2 + sideW / 2), front + 0.12, sideW / 2, 0.2);
-      const dp = toWorld(c, 0, front + 0.12);
+      const bz = T ? doorZ + 0.12 : front + 0.12; // the shut flap, or the old wall line
+      for (const s of [-1, 1]) wall(s * (dw / 2 + sideW / 2), bz, sideW / 2, 0.2);
+      const dp = toWorld(c, 0, bz);
       doorBlock = { x: dp.x, z: dp.z, hw: dw / 2, hd: 0.2, rot: c.rot };
     }
 

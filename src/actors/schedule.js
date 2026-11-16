@@ -120,7 +120,7 @@ export function createCrowd() {
     if (d < 0.18 || (viaDoor && d < 0.5)) { if (viaDoor) { m.pastDoor = true; return false; } m.go = 0; return true; }
     m.travel += dt;
     // A long way to go, or badly stuck: just get there rather than wander forever.
-    if (m.travel > 40 || m.stuck > 6) { m.x = target.x; m.z = target.z; return true; }
+    if (m.travel > 20 || m.stuck > 4) { m.x = target.x; m.z = target.z; return true; }
     // Everyone has their own pace, gets going gradually and slows as they arrive.
     const pace = 0.88 + ((m.index * 37) % 25) / 100;
     m.go = (m.go || 0) + (1 - (m.go || 0)) * (1 - Math.exp(-dt * 2.5));

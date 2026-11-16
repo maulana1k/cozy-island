@@ -726,7 +726,11 @@ function step() {
   ui.update(dt, elapsed);
 
   // Shadows are redrawn every second picture at the smooth rate: nobody sees a shadow one frame late.
-  renderer.shadowMap.needsUpdate = saver || (stats.frames & 1) === 0;
+  // The sun's big shadow map is redrawn every second picture; the fire's and the lamp's (small, only at
+  // night and close by) every picture, so the shadows round the bonfire never lag behind the people.
+  sky.sunLight.shadow.autoUpdate = false;
+  sky.sunLight.shadow.needsUpdate = saver || (stats.frames & 1) === 0;
+  renderer.shadowMap.needsUpdate = true;
   renderer.render(scene, camera);
   // Counted over two pictures, since only every other one redraws the shadows.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;

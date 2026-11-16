@@ -14,10 +14,12 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 }
 
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
+const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
-const FIRE_SHADOW_EVERY = 0.03, LAMP_SHADOW_EVERY = 0.1; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
+const FIRE_SHADOW_EVERY = 0, LAMP_SHADOW_EVERY = 0; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
 
 export function createProps(scene, deps) {
+  const shadowFires = [];
   let lampDark = 0; // 0 in daylight .. 1 at night: how much a lit lamp shows against the day
   const { scatter, player, ui, audio } = deps;
   const group = new THREE.Group();
@@ -259,7 +261,7 @@ export function createProps(scene, deps) {
       for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + 0.4, log = mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.8, 6), logMat.c, Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5); log.rotation.set(Math.PI / 2, 0, a); g.add(log); }
       flames.scale.setScalar(1.25); flames.position.y = 0.25;
       g.scale.setScalar(1.9);
-      light.distance = 34; light.position.y = 1.3;
+      light.distance = 20; light.position.y = 1.3; // also the reach of its shadow cube, redrawn every picture: keep it close
       // The bonfire throws real shadows, radially away from itself. Its cube map is not redrawn every
       // frame: it is rebuilt on its own slow schedule (see the updater below). The logs and stones round
       // the flame must not cast, or they would shadow everything from a light that sits inside the stack.
@@ -270,6 +272,8 @@ export function createProps(scene, deps) {
       light.shadow.camera.near = 0.6;
       light.shadow.autoUpdate = false; light.shadow.needsUpdate = false;
       light.shadow.intensity = 1;
+      light.shadow.camera.layers.set(NEAR_CASTERS); // only what stands close to the fire is drawn into its cube
+      shadowFires.push({ light, x: f.x, y, z: f.z });
     }
     g.position.set(f.x, y - 0.02, f.z);
     // The ring of stones and the logs never move: weld them (the flames and the light stay apart).
@@ -326,8 +330,24 @@ export function createProps(scene, deps) {
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
   const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
   // The nearest lit lamp also casts a cube shadow, rebuilt on a slow schedule or when another lamp becomes nearest.
-  { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.004; sh.normalBias = 0.1; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; }
+  { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.004; sh.normalBias = 0.1; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; sh.camera.layers.set(NEAR_CASTERS); }
   let lampShadowTarget = null, lampShadowAge = 99;
+  // A few times a second, mark which shadow casters stand near a lit fire or the shadowing lamp, so the
+  // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.
+  const _c = new THREE.Vector3(); let casterScan = 0;
+  function markNearCasters(centres) {
+    scene.traverse((o) => {
+      if (!o.isMesh || !o.castShadow || o.isInstancedMesh) return;
+      const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
+      const bs = o.boundingSphere || g.boundingSphere;
+      _c.copy(bs.center).applyMatrix4(o.matrixWorld);
+      const r = bs.radius * o.matrixWorld.getMaxScaleOnAxis();
+      let near = false;
+      if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) { near = true; break; }
+      if (near) o.layers.enable(NEAR_CASTERS); else o.layers.disable(NEAR_CASTERS);
+    });
+  }
+  const casterCentres = [];
   const outside = [];
   const byDistance = [];
 
@@ -369,6 +389,13 @@ export function createProps(scene, deps) {
         lampShadowAge += dt;
         if (l0 && (l0 !== lampShadowTarget || lampShadowAge > LAMP_SHADOW_EVERY)) { sh.needsUpdate = true; lampShadowAge = 0; }
         lampShadowTarget = l0;
+        casterScan -= dt;
+        if (casterScan <= 0) {
+          casterScan = 0.25; casterCentres.length = 0;
+          for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14 });
+          if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9 });
+          if (casterCentres.length) markNearCasters(casterCentres);
+        }
       }
       lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && dark > 0.01) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * dark; } else light.intensity = 0; });
 

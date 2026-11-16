@@ -39,11 +39,11 @@ export function createEffects(scene, groundAt) {
       m.userData = { kind: 'fleck', vx: Math.cos(a) * v, vz: Math.sin(a) * v, vy: (1.4 + Math.random() * 1.4) * power, g: 7, age: 0, life: 0.5 + Math.random() * 0.3, size: 0.7 + Math.random() * 0.8, alpha: 1, spin: (Math.random() - 0.5) * 16 };
     }
   }
-  // A ring spreading across the water.
-  function ripple(x, z, size = 1, delay = 0) {
+  // A ring spreading across the water (or a puddle at height y).
+  function ripple(x, z, size = 1, delay = 0, y = 0.04) {
     const m = spawn('ring', ringGeo);
     m.material.color.setHex(0xffffff);
-    m.position.set(x, 0.04, z);
+    m.position.set(x, y, z);
     m.userData = { kind: 'ring', age: -delay, life: 1.1, size, alpha: 0.7 };
     m.visible = delay <= 0;
   }
@@ -69,9 +69,23 @@ export function createEffects(scene, groundAt) {
 
   return {
     puff, flecks, ripple, footprint,
-    // One footfall on a given kind of ground.
-    step(surface, p, heading, running) {
+    // One footfall on a given kind of ground. wet (0..1): how soaked the ground is from rain (weather.wet).
+    step(surface, p, heading, running, wet = 0) {
       const n = running ? 1 : 0;
+      // On rain-soaked ground every step splashes: a ring where the foot lands and spray kicked up behind,
+      // bigger when running, and a dark wet print that fades.
+      if (wet > 0.25 && surface !== 'water') {
+        const gy = groundAt(p.x, p.z) + 0.03, k = Math.min(1, (wet - 0.25) / 0.5);
+        ripple(p.x, p.z, (running ? 0.55 : 0.35) * (0.6 + 0.4 * k), 0, gy);
+        if (running) {
+          ripple(p.x, p.z, 0.9 * (0.6 + 0.4 * k), 0.12, gy);
+          const bx = p.x - Math.sin(heading) * 0.25, bz = p.z - Math.cos(heading) * 0.25;
+          puff(bx, gy - 0.03, bz, 2 + Math.round(3 * k), 0xdcecf5, 0.22, 1.0 + 0.5 * k);
+          flecks(bx, gy - 0.05, bz, 2 + Math.round(2 * k), [0xcfe4f0, 0xb8d3e3], 0.6);
+        }
+        footprint(p.x, p.z, heading, 0x5a6b70, running ? 6 : 4);
+        if (surface !== 'mud' && surface !== 'sand') return;
+      }
       if (surface === 'water') { ripple(p.x, p.z, 0.7); ripple(p.x, p.z, 1.15, 0.18); puff(p.x, 0, p.z, 2 + n * 2, 0xe6f7fa, 0.25, 0.9 + n * 0.4); }
       else if (surface === 'mud') { flecks(p.x, p.y, p.z, 3 + n * 3, MUD, 0.7); footprint(p.x, p.z, heading, 0x4f3d2c, 16); }
       else if (surface === 'sand') { if (running) puff(p.x, p.y, p.z, 2, 0xf7ecc8, 0.2, 0.3); footprint(p.x, p.z, heading, 0xc9b27e, 12); }

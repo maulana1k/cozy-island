@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { createRng } from '../logic/rng.js';
 import { SEED } from '../config.js';
+import { heightAt } from '../logic/terrain.js';
 
 export const KINDS = ['sun', 'wind', 'rain', 'fog'];
 export const LABEL = { sun: 'Sunny', wind: 'Windy', rain: 'Rainy', fog: 'Foggy' };
@@ -88,7 +89,7 @@ export function oddsAt(hour, previous) {
 }
 
 // ---- Particle shaders -----------------------------------------------------------------------------
-const RAIN_N = 1900, SPLASH_N = 150, WIND_N = 170, WIND_SEGS = 16, MIST_N = 52, LEAF_N = 220;
+const RAIN_N = 1900, SPLASH_N = 220, WIND_N = 170, WIND_SEGS = 16, MIST_N = 52, LEAF_N = 220;
 
 function seeded(n, rng, width = 4) {
   const a = new Float32Array(n * width);
@@ -106,35 +107,34 @@ function buildRain() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 1, 0]), 3));
   geo.setIndex([0, 1, 2, 2, 1, 3]);
-  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uVel: { value: new THREE.Vector3(0, -6.5, 0) }, uWindDir: { value: new THREE.Vector2(1, 0) }, uGust: { value: 0 }, uColor: { value: new THREE.Color(0xc9d8ea) }, uAlpha: { value: 0.5 } };
+  // uOff: the sideways drift every drop shares, added up on the CPU each frame and wrapped to the box (so a turning
+  // wind never swings the whole field); uDrift: that drift's speed now (m/s), so each streak is drawn exactly along
+  // the path its drop is travelling. Drops sit at fixed places in the world: walking through the rain never drags it along.
+  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uOff: { value: new THREE.Vector3() }, uDrift: { value: new THREE.Vector3() }, uFall: { value: 6.5 }, uColor: { value: new THREE.Color(0xc9d8ea) }, uAlpha: { value: 0.5 } };
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
       // aSeed: where the drop lives (xyz) and the rain amount it needs (w).
-      // aSeed2: its own speed (x), size (y), wobble rate (z) and phase (w), so no two drops fall alike.
+      // aSeed2: its own fall speed (x), size (y), brightness (z, w).
       attribute vec4 aSeed; attribute vec4 aSeed2;
-      uniform float uTime, uAmt, uGust; uniform vec3 uCenter, uVel; uniform vec2 uWindDir; varying float vA; varying float vU;
+      uniform float uTime, uAmt, uFall; uniform vec3 uCenter, uOff, uDrift; varying float vA; varying float vU;
       void main() {
         const vec3 BOX = vec3(34.0, 20.0, 34.0);
         if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; vU = 0.0; return; }
-        vec3 vel = uVel * (0.55 + 0.9 * aSeed2.x);
-        vec3 rel = mod(aSeed.xyz * BOX + vel * uTime - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
-        vec3 wp = uCenter + rel;
-        // Each drop wanders a little on its own, and gusts sweep across the field as waves.
-        float ph = aSeed2.w * 6.2832, fq = 0.8 + aSeed2.z * 2.2;
-        vec3 wob = vec3(sin(uTime * fq + ph), 0.0, cos(uTime * fq * 0.83 + ph * 1.7)) * (0.12 + 0.3 * aSeed2.z);
-        float g = sin(uTime * 0.7 + dot(wp.xz, uWindDir) * 0.09) + 0.6 * sin(uTime * 1.7 + wp.x * 0.21 - wp.z * 0.17);
-        vec3 push = vec3(uWindDir.x, 0.0, uWindDir.y) * (g * 0.5 + 0.3) * uGust;
-        vec3 head = wp + wob + push * 1.4;
-        float len = 0.03 + 0.035 * aSeed2.y;
-        vec3 tail = head - (vel + push * 1.6 + wob * 1.5) * len;
+        float fall = uFall * (0.8 + 0.4 * aSeed2.x);
+        vec3 p = aSeed.xyz * BOX + vec3(uOff.x, -mod(fall * uTime, BOX.y), uOff.z);
+        vec3 rel = mod(p - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
+        vec3 head = uCenter + rel;
+        // The streak is the last few hundredths of a second of the drop's own straight path.
+        vec3 vel = vec3(uDrift.x, -fall, uDrift.z);
+        vec3 tail = head - vel * (0.035 + 0.03 * aSeed2.y);
         vec4 a = viewMatrix * vec4(head, 1.0), b = viewMatrix * vec4(tail, 1.0);
         vec3 side = normalize(cross(b.xyz - a.xyz, a.xyz) + 1e-5);
         float dist = length(a.xyz);
         vec4 v = mix(a, b, position.y); v.xyz += side * position.x * (0.008 + 0.012 * aSeed2.y) * (1.0 + dist * 0.035);
         gl_Position = projectionMatrix * v;
         float edge = (1.0 - smoothstep(0.7, 1.0, abs(rel.y) / 10.0)) * (1.0 - smoothstep(0.7, 1.0, length(rel.xz) / 17.0));
-        float bright = 0.35 + 0.65 * fract(sin(aSeed2.x * 91.7 + aSeed2.w * 37.1) * 4375.5);
+        float bright = 0.35 + 0.65 * fract(sin(aSeed2.z * 91.7 + aSeed2.w * 37.1) * 4375.5);
         vA = edge * bright * smoothstep(0.8, 2.5, dist) * (1.0 - position.y * 0.7);
         vU = position.x;
       }`,
@@ -149,30 +149,26 @@ function buildRain() {
   return { mesh: m, uniforms };
 }
 
-// Drops landing: little rings that open and fade on the ground around the player, one instanced mesh.
-// Each slot repeats on its own beat and picks a new spot every time round.
+// Drops landing: little rings that open and fade on the ground, one instanced mesh. The CPU gives each ring a fixed
+// place in the world on the real ground (aSpot: x, y, z, start time) when it starts, so rings stay where they fell
+// while you walk past; each slot repeats on its own beat (aSeed.z) and picks a new spot every time round.
 function buildSplashes() {
   const geo = new THREE.PlaneGeometry(1, 1); geo.rotateX(-Math.PI / 2);
-  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uBase: { value: 0 }, uColor: { value: new THREE.Color(0xdfe9f4) } };
+  const uniforms = { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xdfe9f4) } };
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     vertexShader: /* glsl */`
-      attribute vec4 aSeed; uniform float uTime, uAmt, uBase; uniform vec3 uCenter; varying vec2 vUv; varying float vA; varying float vAge;
-      float h(float n) { return fract(sin(n) * 43758.5453); }
+      attribute vec4 aSeed; attribute vec4 aSpot; uniform float uTime; varying vec2 vUv; varying float vA; varying float vAge;
       void main() {
         float period = 0.45 + aSeed.z * 0.6;
-        float c = uTime / period + aSeed.w * 7.0, k = floor(c);
-        vAge = c - k;
-        vec2 spot = vec2(h(aSeed.x * 91.0 + k * 1.31 + aSeed.y), h(aSeed.y * 57.0 + k * 2.17 + aSeed.x)) - 0.5;
-        const float R = 15.0;
-        vec2 xz = uCenter.xz + spot * 2.0 * R;
-        float r = (0.05 + vAge * (0.16 + 0.12 * aSeed.z)) ;
-        vec3 world = vec3(xz.x + position.x * r * 2.0, uBase + 0.07, xz.y + position.z * r * 2.0);
+        vAge = (uTime - aSpot.w) / period;
+        if (vAge < 0.0 || vAge > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; vUv = uv; return; }
+        float r = 0.05 + vAge * (0.16 + 0.12 * aSeed.z);
+        vec3 world = vec3(aSpot.x + position.x * r * 2.0, aSpot.y + 0.04, aSpot.z + position.z * r * 2.0);
         vUv = uv;
         vec4 mv = viewMatrix * vec4(world, 1.0);
         gl_Position = projectionMatrix * mv;
-        float rank = fract(aSeed.x * 41.7 + aSeed.y * 13.3);
-        vA = step(rank, uAmt) * (1.0 - smoothstep(0.55, 1.0, length(spot) * 2.0)) * smoothstep(1.0, 4.0, length(mv.xyz));
+        vA = smoothstep(1.0, 4.0, length(mv.xyz));
       }`,
     fragmentShader: /* glsl */`
       uniform vec3 uColor; varying vec2 vUv; varying float vA; varying float vAge;
@@ -183,9 +179,31 @@ function buildSplashes() {
         #include <colorspace_fragment>
       }`,
   });
-  const m = instanced(geo, SPLASH_N, [['aSeed', seeded(SPLASH_N, createRng(SEED + 149)), 4]]);
+  const seeds = seeded(SPLASH_N, createRng(SEED + 149));
+  const spots = new Float32Array(SPLASH_N * 4).fill(-1e6);
+  const m = instanced(geo, SPLASH_N, [['aSeed', seeds, 4], ['aSpot', spots, 4]]);
   m.material = mat; m.renderOrder = 4; m.name = 'rainSplashes';
-  return { mesh: m, uniforms };
+  const spotAttr = m.geometry.getAttribute('aSpot'); spotAttr.setUsage(THREE.DynamicDrawUsage);
+  const next = new Float32Array(SPLASH_N); // when each slot starts its next ring
+  for (let i = 0; i < SPLASH_N; i++) next[i] = seeds[i * 4 + 3] * 1.5;
+  // Starts new rings round (fx, fz) for the slots whose last ring is over. amt: 0..1 how many slots are in use.
+  function tick(time, fx, fz, amt, ground) {
+    let dirty = false;
+    for (let i = 0; i < SPLASH_N; i++) {
+      if (time < next[i]) continue;
+      const period = 0.45 + seeds[i * 4 + 2] * 0.6;
+      next[i] = time + period * (0.9 + Math.random() * 0.4);
+      const rank = (seeds[i * 4] * 41.7 + seeds[i * 4 + 1] * 13.3) % 1;
+      const a = Math.random() * Math.PI * 2, r = 1.2 + Math.sqrt(Math.random()) * 14;
+      const x = fx + Math.cos(a) * r, z = fz + Math.sin(a) * r, y = ground(x, z);
+      // Rings on dry land only: the sea and the river draw their own rain rings.
+      if (rank > amt || y < 0.05) spots[i * 4 + 3] = -1e6;
+      else { spots[i * 4] = x; spots[i * 4 + 1] = y; spots[i * 4 + 2] = z; spots[i * 4 + 3] = time; }
+      dirty = true;
+    }
+    if (dirty) spotAttr.needsUpdate = true;
+  }
+  return { mesh: m, uniforms, tick };
 }
 
 // Wind streaks up at treetop height (about 4-7 m). The field moves by uOff, an offset the CPU adds up
@@ -345,7 +363,8 @@ export function createWeather(scene, params, audio) {
   const rng = createRng(SEED + 97);
   const rain = buildRain(), splash = buildSplashes(), streaks = buildWindStreaks(rng), mist = buildMist(rng), leaves = buildLeaves(rng);
   scene.add(rain.mesh, splash.mesh, streaks.mesh, mist.mesh, leaves.mesh);
-  const streakOff = new THREE.Vector3(), leafOff = new THREE.Vector3();
+  const streakOff = new THREE.Vector3(), leafOff = new THREE.Vector3(), rainOff = new THREE.Vector3(), rainDrift = new THREE.Vector3();
+  let ground = heightAt; // the game can hand in its own (with decks and bridges) through setGround
 
   const cur = { wind: 0, rain: 0, fog: 0, cloud: 0, cold: 0 };
   const from = { ...cur }, to = { ...cur };
@@ -355,7 +374,7 @@ export function createWeather(scene, params, audio) {
     nextKind: 'sun', hoursLeft: 0, blend: 1, blendTime: 1,
     label: LABEL.sun,
     flash: 0, flashClock: -1, strike,
-    setKind, update, force,
+    setKind, update, force, setGround(fn) { ground = fn; },
   };
   let thunderIn = -1;
   let windAngle = 0.6, windClock = 0, clock = 0, baseY = 0, lastT = -1, hasBase = false;
@@ -443,13 +462,16 @@ export function createWeather(scene, params, audio) {
       const u = rain.uniforms;
       u.uTime.value = clock % 3600; u.uAmt.value = Math.min(1, w.rain * 1.05);
       u.uCenter.value.set(gx, baseY + 3, gz);
-      u.uVel.value.set(w.windX * (0.5 + w.wind * 3.5), -6.5, w.windZ * (0.5 + w.wind * 3.5));
-      u.uWindDir.value.set(w.windX, w.windZ); u.uGust.value = 0.5 + w.wind * 2.2;
+      // The shared sideways drift: eased toward the wind, then added up (wrapped to the box) so the field glides.
+      const want = 0.4 + w.wind * 3.2, k = Math.min(1, dt * 1.5);
+      rainDrift.x += (w.windX * want - rainDrift.x) * k; rainDrift.z += (w.windZ * want - rainDrift.z) * k;
+      rainOff.x = (rainOff.x + rainDrift.x * dt) % 34; rainOff.z = (rainOff.z + rainDrift.z * dt) % 34;
+      u.uOff.value.copy(rainOff); u.uDrift.value.copy(rainDrift); u.uFall.value = 6.5;
       u.uColor.value.setRGB(0.62 * dark + 0.04, 0.72 * dark + 0.05, 0.86 * dark + 0.08);
       u.uAlpha.value = 0.6;
       const sp = splash.uniforms;
-      sp.uTime.value = clock % 3600; sp.uAmt.value = Math.min(1, w.rain * 1.05);
-      sp.uCenter.value.set(fx, 0, fz); sp.uBase.value = fy;
+      sp.uTime.value = clock;
+      splash.tick(clock, fx, fz, Math.min(1, w.rain * 1.05), ground);
       sp.uColor.value.copy(u.uColor.value);
     }
     splash.mesh.visible = rainOn;

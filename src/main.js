@@ -45,7 +45,8 @@ import * as hamletArea from './world/areas/hamlet.js';
 import * as farm from './world/areas/farm.js';
 import * as harbour from './world/areas/harbour.js';
 import * as storyCast from './world/areas/storyCast.js'; // the story's buddy, younger scout, notice board, glowing specks
-const AREA_LIST = [crossings, signpost, riverside, cliffs, hamletArea, farm, harbour, storyCast];
+import * as lifeguard from './world/areas/lifeguard.js'; // the lifeguard tower on the camp beach
+const AREA_LIST = [crossings, signpost, riverside, cliffs, hamletArea, farm, harbour, storyCast, lifeguard];
 // ---- Plants and ground grass on the locals' land (src/world/flora.js). Kept last: it lays out its
 // plants round every circle the areas above ask to keep clear. `?noflora` leaves it out.
 import * as flora from './world/flora.js';
@@ -82,6 +83,7 @@ const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
 const weather = createWeather(scene, params, audio); // random weather; ?weather=rain|wind|fog|sun forces one
+weather.setGround(groundAt); // rain rings land on decks and bridges too
 const village = createVillage(scene);
 const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(bed) });
 const campProps = createCampProps(scene);
@@ -238,7 +240,7 @@ let stepCount = 0, dayNumber = 1;
 player.onStep = (surface, running) => {
   stepCount++;
   audio.play(`step:${surface}`);
-  effects.step(surface, player.position, player.heading, running);
+  effects.step(surface, player.position, player.heading, running, weather.wet); // rain-soaked ground splashes underfoot
   if (surface === 'sand') discover('place-beach');
   if (surface === 'water' && pondDistance(player.position.x, player.position.z) < POND.rw) discover('place-pond');
 };
@@ -560,12 +562,13 @@ function step() {
   last = now;
   stats.frames++; stats.total += raw; stats.worst = Math.max(stats.worst, raw);
   if (hud.started && !hud.menuOpen) tuneResolution(raw);
-  const paused = !hud.started || hud.menuOpen;
+  const previewing = !hud.started && storyRt.previewing; // the name and look picker: the world carries on behind it
+  const paused = (!hud.started && !previewing) || hud.menuOpen;
   // While paused the world stands still; only the picture keeps refreshing.
   const dt = paused ? 0 : clampDt(raw);
   elapsed += dt;
 
-  const talking = storyRt.talking; // a conversation (or a wait) is open: game time stands still
+  const talking = storyRt.talking || previewing; // a conversation, a wait or the picker: game time stands still, you stand still
   if (!freezeTime && !talking) {
     const before = timeOfDay;
     timeOfDay = advance(timeOfDay, dt * (sleeping ? 45 : daySpeed));

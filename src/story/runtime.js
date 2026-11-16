@@ -84,6 +84,17 @@ export function createStoryRuntime(io) {
   const tmp = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), m4 = new THREE.Matrix4(), up = new THREE.Vector3(0, 1, 0);
   // Returns true while it is in charge of the camera.
   function cameraStep(dt) {
+    // The picker: a close, front-on view of your scout on the left of the screen (the panel is on the right).
+    if (ui.picking) {
+      const P = player.position, fx = player.facing.x, fz = player.facing.z, rx = fz, rz = -fx;
+      shot.pos.set(P.x + fx * 2.7 + rx * 0.8, P.y + 1.15, P.z + fz * 2.7 + rz * 0.8);
+      shot.look.set(P.x + rx * 0.8, P.y + 0.72, P.z + rz * 0.8);
+      if (shot.k !== -1) { shot.k = -1; shot.lookNow.copy(shot.look); }
+      camera.position.lerp(shot.pos, smooth(3, dt));
+      shot.lookNow.lerp(shot.look, smooth(4, dt));
+      camera.lookAt(shot.lookNow);
+      return true;
+    }
     if (!shot.active || !talkTarget) return false;
     const P = player.position, N = talkTarget.position;
     const nx = N.x, nz = N.z, dx = nx - P.x, dz = nz - P.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
@@ -236,6 +247,8 @@ export function createStoryRuntime(io) {
   return {
     story, ui, content: CONTENT,
     get talking() { return story.talking || busy; },
+    // The picker is open on the title screen: the world runs (people move) but you stand still.
+    get previewing() { return ui.picking; },
     get busy() { return busy; },
     prompt, tryTalk, close, cameraStep, cameraAfter, update, goal, card, event, waitFor, softFail, onSleep, onWake, save, openPicker, continueGame, titleKey, ensureStarted,
     hasSave, sessionOnly,

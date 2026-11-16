@@ -137,9 +137,9 @@ export function buildPaddy(width = 10, depth = 8) {
 }
 
 // A vegetable plot: raised soil rows with cabbages, lettuces and carrot tops, bean poles and a watering can.
-export function buildVegPlot(width = 6, depth = 4) {
+export function buildVegPlot(width = 6, depth = 4, skirt = 0.5) { // skirt: how far the plot's earth slab reaches down, for a plot on a slope
   const L = [], rand = rng(23);
-  L.push(box(width, 0.5, depth, C.dirt, 0, -0.24, 0));                                              // trodden bare earth floor, a slab that reaches down into sloping ground
+  L.push(box(width, skirt, depth, C.dirt, 0, 0.01 - skirt / 2, 0));                                              // trodden bare earth floor, a slab that reaches down into sloping ground
   // Low wooden boards round the edge.
   for (const sz of [-1, 1]) L.push(box(width, 0.14, 0.06, C.wood, 0, 0.07, sz * (depth / 2 - 0.03)));
   for (const sx of [-1, 1]) L.push(box(0.06, 0.14, depth - 0.12, C.wood, sx * (width / 2 - 0.03), 0.07, 0));
@@ -293,9 +293,9 @@ export function buildScarecrow() {
 }
 
 // A buffalo wallow: a muddy pool with a rim of churned earth, hoof prints and reeds.
-export function buildWallow(radius = 3) {
+export function buildWallow(radius = 3, skirt = 0.6) { // skirt: depth of the earth plug under it, for sloping ground
   const L = [], rand = rng(37);
-  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.6, 32), C.dirt, 0, -0.29, 0));      // trampled dry earth round it, a plug that reaches down into sloping ground
+  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, skirt, 32), C.dirt, 0, 0.01 - skirt / 2, 0));      // trampled dry earth round it, a plug that reaches down into sloping ground
   L.push(sheet(new THREE.CylinderGeometry(radius * 0.88, radius * 0.88, 0.05, 28), new THREE.MeshStandardMaterial({ color: 0x74523a, roughness: 0.3 }), 0, 0.035, 0));
   L.push(...lumpRing(radius * 0.97, Math.round(radius * 8), radius * 0.16, [0x9a7a55, 0x8a6a48, 0xa8865e], 0.07, rand));
   L.push(...lumpRing(radius * 1.12, Math.round(radius * 5), radius * 0.1, [0x9a7a55, 0xb08a5e], 0.04, rand, 0.15));
@@ -367,9 +367,9 @@ export const buildMangoTree = () => buildOrchardTree(1);
 export const buildPapayaTree = () => buildOrchardTree(2);
 
 // A duck pond: round, with a bed, still water, a bank of lumpy earth and stones, lily pads, pink lotus flowers and reeds.
-export function buildDuckPond(radius = 3.5) {
+export function buildDuckPond(radius = 3.5, skirt = 0.6) { // skirt: depth of the grassy plug under it, for sloping ground
   const L = [], rand = rng(53);
-  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, 0.6, 36), C.grass, 0, -0.285, 0));      // grassy fringe, a plug that reaches down into sloping ground
+  L.push(M(new THREE.CylinderGeometry(radius * 1.3, radius * 1.3, skirt, 36), C.grass, 0, 0.015 - skirt / 2, 0));      // grassy fringe, a plug that reaches down into sloping ground
   L.push(M(new THREE.CylinderGeometry(radius * 0.97, radius * 0.97, 0.03, 32), 0x4e8f95, 0, 0.03, 0));       // pond bed
   L.push(...lumpRing(radius * 1.0, Math.round(radius * 8), radius * 0.12, [0x9c7b56, 0x8b6c4b, 0xa98a62], 0.08, rand));
   for (let i = 0; i < Math.round(radius * 3); i++) { const a = rand() * Math.PI * 2, r = radius * (0.98 + rand() * 0.1); L.push(sph(0.14 + rand() * 0.1, C.stone, Math.cos(a) * r, 0.1, Math.sin(a) * r, 1, 0.7, 1, 0, 0, 0, 7, 5)); }

@@ -109,7 +109,7 @@ const NAMED = { villager: 'Scout', local: 'Villager', goat: 'Goat', buffalo: 'Wa
 const LANDMARKS = () => [['Summit camp', LOOKOUT, 1], ['Windmill', WINDMILL, 6], ['Dock', dockEnd, 0.5], ['Pond', POND, 0], ['Beach camp', CAMPFIRE, 0.5], ['Village', AREAS.village, 4], ['Waterfall', AREAS.waterfall.foot, 6],
   ['Cliff lookout', AREAS.lookout, 1], ['Plank bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 1], ['Rice fields', AREAS.paddies, 0], ['Fishing jetty', AREAS.jetty, 0.5]];
 const scope = createScope({
-  camera, input, groundAt,
+  camera, input, groundAt, audio,
   candidates: () => {
     const out = [];
     for (const t of interactables) { if (t.enabled === false || t.kind === 'pickup' || t.kind === 'ladder') continue; const name = t.speaker || NAMED[t.kind]; if (name) out.push({ id: t.id, name, x: t.position.x, y: (t.markerY || groundAt(t.position.x, t.position.z)) - 0.6, z: t.position.z, far: 180 }); }
@@ -117,7 +117,7 @@ const scope = createScope({
     return out;
   },
   onSpot: (name) => { say(`Spotted: ${name}`, '🔭'); progress('spot'); },
-  onClose: () => syncLook(),
+  onClose: () => { storyRt.blendFrom(); syncLook(); }, // the follow camera blends back in
 });
 
 // ---- Backpack and how you feel ------------------------------------------------
@@ -417,7 +417,9 @@ function syncLook() {
 function toggleLook() { freeLook = !freeLook; hud.setLook(freeLook); audio.play('ui'); syncLook(); }
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
-  // Esc releases the mouse before the game sees the key, so treat that as "pause".
+  // Esc releases the mouse before the game sees the key: while looking through the telescope that means "leave it".
+  if (!mouseHeld() && scope.active) { scope.close(); input.consumeInteract(); return; }
+  // Otherwise treat it as "pause".
   if (!mouseHeld() && freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) hud.openMenu();
 });
 canvas.addEventListener('click', syncLook);

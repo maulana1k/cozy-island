@@ -236,6 +236,10 @@ export function createAudio(makeContext = () => new AudioContext()) {
     bugle() { [[G5 / 2, 0], [C5, 0.16], [E5, 0.32], [G5, 0.48]].forEach(([f, d]) => { tone(f, { type: 'sawtooth', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.035, delay: d }); tone(f, { type: 'triangle', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.06, delay: d }); }); },
     sizzle() { hiss({ type: 'highpass', freq: 3200, dur: 1.0, gain: 0.05 }); },
     click() { tone(900, { type: 'square', dur: 0.03, gain: 0.03 }); },
+    // The telescope: a soft detent click as the zoom ring passes each step, and a small motor whirr as it turns.
+    scopeTick() { hiss({ type: 'bandpass', freq: 2600, q: 7, dur: 0.016, gain: 0.05 }); tone(520, { type: 'square', dur: 0.018, gain: 0.01 }); },
+    scopeWhirr() { tone(170, { type: 'sawtooth', dur: 0.35, gain: 0.01, to: 260, attack: 0.04 }); hiss({ type: 'bandpass', freq: 1100, q: 3, dur: 0.35, gain: 0.018 }); },
+    scopeIn() { hiss({ type: 'lowpass', freq: 700, dur: 0.5, gain: 0.03 }); tone(330, { type: 'sine', dur: 0.12, gain: 0.025, delay: 0.55, to: 300 }); },
     nope() { tone(220, { type: 'triangle', dur: 0.12, gain: 0.06 }); tone(180, { type: 'triangle', dur: 0.16, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
   };

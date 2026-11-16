@@ -13,7 +13,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createFigure } from '../../actors/figure.js';
 
 export const TOWER = { x: -5, z: 24 };
-const HILL_TOP = { x: -18, z: -22 }, BEACH = { x: -24.5, z: 42.5 }; // the two ends of what the lifeguard watches
+const CAMP = { x: 10, z: 8 }, BEACH = { x: -24.5, z: 42.5 }; // the two ends of what the lifeguard watches (the camp centre is the big fire)
 const DECK = 8.6;                        // cabin floor height: the roof peak ends up about 12.5 m, tree height
 const BASE = 2.1, TOP = 1.65;            // half-spread of the legs at the ground and under the cabin
 const CAB = 1.8;                         // half-size of the cabin floor
@@ -152,9 +152,10 @@ export function create(scene, deps) {
   const ground = heightAt || groundAt;
   if (keepClear) keepClear(TOWER.x, TOWER.z, 3.6);
   const y0 = ground(TOWER.x, TOWER.z);
-  // Faces halfway between the hill and the beach, and scans across both.
-  const toHill = Math.atan2(HILL_TOP.x - TOWER.x, HILL_TOP.z - TOWER.z), toBeach = Math.atan2(BEACH.x - TOWER.x, BEACH.z - TOWER.z);
-  const half = Math.atan2(Math.sin(toHill - toBeach), Math.cos(toHill - toBeach)) / 2, face = toBeach + half, sweep = Math.abs(half) + 0.15;
+  // The tower stands between the camp centre (north-east) and the beach (south-west): the balcony faces between them,
+  // south-east, over the camp's southern half and the sea, with the camp on the left and the beach on the right.
+  const toCamp = Math.atan2(CAMP.x - TOWER.x, CAMP.z - TOWER.z), toBeach = Math.atan2(BEACH.x - TOWER.x, BEACH.z - TOWER.z);
+  const face = (toCamp + toBeach) / 2, sweep = Math.min(1.5, Math.abs(toCamp - toBeach) / 2);
   const cosF = Math.cos(face), sinF = Math.sin(face);
   const W = (lx, lz) => ({ x: TOWER.x + lx * cosF + lz * sinF, z: TOWER.z - lx * sinF + lz * cosF });
   const { frame, roof, head, lens, beam } = buildTower();
@@ -175,17 +176,7 @@ export function create(scene, deps) {
   const climb = { phase: 'ground', t: 0, deck: null };
   // air: 0 marks the body as off the ground, so the feet are not planted on the grass far below (src/actors/figure.js).
   const ro = { pose: 'climb', climb: 0, air: 0, land: 0, gesture: null };
-  // cam: while you climb, the camera watches from just outside the frame behind the ladder (see main.js), so the
-  // beams and the cabin floor never hide you.
-  const cam = { pos: { x: 0, y: 0, z: 0 }, look: { x: 0, y: 0, z: 0 } };
-  const riding = { heading: face + Math.PI, speed: 0, pitch: 0, roll: 0, opts: ro, label: 'Guard tower ladder', hint: 'climbing the ladder', camSpeed: 0, cam };
-  // Inside the frame (nothing between you and the camera but the thin cage), or in the cabin for the last step.
-  const camIn = W(0.8, 0.6), camTop = W(0.95, 1.0);
-  function aimCam(player) {
-    const y = player.position.y, top = y > deckTop - 1.5, at = top ? camTop : camIn;
-    cam.pos.x = at.x; cam.pos.z = at.z; cam.pos.y = top ? deckTop + 1.8 : Math.min(y + 0.75, deckTop - 0.5);
-    cam.look.x = player.position.x; cam.look.y = y + (top ? 0.5 : 0.8); cam.look.z = player.position.z;
-  }
+  const riding = { heading: face + Math.PI, speed: 0, pitch: 0, roll: 0, opts: ro, label: 'Guard tower ladder', hint: 'climbing the ladder', camSpeed: 0 }; // the follow camera stays yours (free look) while you climb
   const rungs = Math.round((DECK - 0.2) / RUNG);
   // While you are up: the back and side walls, the front wall either side of the door, the balcony rail, the telescope and lamp.
   const walls = [[0, -CAB, CAB + 0.1, 0.08], [CAB, 0, 0.08, CAB + 0.1], [-CAB, 0, 0.08, CAB + 0.1],
@@ -196,16 +187,15 @@ export function create(scene, deps) {
   const hatchRail = { ...W(LAD.x, LAD.z - 0.05), hw: 0.48, hd: 0.42, rot: face };
   function startUp(player) {
     player.riding = riding; climb.phase = 'climbUp'; climb.t = 0; riding.heading = face + Math.PI;
-    player.position.set(foot.x, ground(foot.x, foot.z), foot.z); aimCam(player);
+    player.position.set(foot.x, ground(foot.x, foot.z), foot.z);
   }
   function startDown(player) {
     if (climb.deck) { for (const q of climb.deck) removePlatform(q); climb.deck = null; }
     player.riding = riding; climb.phase = 'climbDown'; climb.t = 0; riding.heading = face + Math.PI;
-    player.position.set(up0.x, deckTop, up0.z); aimCam(player);
+    player.position.set(up0.x, deckTop, up0.z);
   }
   function stepClimb(dt, player) {
     climb.t += dt;
-    aimCam(player);
     const total = rungs + 1;
     let c = climb.phase === 'climbUp' ? Math.min(total, climb.t / RUNG_TIME) : Math.max(0, total - climb.t / RUNG_TIME);
     ro.climb = c; riding.heading = face + Math.PI;

@@ -138,6 +138,29 @@ export function bushGeometry() {
   return mergeGeometries([leafy(0, 0.42, 0, 0.62, 0.48, 0.58), leafy(0.42, 0.32, 0.12, 0.42, 0.36, 0.4, 1), leafy(-0.4, 0.3, -0.1, 0.44, 0.34, 0.42, 2), leafy(0.05, 0.3, -0.42, 0.38, 0.32, 0.36, 3), leafy(-0.05, 0.62, 0.2, 0.36, 0.3, 0.34, 4)]);
 }
 
+// The swaying grass material (also used by src/world/flora.js): `time` and `walker` are { value } uniforms.
+export function swayingGrassMaterial(grassTime, grassWalker) {
+  const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true });
+  grassMat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = grassTime; shader.uniforms.uWalker = grassWalker;
+    shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWalker;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        // The breeze crosses the field as slow waves, with gusts; tips move most.
+        vec2 at = instanceMatrix[3].xz;
+        float gust = 0.55 + 0.45 * sin(uTime * 0.23 + at.x * 0.03 + at.y * 0.02);
+        float swayA = sin(uTime * 1.05 + at.x * 0.16 + at.y * 0.11) * gust;
+        float swayB = cos(uTime * 0.8 + at.x * 0.09 - at.y * 0.13) * gust;
+        float tip = position.y * position.y;
+        transformed.x += swayA * 0.16 * tip;
+        transformed.z += swayB * 0.1 * tip;
+        // Grass leans away from feet walking through it.
+        vec2 away = at - uWalker.xz; float near = 1.0 - smoothstep(0.2, 1.3, length(away));
+        transformed.xz += normalize(away + 0.0001) * near * 0.45 * tip;
+      #endif`);
+  };
+  return grassMat;
+}
+
 export function createScatter(scene) {
   const data = getScatter();
   const dummy = new THREE.Object3D();
@@ -212,24 +235,7 @@ export function createScatter(scene) {
   // ---- Tall dry grass, swaying in the breeze
   const rng = createRng(SEED + 21);
   const grassTime = { value: 0 }, grassWalker = { value: new THREE.Vector3(0, 0, 9999) };
-  const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true });
-  grassMat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = grassTime; shader.uniforms.uWalker = grassWalker;
-    shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWalker;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-        // The breeze crosses the field as slow waves, with gusts; tips move most.
-        vec2 at = instanceMatrix[3].xz;
-        float gust = 0.55 + 0.45 * sin(uTime * 0.23 + at.x * 0.03 + at.y * 0.02);
-        float swayA = sin(uTime * 1.05 + at.x * 0.16 + at.y * 0.11) * gust;
-        float swayB = cos(uTime * 0.8 + at.x * 0.09 - at.y * 0.13) * gust;
-        float tip = position.y * position.y;
-        transformed.x += swayA * 0.16 * tip;
-        transformed.z += swayB * 0.1 * tip;
-        // Grass leans away from feet walking through it.
-        vec2 away = at - uWalker.xz; float near = 1.0 - smoothstep(0.2, 1.3, length(away));
-        transformed.xz += normalize(away + 0.0001) * near * 0.45 * tip;
-      #endif`);
-  };
+  const grassMat = swayingGrassMaterial(grassTime, grassWalker);
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
@@ -288,6 +294,9 @@ export function createScatter(scene) {
     update(elapsed, walker) {
       if (walker) grassWalker.value.copy(walker);
       grassTime.value = elapsed;
+      // Far across the river (the village, the farm, the ridge) the camp's 7000 tufts are a few pixels
+      // each yet cost 280k triangles: leave them out there (src/world/flora.js grows the grass over there).
+      if (walker) { const d = Math.hypot(walker.x - 10, walker.z - 8); grass.visible = grass.visible ? d < 100 : d < 95; }
       // The slow sway of the trees is refreshed every other frame; a shaken tree every frame.
       const shaking = trees.some((t) => elapsed - t.shakeStart < SHAKE_TIME);
       if (!shaking && (swayFrame++ & 1)) return;

@@ -24,7 +24,7 @@ import { buildYard, buildRetainingWall, buildStoneSteps, buildHedge, buildFenceS
 
 const VF = AREAS.villageFrame, VP = AREAS.villagePoint, TER = AREAS.terraces;
 const C = { x: AREAS.square.x, z: AREAS.square.z };   // the middle of the square
-const SHOW_WITHIN = 75, ANIMATE_WITHIN = 60, SHADOW_WITHIN = 16, DRY = 0.35;
+const SHOW_WITHIN = 75, BUILDINGS_WITHIN = 230, ANIMATE_WITHIN = 60, SHADOW_WITHIN = 16, DRY = 0.35;
 const face = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
 // A point given in a thing's own frame (it stands at x, z turned by ry) in world coordinates.
 const toW = (o, lx, lz) => ({ x: o.x + lx * Math.cos(o.ry) + lz * Math.sin(o.ry), z: o.z - lx * Math.sin(o.ry) + lz * Math.cos(o.ry) });
@@ -383,7 +383,10 @@ export function create(scene, deps) {
     update(dt, elapsed, player, night) {
       const px = player.position.x, pz = player.position.z;
       shown = Math.hypot(px - C.x, pz - C.z) < SHOW_WITHIN;
-      village.visible = shown; glow.visible = halo.visible = shown && night > 0.3;
+      // The houses and walls are a few welded meshes, cheap enough to keep in view from the dock and camp;
+      // only the people need hiding at range.
+      const seen = Math.hypot(px - C.x, pz - C.z) < BUILDINGS_WITHIN;
+      village.visible = seen; glow.visible = halo.visible = seen && night > 0.3;
       const t = deps.dayTime();
       if (first) for (const p of people) p.phase = null;
       for (const p of people) {

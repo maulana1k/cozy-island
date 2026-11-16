@@ -261,3 +261,30 @@ Design: `docs/superpowers/specs/2026-11-16-bigger-island-design.md`. Built by pa
 All under the 900-call budget. The village, farm and dock views are the dearest; the profile is still draw-call bound (about a third of script time in per-object uniform uploads), so the next saving is fewer separate objects there, not WebAssembly.
 
 Known gaps: saying hello to locals and petting farm animals were not tried with a real key press; heron flight and butterflies were not watched in motion; frame rate on the owner's screen is unmeasured; orchard trees of every kind give apples; white water downstream of the stepping stones is strong.
+
+## Living village and land (2026-11-16)
+
+Design: `docs/superpowers/specs/2026-11-16-living-village-design.md` (owner chose B: terraced hillside). Built by subagents, checked and joined up by the main session.
+
+- Terrain (`terrain.js`, `ground.js`, `wilds.js`, `island.js`): four village terraces climbing from the bridge with faces you cannot walk up, 5 flights of steps and a cart ramp lane; a farm valley with a wadeable stream from a spring; a wooded ridge with a trail to a clearing. Ground painted in patches (grass, dry grass, dirt, clay, damp, sand) with a stamp API `paintGround({ kind, path|circle|rect, width })`. Anchors for all of it are in `AREAS` in `config.js` (`terraces`, `steps`, `ramp`, `plots`, `paths`, `valley`, `stream`, `paddyFields`, `ridge`, `ridgeTrail`, `clearing`, `villagePoint`).
+- `src/kit/yard.js`: yard props, `buildYard(variant, seed)`, hedges, stone and retaining walls, stone steps, gates, fences.
+- `areas/hamlet.js`: houses on plots with yards, retaining walls on every terrace face (with earth fill behind), steps as platforms, ramp fences, lamps; locals walk a 68-link network using the steps. Houses and walls stay visible to 230 m (cheap welded meshes); people only within 75 m.
+- `areas/farm.js`: 9 paddies on `paddyFields`, two plank footbridges over the stream, pen, wallow, pond, orchard, walls and gates; positions found by a search for level ground.
+- `world/flora.js` + `kit/plants.js`: about 2,300 plants in mixed clusters by ground type (ridge forest, copses, bamboo by water, palms on the shore, fruit trees and shrubs by homes, bushes along wall feet, flowers on path edges), plus ground grass tinted by the painted ground within 28 m. Real models within 25 to 40 m, single lumps to 150 m, ridge forest lumps at any distance. `?noflora` leaves it out. The camp's 7,000 grass tufts are now hidden beyond 100 m of camp.
+
+`node tools/prof.mjs`, quiet machine:
+
+| Spot | Frame | Draw calls | Triangles |
+|---|---|---|---|
+| Camp | 4.6 ms | 573 | 1.16 M |
+| Summit | 4.7 ms | 359 | 1.05 M |
+| Jungle | 5.2 ms | 592 | 1.63 M |
+| Bridge | 3.3 ms | 203 | 0.74 M |
+| Village | 6.2 ms | 653 | 1.41 M |
+| Farm | 6.0 ms | 709 | 1.44 M |
+| Cliff top | 3.6 ms | 655 | 1.41 M |
+| Dock | 7.2 ms | 858 | 1.40 M |
+| Top terrace | 6.0 ms | 612 | 1.41 M |
+| Clearing | 6.5 ms | 701 | 1.47 M |
+
+Known gaps: only one vegetable plot fit in the valley; two herons not three; locals ignore plant colliders and may brush through bushes; a light earth band along wall tops; grass streaming cost while walking not measured; night views of the new land only partly checked.

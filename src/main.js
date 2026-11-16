@@ -44,6 +44,10 @@ import * as hamletArea from './world/areas/hamlet.js';
 import * as farm from './world/areas/farm.js';
 import * as harbour from './world/areas/harbour.js';
 const AREA_LIST = [crossings, signpost, riverside, cliffs, hamletArea, farm, harbour];
+// ---- Plants and ground grass on the locals' land (src/world/flora.js). Kept last: it lays out its
+// plants round every circle the areas above ask to keep clear. `?noflora` leaves it out.
+import * as flora from './world/flora.js';
+if (!new URLSearchParams(location.search).has('noflora')) AREA_LIST.push(flora);
 import { nearestSafe, wildness, shoreR } from './logic/terrain.js';
 import { WILD } from './config.js';
 import { ITEMS, FLASK_SIPS, SIP } from './logic/items.js';

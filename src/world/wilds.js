@@ -5,7 +5,7 @@
 // lump per treetop. There is no fence: the camp's woods just thicken into it.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { heightAt, landR, wildDepth, wildness, groundKind } from '../logic/terrain.js';
+import { heightAt, landR, wildDepth, wildness, groundKind, ridgeForest } from '../logic/terrain.js';
 import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
@@ -42,8 +42,11 @@ const KEEP_CLEAR = [
   { x: AREAS.village.x, z: AREAS.village.z, r: AREAS.village.r + 5 }, { x: AREAS.paddies.x, z: AREAS.paddies.z, r: AREAS.paddies.r + 2 },
   { x: AREAS.orchard.x, z: AREAS.orchard.z, r: AREAS.orchard.r + 2 }, { x: AREAS.jetty.x, z: AREAS.jetty.z, r: 8 },
 ];
+const KEEP_DEFAULTS = KEEP_CLEAR.length;
 export const keepClear = (x, z, r) => { KEEP_CLEAR.push({ x, z, r }); };
-const cleared = (x, z) => KEEP_CLEAR.some((k) => Math.hypot(x - k.x, z - k.z) < k.r);
+// For src/world/flora.js: is (x, z) within `pad` metres of a circle an area asked to keep clear?
+export const areaKeepsClear = (x, z, pad = 0) => { for (let i = KEEP_DEFAULTS; i < KEEP_CLEAR.length; i++) { const k = KEEP_CLEAR[i]; if (Math.hypot(x - k.x, z - k.z) < k.r + pad) return true; } return false; };
+export const keepClearList = () => KEEP_CLEAR.slice(KEEP_DEFAULTS);
 
 export function createWilds(scene) {
   const group = new THREE.Group(); scene.add(group);
@@ -133,7 +136,8 @@ export function createWilds(scene) {
     }
 
     // What grows here. Groves of palms, stands of pine, giants in the damp, open glades between.
-    const grows = (x, z) => { const w = wildness(x, z); return w > 0 && landR(x, z) < GRASS_RADIUS - 2 ? w : 0; };
+    // The ridge's wood is grown by src/world/flora.js (its own forest), so the jungle leaves it alone.
+    const grows = (x, z) => { const w = wildness(x, z); return w > 0 && landR(x, z) < GRASS_RADIUS - 2 && ridgeForest(x, z).depth < -1.5 ? w : 0; };
     for (let n = 0; n < 230; n++) {
       const x = x0 + rng() * TILE, z = z0 + rng() * TILE, pick = rng(), size = rng(), turn = rng(), chance = rng();
       const w = grows(x, z);
@@ -168,19 +172,7 @@ export function createWilds(scene) {
       else if (what < 0.55 && !glade) tile.ferns.push(item);
       else tile.tufts.push(item);
     }
-    // The locals' land: a few palms, fruit trees and bushes, far sparser than the jungle,
-    // never on the paths, the beaches, the terraces, the paddies, the stream or in the ridge's wood.
-    for (let n = 0; n < 26; n++) {
-      const x = x0 + rng() * TILE, z = z0 + rng() * TILE, what = rng(), size = rng(), turn = rng();
-      const g = groundKind(x, z);
-      if (!g || g.locals < 0.8 || g.trail < 3 || g.river < 4 || g.terrace > 0.05 || g.paddy > 0 || g.stream < 3 || g.forest > -1 || cleared(x, z)) continue;
-      const y = heightAt(x, z), r = landR(x, z);
-      if (y < 0.7 || steep(x, z, y)) continue;
-      if (what < 0.32) tile.trees.push({ x, y: y - 0.1, z, kind: r > 40 || what < 0.12 ? 3 : 1, scale: 0.85 + size * 0.45, rot: turn * 6.283, tint: size - 0.5 });
-      else if (what < 0.4) tile.trees.push({ x, y: y - 0.05, z, kind: 5, scale: 0.8 + size * 0.5, rot: turn * 6.283, tint: size - 0.5 });
-      else if (what < 0.75) tile.bushes.push({ x, y, z, s: 0.6 + size * 0.6, rot: turn * 6.283, tint: size });
-      else if (what < 0.8) tile.rocks.push({ x, y, z, s: 0.5 + size * 0.5, rot: turn * 6.283, tint: size });
-    }
+    // The locals' land is planted by src/world/flora.js (trees, bushes, bamboo, palms, flowers, grass).
     return tile;
   }
 

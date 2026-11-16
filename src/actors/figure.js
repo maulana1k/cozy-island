@@ -65,7 +65,9 @@ let groundUnder = null;
 export function setGround(fn) { groundUnder = fn; }
 const solePoint = new THREE.Vector3();
 
-export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; }
+// (x, z) is the camera, for judging detail; (px, pz) is the scout, the one people look at.
+const scout = { x: 0, z: 0 };
+export function setViewer(x, z, px = x, pz = z) { viewer.x = x; viewer.z = z; scout.x = px; scout.z = pz; frameCount++; }
 // How sleepy the whole camp is (0 by day, 1 late at night), so faces can show it.
 let sleepy = 0;
 export function setSleepy(v) { sleepy = v; }
@@ -347,6 +349,8 @@ export function createFigure({
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
   const soleY = -0.051 * P.limb, SOLE = [[-0.075, 0.004], [0.035, 0], [0.145, 0.004]].map(([z, dy]) => new THREE.Vector3(0, soleY + dy, z * P.limb));
   // The little signs of life: blinking, where the eyes are looking, the mouth, noticing someone come close.
+  // Turning: how fast the body is coming round, so it can lean into the bend. Fidgets: what someone with nothing to do gets up to.
+  let lastYaw = null, turn = 0, fidgetIn = 3 + Math.random() * 9, fidget = null;
   const face = [0, 0, 0.75, 1]; // eased toward whichever face fits the moment
   let blinkIn = 1 + Math.random() * 4, blink = 0, gaze = 0, gazeUp = 0, headLook = 0, mouthOpen = 0, hello = 0, wasNear = false;
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
@@ -376,6 +380,24 @@ export function createFigure({
       if (far && (frameCount + slot) % 3 !== 0) return;
       const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, isFar ? 1 : 0.1); // far-off people move in big, rare steps
       lastElapsed = elapsed;
+      // Standing about with nothing to do, people fidget: look round, stretch, scratch, tap a foot, yawn when it is late.
+      if (!self && !far) {
+        const idle = speed < 0.05 && !o.pose && !o.gesture && !o.sitting && !o.sitGround && o.air === undefined;
+        if (fidget) { fidget.t += dt; if (fidget.t >= fidget.dur || !idle) fidget = null; }
+        else if (idle) {
+          fidgetIn -= dt;
+          if (fidgetIn <= 0) {
+            fidgetIn = 5 + Math.random() * 12;
+            const pick = sleepy > 0.5 && Math.random() < 0.5 ? ['yawn', 2.2] : [['lookabout', 2.4], ['stretch', 2.0], ['scratch', 1.6], ['tapfoot', 2.2], ['lookabout', 2.0]][Math.floor(Math.random() * 5)];
+            fidget = { name: pick[0], t: 0, dur: pick[1] };
+          }
+        }
+        if (fidget) o = { ...o, gesture: { name: fidget.name, u: fidget.t / fidget.dur } };
+      }
+      // How sharply the body is turning, eased, so it leans into bends and the head leads the way round.
+      const yaw = group.rotation.y;
+      if (lastYaw !== null && dt > 0) { let dy = yaw - lastYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); turn += (clamp(dy / dt, -4, 4) - turn) * (1 - Math.exp(-dt * 6)); }
+      lastYaw = yaw;
       const ease = (k) => 1 - Math.exp(-dt * k);
       gait += (clamp(speed / 0.7, 0, 1) - gait) * ease(10);
       run += (clamp((speed - 2.6) / 1.3, 0, 1) - run) * ease(7);
@@ -558,7 +580,7 @@ export function createFigure({
       eyeRig.scale.y = (1 - 0.9 * shut) * face[3];
       // Looking: at whatever you are about to use, or (for everyone else) at you when you come close.
       let wantYaw = 0, near = false;
-      const tx = o.look ? o.look.x : self ? null : viewer.x, tz = o.look ? o.look.z : self ? null : viewer.z;
+      const tx = o.look ? o.look.x : self ? null : scout.x, tz = o.look ? o.look.z : self ? null : scout.z;
       if (tx !== null && !lying) {
         const dx = tx - group.position.x, dz = tz - group.position.z, d2 = dx * dx + dz * dz;
         if (d2 < (o.look ? 64 : 20) && d2 > 0.04) {
@@ -599,7 +621,7 @@ export function createFigure({
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);
-      inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w;
+      inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w - turn * 0.045 * gait;
       const stretch = o.air !== undefined ? Math.abs(o.air) * 0.05 : 0;
       // A springy little squash on every footfall, more so at a run.
       const boing = Math.sin(phase * 2 + 0.6) * 0.008 * gait * (1 + run * 0.8);
@@ -607,7 +629,7 @@ export function createFigure({
       // The head stays level and looks about a little when standing.
       // The head bobbles from side to side with each step, and looks about when standing.
       neck.rotation.x = -inner.rotation.x * 0.6 + pose.hp;
-      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) * (headLook ? 0.15 : 1) + pose.hy + headLook;
+      neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) * (headLook ? 0.15 : 1) + pose.hy + headLook + clamp(turn * 0.12, -0.4, 0.4) * gait;
       neck.rotation.z = -inner.rotation.z * 0.5 + Math.sin(phase) * 0.03 * gait * (1 + run * 0.5);
       // Asleep: flat on the back, centred on the bed, chest rising and falling.
       if (o.pose === 'sleep') { inner.rotation.set(-Math.PI / 2, 0, 0); inner.position.set(0, 0.1, TALL / 2); neck.rotation.set(0, 0, 0); inner.scale.set(1, 1, 1 + Math.sin(elapsed * 1.3 + seed) * 0.03); }

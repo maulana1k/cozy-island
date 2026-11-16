@@ -74,14 +74,25 @@ export function shared(color) {
 }
 const asMat = (m) => (typeof m === 'number' ? shared(m) : m);
 
+// Nothing hand-built is perfectly square. A steady pseudo-random number from where a thing stands,
+// so each crate, plank and pole is a little off true, and the same every time the game starts.
+const off = (x, y, z, k) => { const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + k * 4.137) * 43758.5453; return (v - Math.floor(v)) * 2 - 1; };
 export function box(w, h, d, m, x = 0, y = 0, z = 0, ry = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), asMat(m));
   mesh.position.set(x, y, z); mesh.rotation.y = ry; mesh.castShadow = true; mesh.receiveShadow = true;
+  // Small loose things (crates, planks, shelves) sit slightly askew and are not all one size.
+  const big = Math.max(w, h, d), small = Math.min(w, h, d);
+  if (big <= 1.6 && small >= 0.03 && big >= 0.12) {
+    mesh.rotation.y += off(x, y, z, 1) * 0.035; mesh.rotation.z = off(x, y, z, 2) * 0.012; mesh.rotation.x = off(x, y, z, 3) * 0.012;
+    mesh.scale.set(1 + off(x, y, z, 4) * 0.025, 1, 1 + off(x, y, z, 5) * 0.025);
+  }
   return mesh;
 }
 export function cyl(rTop, rBottom, h, m, x = 0, y = 0, z = 0, seg = 8) {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, h, seg), asMat(m));
   mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true;
+  // Poles and posts never stand dead straight: each leans a degree or two its own way.
+  if (h > 0.9 && Math.max(rTop, rBottom) < 0.1) { mesh.rotation.z = off(x, y, z, 6) * 0.03; mesh.rotation.x = off(x, y, z, 7) * 0.03; }
   return mesh;
 }
 export function ball(r, m, x = 0, y = 0, z = 0, detail = 0) {
@@ -102,9 +113,32 @@ export function stick(a, b, r, m, seg = 6) {
 // A triangular prism lying along z: the shape of a tent or a pitched roof.
 export function roofGeometry(width, height, depth) {
   const shape = new THREE.Shape();
-  shape.moveTo(-width / 2, 0); shape.lineTo(width / 2, 0); shape.lineTo(0, height); shape.closePath();
-  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  if (depth < 1) { // a pennant or a gable: a plain triangle
+    shape.moveTo(-width / 2, 0); shape.lineTo(width / 2, 0); shape.lineTo(0, height); shape.closePath();
+    const flat = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+    flat.translate(0, 0, -depth / 2);
+    return flat;
+  }
+  // A real roof is cloth or thatch over poles: the ridge dips between its ends, each slope
+  // bellies in a little, and the eaves do not run dead level.
+  const N = 5;
+  shape.moveTo(-width / 2, 0); shape.lineTo(width / 2, 0);
+  for (let i = 1; i <= N; i++) shape.lineTo((width / 2) * (1 - i / N), height * (i / N));
+  for (let i = 1; i < N; i++) shape.lineTo(-(width / 2) * (i / N), height * (1 - i / N));
+  shape.closePath();
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, steps: 6 });
   geo.translate(0, 0, -depth / 2);
+  const p = geo.attributes.position, slope = Math.hypot(width / 2, height);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), u = y / height, along = 1 - (2 * z / depth) ** 2;
+    if (u <= 0.001 && Math.abs(x) < width / 2 - 0.01) continue; // the underside stays flat
+    const side = Math.sign(x) || 1;
+    const belly = Math.sin(Math.PI * u) * slope * 0.022 * (0.4 + 0.6 * along); // inward, square to the slope
+    const dip = u * height * 0.07 * along;                                    // the ridge sags between the gables
+    const eave = (1 - u) * (1 - u) * off(Math.round(z * 3), side, width, 8) * 0.035;
+    p.setXYZ(i, x - side * belly * (height / slope), y - belly * (width / 2 / slope) - dip + eave, z);
+  }
+  geo.computeVertexNormals();
   return geo;
 }
 

@@ -510,7 +510,7 @@ function step() {
   setSleepy(night);
   // The scout's face shows how they are doing.
   player.mood = params.get('mood') || (vitals.hungry || vitals.thirsty ? 'sad' : vitals.winded ? 'effort' : vitals.cheer >= 85 ? 'happy' : null); // ?mood= is a debug aid
-  setViewer(camera.position.x, camera.position.z); // detail is judged from the camera, so the films look right
+  setViewer(camera.position.x, camera.position.z, player.position.x, player.position.z); // detail is judged from the camera, so the films look right
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
   // F joins in with whatever the camp is doing right now.
@@ -551,8 +551,8 @@ function step() {
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
     campLife.update(dt, elapsed);
-    animals.update(dt, elapsed, player);
-    wildlife.update(dt, elapsed, player);
+    animals.update(dt, elapsed, player, night);
+    wildlife.update(dt, elapsed, player, night);
     pond.update(dt, elapsed, night);
     pickups.update(dt, player.position);
     wilds.update(elapsed, night, player.position);

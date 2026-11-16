@@ -117,11 +117,15 @@ export function createCrowd() {
     // Into a tent: go to the flap first, then straight in to the bed.
     const viaDoor = goal.via && !m.pastDoor, target = viaDoor ? goal.via : goal;
     const dx = target.x - m.x, dz = target.z - m.z, d = Math.hypot(dx, dz);
-    if (d < 0.18 || (viaDoor && d < 0.5)) { if (viaDoor) { m.pastDoor = true; return false; } return true; }
+    if (d < 0.18 || (viaDoor && d < 0.5)) { if (viaDoor) { m.pastDoor = true; return false; } m.go = 0; return true; }
     m.travel += dt;
     // A long way to go, or badly stuck: just get there rather than wander forever.
     if (m.travel > 40 || m.stuck > 6) { m.x = target.x; m.z = target.z; return true; }
-    const speed = Math.min((hurry ? 4.4 : 2.7) * (m.adult ? 0.9 : 1), d / Math.max(dt, 1e-3));
+    // Everyone has their own pace, gets going gradually and slows as they arrive.
+    const pace = 0.88 + ((m.index * 37) % 25) / 100;
+    m.go = (m.go || 0) + (1 - (m.go || 0)) * (1 - Math.exp(-dt * 2.5));
+    const cruise = (hurry ? 3.6 : 2.3) * (m.adult ? 0.9 : 1) * pace * Math.max(0.25, m.go) * Math.min(1, 0.4 + d / 1.8);
+    const speed = Math.min(cruise, d / Math.max(dt, 1e-3));
     let nx = dx / d, nz = dz / d;
     if (m.stuck > 0.6) { const side = m.index % 2 ? 1 : -1; const ox = -nz * side, oz = nx * side; nx = nx * 0.3 + ox; nz = nz * 0.3 + oz; const l = Math.hypot(nx, nz); nx /= l; nz /= l; }
     const want = { x: m.x + nx * speed * dt, z: m.z + nz * speed * dt };
@@ -136,6 +140,7 @@ export function createCrowd() {
 
   return {
     get block() { return block; },
+    get members() { return members; },
     // home: where the member's own activity happens ({x, z, rot}), or null for someone who roams.
     join({ home = null, role = 'scout', adult = false }) {
       const m = { pastDoor: false, index: members.length, home, role, adult, x: home ? home.x : 0, z: home ? home.z : 0, rot: home ? home.rot : 0, speed: 0, opts: {}, hidden: false, controlled: false, spot: null, arrived: false, travel: 0, stuck: 0 };

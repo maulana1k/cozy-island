@@ -79,8 +79,21 @@ export function createVillagers(scene, deps) {
           if (player.pushing) nudge(v, { x: player.position.x, z: player.position.z });
           else if (b.state === 'walk' && dx * b.facing.x + dz * b.facing.z > 0) waitAMoment(b, 1);
         }
+        const was = b.state;
         stepVillager(b, dt, world);
         v.position.x = b.x; v.position.z = b.z;
+        // Arriving somewhere, a wanderer may find someone close by and stop for a chat.
+        if (v.chat) { v.chat.t += dt; if (v.chat.t >= v.chat.dur || b.state !== 'idle') v.chat = null; }
+        else if (was === 'walk' && b.state === 'idle' && Math.random() < 0.6) {
+          let best = null, bd = 3.6 * 3.6;
+          for (const o of crowd.members) { if (o === m || o.hidden) continue; const q = (o.x - b.x) ** 2 + (o.z - b.z) ** 2; if (q > 0.5 && q < bd) { bd = q; best = o; } }
+          if (best) {
+            const dur = 3 + Math.random() * 3.5, l = Math.sqrt(bd);
+            b.facing.x = (best.x - b.x) / l; b.facing.z = (best.z - b.z) / l; b.timer = Math.max(b.timer, dur + 0.5);
+            v.chat = { t: 0, dur, with: best };
+            if (d < 25) ui.emote(new THREE.Vector3(b.x, groundAt(b.x, b.z) + 1.5, b.z), 'note');
+          }
+        }
 
         v.wobble = Math.max(0, v.wobble - dt / 0.7);
         v.hop = Math.max(0, v.hop - dt);
@@ -88,11 +101,11 @@ export function createVillagers(scene, deps) {
 
         const want = Math.atan2(b.facing.x, b.facing.z);
         let diff = want - v.heading; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-        v.heading += diff * Math.min(1, dt * 7);
+        v.heading += diff * Math.min(1, dt * 4.5); // comes round in a curve
 
         v.figure.group.position.set(b.x, groundAt(b.x, b.z) + hopY, b.z);
         v.figure.group.rotation.y = v.heading;
-        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
+        v.figure.animate(b.state === 'walk' ? b.speed : 0, elapsed, { wobble: v.wobble, pose: v.chat && !v.react ? 'explain' : undefined, look: v.chat ? v.chat.with : undefined, mood: v.chat ? 'happy' : undefined, gesture: v.react && v.react.t > 0 ? { name: v.react.name, u: v.react.t / v.react.dur } : null });
       }
     },
   };

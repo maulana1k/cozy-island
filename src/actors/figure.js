@@ -82,6 +82,18 @@ function keyed(W, V, w) {
 const RUN_TH_W = [0, 0.15, 0.44, 0.78, 0.92, 1], RUN_TH_B = [0, 0, 0.05, 0.88, 0.76, 0], RUN_TH = new Float64Array(6);
 const RUN_KN_W = [0, 0.16, 0.44, 0.7, 0.9, 1], RUN_KN_B = [0, 0.62, 1.84, 1.62, 0.7, 0], RUN_KN = new Float64Array(6);
 const RUN_FT_W = [0, 0.2, 0.45, 0.66, 0.84, 1], RUN_FT = new Float64Array([0, 0.6, 0.95, 0.3, -0.1, 0]);
+// A walking leg, by joint angles over its stride, shaped like measured human walking. Stance (s 0..1, heel
+// strike to toe-off): the knee lands nearly straight (3 degrees), stays so while both feet are down, gives
+// about 12 degrees as the weight comes fully on, straightens to about 3 by late stance and is still nearly straight when the other heel lands (s 0.83),
+// so both legs are straight in the double support (the inverted V); it starts to bend only as the toes leave.
+const WK_S_W = [0, 0.12, 0.3, 0.46, 0.62, 0.83, 0.93, 1], WK_S_KN = [0.05, 0.07, 0.21, 0.12, 0.05, 0.05, 0.09, 0.26];
+// Swing (w 0..1, toe-off to heel strike): the knee folds to its peak (about 60 degrees) a third of the way
+// through, then reaches out straight again before the heel comes down. The thigh swings through, flexes a
+// little past its landing angle and settles back onto it. The foot leaves pointed and lands toes up.
+// Values are filled in each frame from the toe-off and heel-strike poses.
+const WK_TH_W = [0, 0.25, 0.5, 0.78, 1], WK_TH = new Float64Array(5);
+const WK_KN_W = [0, 0.3, 0.5, 0.75, 0.9, 1], WK_KN = new Float64Array(6);
+const WK_FT_W = [0, 0.3, 0.65, 1], WK_FT = new Float64Array(4);
 
 // (x, z) is the camera, for judging detail; (px, pz) is the scout, the one people look at.
 const scout = { x: 0, z: 0 };
@@ -393,13 +405,33 @@ export function createFigure({
   const HANG_DROP = P === KID ? 0.31 - KID.pelvisY : 0;                    // keeps the hands on the flying-fox bar
   let phase = Math.random(), spd = 0, lastSpd = 0, acc = 0, gait = 0, run = 0, effort = 0, locoLegs = 1, locoArms = 1;
   let steps = 0, bounce = 0, fly = 0; // footfalls so far; the running bounce of the hips (own units)
+  // The walking hips follow the planted leg's height; where one leg hands over to the next (a corner in that
+  // height) they round it off through a critically damped follower that keeps up with its slope: hT0 the
+  // last height, hTd its rate, hErr and hErrV how far the hips are from it [value, rate] (never above it).
+  let hT0 = null, hTd = 0, hErr = 0, hErrV = 0;
+  const H_W = 85;
   let wasAir = false, jump = null, landRun = false, lastPy = null, pyVel = 0, pyAcc = 0;
   // The body's own level over uneven ground (world m, eased so steps and slopes never jolt it) and the
   // little correction that keeps the soles on the ground, eased too: both critically damped [value, velocity].
   let bodyY = null, springY = null, bodyV = 0, liftV = 0;
   const BODY_W = 10, LIFT_W = 22;
+  // A critically damped spring's exact step toward T over dt (stable for any dt): leaves the value in cdX, the rate in cdV.
+  let cdX = 0, cdV = 0;
+  function critStep(x, v, T, w, dt) { const e = x - T, a = v + w * e, f = Math.exp(-w * dt); cdX = T + (e + a * dt) * f; cdV = (v - w * a * dt) * f; }
   // g: the ground under the foot (world m), g0: where it last pushed off, gO: g against the body's level (own units)
-  const legs = [{ u: 0, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, zf: 0, g: 0, g0: 0, gO: 0, gd: 0, kAdd: 0, fAdd: 0, tAdd: 0, fresh: false }, { u: 0.5, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, zf: 0, g: 0, g0: 0, gO: 0, gd: 0, kAdd: 0, fAdd: 0, tAdd: 0, fresh: false }];
+  const legs = [{ u: 0, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, zf: 0, g: 0, g0: 0, gO: 0, gd: 0, kAdd: 0, fAdd: 0, tAdd: 0, fresh: false, ax: 0, az: 0, ayaw: 0, anc: false, held: false, stepping: false }, { u: 0.5, stance: true, s: 0, w: 0, z: 0, y: ANK, sg: 0, kL: 0.99, lift: 0, zf: 0, g: 0, g0: 0, gO: 0, gd: 0, kAdd: 0, fAdd: 0, tAdd: 0, fresh: false, ax: 0, az: 0, ayaw: 0, anc: false, held: false, stepping: false }];
+  // A planted walking foot stays where it landed on the ground (ax, az: the world spot of its flat foot), so it
+  // never slides when the body speeds up, slows down or stops. ayaw: which way the body faced then.
+  // (A leaning body carries its hips, and so the feet as placed, hzL further forward: the last frame's.)
+  let fwdX = 0, fwdZ = 1, hzL = 0;
+  const anchorAt = (L, zf) => { L.ax = group.position.x + fwdX * (zf + hzL) * scale; L.az = group.position.z + fwdZ * (zf + hzL) * scale; L.ayaw = group.rotation.y; L.anc = true; };
+  const anchorRel = (L) => ((L.ax - group.position.x) * fwdX + (L.az - group.position.z) * fwdZ) / scale - hzL;
+  // Stopping: one foot at a time steps in under the hips (stLeg, how far through the step stX, from the ankle
+  // at stZ0, stY0 with the foot tipped stSg0), until both stand side by side.
+  let stLeg = -1, stX = 0, stZ0 = 0, stY0 = 0, stSg0 = 0;
+  const ST_T = 0.28;
+  // Does this foot need to step in: in the air, not under the hips, or planted before the body turned on the spot?
+  const settleOff = (L, yaw) => (!L.held && !L.stance) || Math.abs(anchorRel(L)) > 0.012 / scale || Math.abs(Math.atan2(Math.sin(yaw - L.ayaw), Math.cos(yaw - L.ayaw))) > 0.3;
   // The ground at a spot given in the body's own frame (x across, z forward, in metres), with no allocation.
   let gX = 0, gZ = 0, gCos = 1, gSin = 0, gSink = 0;
   const groundLocal = (lx, lz) => groundUnder(gX + lx * gCos + lz * gSin, gZ - lx * gSin + lz * gCos) - gSink;
@@ -408,26 +440,49 @@ export function createFigure({
   const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0] };
   const pull = (sp, target, w, z, dt, force = 0) => {
     if (dt > 0.06 || dt <= 0) { if (dt > 0.06) { sp[0] = target; sp[1] = 0; } return sp[0]; }
-    sp[1] += (-(w * w) * (sp[0] - target) - 2 * z * w * sp[1] + force) * dt; sp[0] += sp[1] * dt; return sp[0];
+    // In steps of at most 0.01 s, so it is stable however long the frame (w * step stays well under 1).
+    const n = Math.ceil(dt / 0.01), h = dt / n;
+    for (let k = 0; k < n; k++) { sp[1] += (-(w * w) * (sp[0] - target) - 2 * z * w * sp[1] + force) * h; sp[0] += sp[1] * h; }
+    return sp[0];
   };
   // Cadence (steps a second) and step length from speed, the way children move: steps get much longer as
   // they speed up while the legs turn over only a little faster. A leg can only sweep so far under the
   // body, so past a brisk walk the only way to go faster is a moment in the air between steps: running.
-  function gaitOf(v) {
+  // Walking, the step comes from the angles: the leg lands with the thigh about 24 degrees forward and a
+  // nearly straight knee, so the footprint each foot sweeps (own units) follows from the leg's length.
+  const WK_HU = 0.45, WK_K0 = WK_S_KN[0];                                   // the foot's tilt (toes up) and knee bend at heel strike
+  const WK_D0 = -HEEL * (1 - Math.cos(WK_HU)) - ANK * Math.sin(WK_HU);      // the ankle against the flat foot's spot, heel down and toes up
+  const WK_A = 0.45;                                                       // the share of the footprint ahead of the hip as the heel lands
+  const walkC = (A) => (TH * Math.sin(A) + SH * Math.sin(A - WK_K0) - WK_D0) / WK_A;
+  const A_NOM = 0.42, A_MAX = 0.53, C_LO = 1.8, C_HI = 3.0;               // 24 and 30 degrees; a natural cadence band (steps a second on a scout's legs)
+  const gaitOut = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 }, gaitAsk = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 };
+  let gDw = 0.6;
+  const sOf = (A) => (walkC(A) * scale) / (2 * gDw);                      // a walking step at this angle (m)
+  function gaitOf(v, out = gaitOut) {
     const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
-    // Walking: cadence climbs from 2.2 to about 3.9 steps a second by a brisk walk (v about 2.1 on a scout's legs),
-    // and each foot is down about half of every stride. Running (above about 2.2): the legs turn over a little
-    // slower than the quickest walk and every step has a moment in the air; the blend runs over 2.15 to 2.9.
-    const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.85;
+    // Walking: about 24 degrees each way, the cadence whatever puts the planted foot down without skating
+    // (speed over step). Ambling, the steps shorten rather than the legs turning over in slow motion; brisk,
+    // the hips swing wider (up to 30 degrees) before the legs turn over faster than about 3 a second.
+    // Each foot is down 60% of the stride, so for a tenth of it at each footfall both are (double support).
+    // Running (above about 2.2 on a scout's legs): every step has a moment in the air; the blend runs over 2.15 to 2.9.
+    const Dw = 0.6 - 0.02 * smooth(vk / 2.0); gDw = Dw;
+    let A = A_NOM, want = 0;
+    if (v * sqK > C_HI * sOf(A_NOM)) want = (v * sqK) / C_HI;
+    else if (v * sqK < C_LO * sOf(A_NOM)) want = (v * sqK) / C_LO;
+    if (want > 0) {
+      let lo = want > sOf(A_NOM) ? A_NOM : 0, hi = want > sOf(A_NOM) ? A_MAX : A_NOM;
+      for (let k = 0; k < 14; k++) { const m = (lo + hi) / 2; if (sOf(m) < want) lo = m; else hi = m; }
+      A = (lo + hi) / 2;
+    }
+    const cWk = Math.max(C_LO, (v * sqK) / sOf(A));                       // steps a second, on a scout's legs
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
-    const Dw = 0.62 - 0.04 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
-    const Cw = 0.48, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
-    const r = smooth((vk - 2.15) / 0.75);                  // 0 walking .. 1 running
-    const cWk = Math.min(4.4, Math.max(cWalk, (vk * 2 * Dw) / Cw));
+    const Cr = 0.50;                                                      // the longest footprint a scout's leg sweeps running (m)
+    const r = smooth((vk - 2.15) / 0.75);                                 // 0 walking .. 1 running
     const cK = lerp(cWk, cRun, r);
     const Sk = vk / cK;
-    const D = lerp(Dw, Math.min(0.45, Cr / (2 * Math.max(Sk, 1e-4))), r);
-    return { r, vk, c: cK / sqK, S: Sk * legK, D };
+    out.r = r; out.vk = vk; out.c = cK / sqK; out.S = Sk * legK; out.A = A;
+    out.D = lerp(Dw, Math.min(0.45, Cr / (2 * Math.max(Sk, 1e-4))), r);
+    return out;
   }
   // Where an ankle is while its foot is down, from the hip's spot on the ground: the foot stays put on the
   // ground (no skating) and rolls from the heel, flat, onto the toes.
@@ -436,6 +491,11 @@ export function createFigure({
   // `r0` is where in the step the heel starts to rise (earlier running).
   function stanceAt(s, C, heel, toe, out, a = 0.5, r0 = 0.5) {
     const zf = C * (a - s), sg = s < 0.2 ? -heel * (1 - s / 0.2) ** 2 : s > r0 ? toe * ((s - r0) / (1 - r0)) ** 2 : 0;
+    return rollAt(zf, sg, out);
+  }
+  // The ankle of a foot whose flat spot is zf, tipped by sg (toes up negative, pivoting on the heel; toes
+  // down positive, pivoting on the toes).
+  function rollAt(zf, sg, out) {
     const c = Math.cos(sg), sn = Math.sin(sg);
     if (sg < 0) { out.z = zf - HEEL + ANK * sn + HEEL * c; out.y = ANK * c - HEEL * sn; } // pivoting on the heel
     else { out.z = zf + TOE + ANK * sn - TOE * c; out.y = ANK * c + TOE * sn; }         // flat, or pivoting on the toes
@@ -474,6 +534,36 @@ export function createFigure({
   // Hip to ankle with the knee bent so far: landing (soft), pushing off (nearly straight).
   const effAt = (k) => Math.sqrt(TH * TH + SH * SH + 2 * TH * SH * Math.cos(k));
   const E_TD = effAt(0.28), E_TO = effAt(0.12);
+  // ---- The walk, by joint angles. The knee is set by the curve above for the stance; the hips ride on the
+  // planted leg at whatever height that leaves them (an inverted pendulum over a nearly straight leg), so the
+  // body is never pulled down to reach. Standing, the knees are as soft as the idle pose has them.
+  const K_IDLE = 0.15; // standing: legs straight but not locked (about 9 degrees)
+  const W_R0 = 0.5;                       // from here on in the stance the heel lifts as the leg needs
+  let wkGait = 1, wkHu = 0, wkC = 0, wkSH = 0.83, wkSig = 0;   // set each frame
+  const wkKnee = (s) => lerp(K_IDLE, keyed(WK_S_W, WK_S_KN, clamp(s, 0, 1)), wkGait);
+  // The foot's tilt through the stance as drawn: heel strike to flat (easing in, so the ankle sinking as the
+  // toes come down does not drop the hips just after the heel lands), flat, then the heel rising toward the
+  // tilt that lets this leg, nearly straight, meet the other one's heel strike (wkSig).
+  const W_RB = 0.7; // the heel rocker's shape: 0 eases in, 1 drops the toes fastest at first
+  const wkRoll = (s) => s < 0.3 ? -wkHu * lerp(1 - smooth(s / 0.3), (1 - s / 0.3) ** 2, W_RB) : s > W_R0 ? wkSig * ((s - W_R0) / (wkSH - W_R0)) ** 2 : 0;
+  const wkP = { z: 0, y: 0, sg: 0, zf: 0 };
+  const lowF = (sg) => -ANK * Math.cos(sg) + Math.min(HEEL * Math.sin(sg), -TOE * Math.sin(sg));
+  // The hips' height over a planted walking foot at s (own units, flat ground), its hip joint carried dz
+  // forward and dy up by the turn and tilt of the hips.
+  const wkH = (s, sg, dz, dy, zf = wkC * (WK_A - s)) => { rollAt(zf, sg, wkP); const e = effAt(wkKnee(s)), z = wkP.z - dz; return Math.sqrt(Math.max(0, e * e - z * z)) + wkP.y - dy; };
+  // How far a planted foot at zf must tip onto its toes for the leg, its knee bent k, to reach hips hN high
+  // with the ground gO under it. Leaves the answer in wkP.
+  // (In the body's leaned frame, wkCl and wkSl the lean, and from the hip joint where it is: dz, dy.)
+  let wkCl = 1, wkSl = 0;
+  const wkFar = (zf, sg, e, hN, gO, dz, dy) => { rollAt(zf, sg, wkP); const yg = wkP.y + gO - hN; return Math.hypot(wkP.z * wkCl - yg * wkSl - dz, yg * wkCl + wkP.z * wkSl - dy) > e; };
+  function wkReach(zf, k, hN, gO, dz, dy) {
+    const e = effAt(k);
+    if (!wkFar(zf, 0, e, hN, gO, dz, dy)) return rollAt(zf, 0, wkP);
+    if (wkFar(zf, 1.1, e, hN, gO, dz, dy)) return wkP;
+    let lo = 0, hi = 1.1;
+    for (let j = 0; j < 14; j++) { const m = (lo + hi) / 2; if (wkFar(zf, m, e, hN, gO, dz, dy)) lo = m; else hi = m; }
+    return rollAt(zf, hi, wkP);
+  }
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
   const soleY = -0.051 * P.limb, SOLE = [[-0.075, 0.004], [0.035, 0], [0.145, 0.004]].map(([z, dy]) => new THREE.Vector3(0, soleY + dy, z * P.limb));
   // The little signs of life: blinking, where the eyes are looking, the mouth, noticing someone come close.
@@ -493,7 +583,7 @@ export function createFigure({
     setCarry(on) { if (load) load.visible = on; },
     setTorch(on) { torchProp.visible = on; },
     // How far one step carries this person at a speed (m), so footfall sounds keep time with the feet.
-    stepLength: (v) => gaitOf(v).S,
+    stepLength: (v) => gaitOf(v, gaitAsk).S,
     // Footfalls so far (one more each time a foot touches down), so footstep sounds land with the feet.
     get steps() { return steps; },
     // speed (m/s) drives the stride. opts: sitting, sitGround, wobble 0..1, air (-1 falling .. 1 rising,
@@ -550,11 +640,11 @@ export function createFigure({
       wasAir = inAir;
       // The stride only turns over while actually going somewhere: standing, both feet stay planted.
       const going = smooth(spd / 0.18);
-      if (!inAir) phase = (phase + dt * G.c * 0.5 * going) % 1;
+      if (!inAir && spd >= 0.04) phase = (phase + dt * G.c * 0.5 * going) % 1; // (stopped: see the settling step below)
       const Tst = 2 / G.c, D = G.D, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
       // How much of a real run this is: a moment in the air between steps (none walking, so walking is untouched).
       fly = run * smooth((0.5 - D) / 0.12);
-      const heelUp = 0.3 * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
+      const heelUp = lerp(WK_HU, 0.3, run) * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
       // Leaning: forward into a run, a touch more while speeding up, back a little while braking. Never into bends.
       const accLean = inAir ? 0 : clamp(acc * 0.008, -0.08, 0.08);
       const crouch = o.crouch || 0, land = o.land || 0;
@@ -571,7 +661,22 @@ export function createFigure({
         }
         aR = (lo + hi) / 2;
       }
-      const aS = lerp(0.5, aR, fly);
+      const aS = lerp(WK_A, aR, fly);
+      // The walk this frame: how much of it there is (the knees soften toward the idle pose when standing), the
+      // footprint, and how far the trailing foot is up on its toes when the other heel lands (wkSig: as far as
+      // lets that leg, nearly straight, carry the hips at the height the landing leg does, so both are straight).
+      const walking = fly < 0.999;
+      fwdX = Math.sin(yaw); fwdZ = Math.cos(yaw);
+      const legFree = !o.sitting && !o.sitGround && !inAir && !LEG_POSES.has(o.pose) && !(o.gesture && LEG_GESTURES.has(o.gesture.name));
+      if (!legFree || lastElapsed === null) { legs[0].anc = legs[1].anc = false; legs[0].held = legs[1].held = false; stLeg = -1; }
+      wkGait = gait; wkHu = WK_HU * gait; wkC = C; wkSH = Math.min(1, 0.5 / D); wkSig = 0;
+      const sTO = Math.max(0, (D - 0.5) / D); // how far into its stance the leading leg is when the other one's toes leave
+      // The hips turn toward the forward leg (see below), most as a heel lands: that carries its hip joint this far forward.
+      const walkW = gait * locoLegs * (inAir ? 0 : 1), rA = C > 1e-3 ? 1 / (C * 0.5 + 0.02) : 0, yawK = walkW * lerp(0.11, 0.13, run) * 0.5;
+      const dzHS = P.hipX * Math.sin(yawK * (clamp(rollAt(C * WK_A, -wkHu, wkP).z * rA, -1.2, 1.2) - clamp(rollAt(C * (WK_A - wkSH), 0, wkP).z * rA, -1.2, 1.2)));
+      const H0 = wkH(0, -wkHu, dzHS, 0);     // the hips over a leg landing on its heel
+      wkCl = 1; wkSl = 0;
+      if (walking && wkSH > W_R0) wkSig = wkReach(C * (WK_A - wkSH), wkKnee(wkSH), H0, 0, -dzHS, 0).sg;
 
       // ---- Where each foot is: down on the ground, or swinging through
       for (let i = 0; i < 2; i++) {
@@ -582,6 +687,12 @@ export function createFigure({
         if (L.fresh && going > 0.5 && !inAir) steps++; // a footfall
         if (L.stance) {
           L.s = L.u / D; stanceAt(L.s, C, heelUp, toeOff, L, aS, r0);
+          if (fly < 1) { // walking: on its own spot, with its own roll (late in the stance worked out again below, once the hips are known)
+            const zfA = C * (WK_A - L.s);
+            if (L.fresh || !L.anc || Math.abs(anchorRel(L) - zfA) > 0.6 * LL) anchorAt(L, zfA);
+            rollAt(anchorRel(L), wkRoll(Math.min(L.s, wkSH)), wkP);
+            L.z = lerp(wkP.z, L.z, fly); L.y = lerp(wkP.y, L.y, fly); L.sg = lerp(wkP.sg, L.sg, fly); L.zf = lerp(wkP.zf, L.zf, fly);
+          }
         } else {
           const w = (L.u - D) / (1 - D); L.w = w;
           stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0); stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0);
@@ -593,17 +704,68 @@ export function createFigure({
           L.sg = lerp(edgeA.sg, edgeB.sg, smooth(w)) + run * 0.35 * Math.sin(Math.PI * w);
         }
       }
-      // ---- The hips. Walking: a small, smooth rise and fall twice a stride, on top of the highest level from
-      // which both ends of the footprint can still be reached (a curve, not the planted leg's own arc: that arc
-      // has a corner at every footfall and read as a jiggle).
-      const hOver = (L, kL) => Math.sqrt(Math.max(0, (kL * LL) ** 2 - L.z * L.z)) + L.y;
-      const kE = lerp(0.99, 0.97, run);
-      let hLow = Math.min(hOver(stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0), kE), hOver(stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0), kE));
-      // the heel coming up and the toes rolling over lift the ankle, so check a point short of each end too
-      hLow = Math.min(hLow, hOver(stanceAt(0.9, C, heelUp, toeOff, edgeT, aS, r0), kE), hOver(stanceAt(0.08, C, heelUp, toeOff, edgeT, aS, r0), kE));
-      const beat = 0.5 + 0.5 * Math.cos(4 * Math.PI * (phase - D / 2)); // 1 over the middle of each footfall
-      // walking: the hips vault over the planted leg, up to nearly straight mid-step and down toward the footfalls: a long step costs a bob, not a crouch
-      let h = hLow + gait * going * (1 - run) * Math.max(0.04 * LL, 0.9 * (kE * LL + ANK - hLow)) * beat;
+      // ---- Stopping. The stride stops turning over where it was, so the feet would be left split (or one in the
+      // air). Instead, one at a time, a foot that is not under the hips (or was planted facing another way
+      // before turning on the spot) takes a short step in beside the other: lifted a little, set down flat.
+      legs[0].stepping = legs[1].stepping = false;
+      if (legFree && spd < 0.04 && walking) {
+        if (stLeg < 0) {
+          const a = settleOff(legs[0], yaw), b = settleOff(legs[1], yaw);
+          if (a || b) {
+            stLeg = a && b ? (!legs[0].stance && !legs[0].held ? 0 : !legs[1].stance && !legs[1].held ? 1 : Math.abs(anchorRel(legs[0])) >= Math.abs(anchorRel(legs[1])) ? 0 : 1) : a ? 0 : 1;
+            // from where that ankle is now (the leg as last drawn)
+            const th0 = stLeg === 0 ? pose.thL : pose.thR, kn0 = stLeg === 0 ? pose.knL : pose.knR, f0 = stLeg === 0 ? pose.fL : pose.fR, l0 = pose.lean;
+            const az = -TH * Math.sin(th0) - SH * Math.sin(th0 + kn0), ay = -TH * Math.cos(th0) - SH * Math.cos(th0 + kn0);
+            const hNow = (pose.py + PELVIS_Y - 0.04) * Math.cos(l0);
+            stZ0 = ay * Math.sin(l0) + az * Math.cos(l0); stY0 = ay * Math.cos(l0) - az * Math.sin(l0) + hNow; stSg0 = f0 + l0 + th0 + kn0; stX = 0;
+          } else if (!(legs[0].stance && legs[1].stance)) {
+            // Both feet down side by side: put the stride where both are down, ready to set off again.
+            phase = D > 0.5 ? (D - 0.5) / 2 : 0; legs[0].held = legs[1].held = false;
+            for (let i = 0; i < 2; i++) { const L = legs[i]; L.u = (phase + i * 0.5) % 1; L.stance = true; L.s = L.u / D; L.fresh = false; }
+          }
+        }
+        for (let i = 0; i < 2; i++) {
+          const L = legs[i];
+          if (i === stLeg) {
+            stX = Math.min(1, stX + dt / ST_T); const x = smooth(stX), xz = smooth((stX - 0.15) / 0.7); // up first, across, then straight down
+            L.stance = true; L.stepping = true; L.held = false;
+            L.z = lerp(stZ0, 0, xz); L.y = lerp(stY0, ANK, x) + 0.07 * LL * Math.sin(Math.PI * stX); L.sg = lerp(stSg0, 0, x); L.zf = L.z;
+            if (stX >= 1) { anchorAt(L, 0); L.held = true; L.stepping = false; L.z = 0; L.y = ANK; L.sg = 0; stLeg = -1; }
+          } else if (L.held || (!L.stance && L.anc)) { // standing on its spot, flat
+            L.stance = true; L.held = true; rollAt(anchorRel(L), 0, L);
+          }
+        }
+      } else { if (stLeg >= 0) legs[stLeg].stepping = false; stLeg = -1; legs[0].held = legs[1].held = false; }
+
+      // ---- The hips. Walking: they ride on the leg that landed last, at the height its angles put them (the
+      // knee from the curve, the foot as it rolls): an inverted pendulum over a nearly straight leg, highest as
+      // the hips pass over the foot, lowest as the next heel lands. Never lowered to make a leg reach.
+      // Hips: they turn with the legs (the forward leg's hip comes forward) and dip on the side of the swinging
+      // leg at a walk. That carries each hip joint a little forward or back and up or down, which the legs
+      // below allow for, so a planted foot stays exactly where it is.
+      const yawP = yawK * (clamp(legs[0].z * rA, -1.2, 1.2) - clamp(legs[1].z * rA, -1.2, 1.2));
+      const lift0 = legs[0].stance ? 0 : Math.sin(Math.PI * legs[0].w), lift1 = legs[1].stance ? 0 : Math.sin(Math.PI * legs[1].w);
+      const rollP = walkW * (1 - run) * 0.045 * (lift0 - lift1);
+      // Standing, the weight drifts gently from foot to foot (the hips tilt a touch with it).
+      const sway = Math.sin((elapsed + seed) * 0.55) * 0.015 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
+      const yawS = P.hipX * Math.sin(yawP), rollS = P.hipX * Math.sin(rollP + sway); // leg 0's hip joint forward, and down; leg 1's the other way
+      const lead = legs[0].u < 0.5 ? legs[0] : legs[1], sLd = Math.min(lead.u / D, wkSH), ld = lead === legs[0] ? 1 : -1;
+      let hT = wkH(sLd, wkRoll(sLd), ld * yawS, -ld * rollS, lead.anc ? anchorRel(lead) : wkC * (WK_A - sLd));
+      if (legs[0].held || legs[1].held || stLeg >= 0) { // stopping: on whichever feet are down
+        hT = Infinity;
+        for (let i = 0; i < 2; i++) { const L = legs[i]; if (L.stepping) continue; const dz = i === 0 ? yawS : -yawS, dy = i === 0 ? -rollS : rollS, e = effAt(wkKnee(L.held ? 0.5 : L.s)), z = L.z - dz; hT = Math.min(hT, Math.sqrt(Math.max(0, e * e - z * z)) + L.y - dy); }
+      }
+      // The hand-over to the next leg is a corner (falling, then rising): round it off. The follower keeps up
+      // with the height's own rate, so it only ever lags at the corner, and then below it (the landing knee
+      // gives a few degrees more: the loading response), never above.
+      if (hT0 === null || dt <= 0 || dt > 0.06) { hErr = 0; hErrV = 0; hTd = 0; }
+      else {
+        const td = (hT - hT0) / dt; hErrV += hTd - td; hTd = td;
+        critStep(hErr, hErrV, 0, H_W, dt); hErr = cdX; hErrV = cdV;
+      }
+      hT0 = hT;
+      const hW = hT + Math.min(0, hErr);
+      let h = hW;
       // Running: a bounce. Off the ground the body flies a true arc under the game's gravity, highest halfway
       // between the steps. On the ground the leg takes the weight like a spring: the hips sink to their lowest
       // halfway through the step (the knee bending to about 40 degrees) and rise again to push off at the
@@ -626,7 +788,7 @@ export function createFigure({
         bounce *= going * fly;
       }
       h = lerp(h, hE, fly) + bounce;
-      const hOff = -crouch * 0.36 * LL - land * (landRun ? 0.1 : 0.3) * LL + Math.sin(elapsed * 1.8 + seed) * 0.004 * (1 - gait);
+      const hOff = -crouch * 0.36 * LL - land * (landRun ? 0.1 : 0.3) * LL + Math.sin(elapsed * 1.8 + seed) * 0.001 * (1 - gait);
       h += hOff;
       // ---- The ground under each foot. A planted foot stands on the ground where it is; a swinging one
       // heads from where it pushed off to where it will come down. The body's level follows the lower
@@ -634,7 +796,8 @@ export function createFigure({
       // while the legs reach for the treads. Running, the foot on the ground (or, in the air, the one about
       // to land) sets the level the body bounces on.
       const lean = 0.012 + run * 0.09 * smooth(G.vk / 3.9) + accLean + crouch * 0.06 + land * 0.04;
-      const hz = hLow * Math.tan(lean); // the leaned body carries the hips, and so the feet, this far forward
+      const hz = hW * Math.tan(lean); // the leaned body carries the hips, and so the feet, this far forward
+      hzL = hz;
       const planted = groundUnder && !far && !o.sitting && !o.sitGround && !inAir && o.pose !== 'hang' && o.pose !== 'sleep';
       if (planted) {
         gX = group.position.x; gZ = group.position.z; gCos = Math.cos(group.rotation.y); gSin = Math.sin(group.rotation.y); gSink = o.sink || 0;
@@ -663,7 +826,7 @@ export function createFigure({
         if (tRun === Infinity) tRun = (legs[0].w > legs[1].w ? legs[0] : legs[1]).gd;
         target = lerp(target, tRun, fly);
         if (springY === null || Math.abs(target - springY) > 1.5) { springY = target; bodyV = 0; } // first step, or moved far at once
-        else if (dt > 0) { const db = Math.min(dt, 0.05); bodyV += (BODY_W * BODY_W * (target - springY) - 2 * BODY_W * bodyV) * db; springY += bodyV * db; }
+        else if (dt > 0) { critStep(springY, bodyV, target, BODY_W, dt); springY = cdX; bodyV = cdV; }
         // Running, the level is the ground under the foot that is down; in the air it moves smoothly from
         // the tread pushed off to the one the next foot lands on, so a flight of steps is taken in bounds.
         let runY = springY;
@@ -687,13 +850,62 @@ export function createFigure({
       // will land: the heel kicks up behind, the thigh drives through, the lower leg reaches out.
       const cl = Math.cos(lean), sl = Math.sin(lean), yHip = h / cl;
       t.py = yHip + 0.04 - PELVIS_Y;
+      wkCl = cl; wkSl = sl;
       const runSwing = fly > 0.001 && !inAir, hEnd = h - bounce, amp = 0.55 + 0.45 * smooth((G.vk - 1.6) / 2.3);
+      // Walking, a swinging leg follows its joint curves from the toe-off pose to the heel-strike pose: the
+      // leg landing at its angle with the hips over it, and the leg leaving as the other one is a little way
+      // into its stance, up on its toes as far as it needs. (Both on flat ground; the ends are met exactly below.)
+      const wkSwing = walking && !inAir && (!legs[0].stance || !legs[1].stance);
+      let sgTO = 0;
+      if (wkSwing) {
+        rollAt(C * WK_A, -wkHu, wkP); let y0 = wkP.y - H0; legIK(wkP.z * cl - y0 * sl - dzHS, y0 * cl + wkP.z * sl);
+        const thHS = ik.th, knHS = ik.kn, hTO = wkH(sTO, wkRoll(sTO), dzHS, 0);
+        sgTO = wkReach(C * (WK_A - 1), wkKnee(1), hTO, 0, -dzHS, 0).sg; y0 = wkP.y - hTO; legIK(wkP.z * cl - y0 * sl + dzHS, y0 * cl + wkP.z * sl);
+        const thTO = ik.th, knTO = ik.kn, dTh = thHS - thTO, wa = clamp(C / walkC(A_MAX), 0, 1), kPk = gait * (0.85 + 0.2 * wa);
+        WK_TH[0] = thTO; WK_TH[1] = thTO + 0.45 * dTh; WK_TH[2] = thTO + 0.92 * dTh; WK_TH[3] = thHS - 0.08 * wa; WK_TH[4] = thHS;
+        WK_KN[0] = knTO; WK_KN[1] = Math.max(kPk, knTO); WK_KN[2] = Math.max(0.66 * kPk, knHS); WK_KN[3] = knHS + 0.2 * kPk; WK_KN[4] = knHS + 0.03 * gait; WK_KN[5] = knHS;
+        WK_FT[0] = sgTO; WK_FT[1] = 0.12 * gait; WK_FT[2] = 0; WK_FT[3] = -wkHu;
+      }
       for (let i = 0; i < 2; i++) {
-        const L = legs[i], yg = L.y + L.gO - h;
-        legIK(L.z * cl - yg * sl, yg * cl + L.z * sl);
-        let th = ik.th, kn = ik.kn, f = L.sg - lean - th - kn;
+        const L = legs[i], hipDz = i === 0 ? yawS : -yawS, hipDy = i === 0 ? -rollS : rollS;
+        // Walking, late in the stance the heel lifts as far as this leg, its knee nearly straight, needs to
+        // carry the hips where they are (on the ground under this foot).
+        if (L.stance && walking && L.s > W_R0 && !L.held && !L.stepping) {
+          wkReach(L.anc ? anchorRel(L) : C * (WK_A - L.s), wkKnee(L.s), h, L.gO, hipDz, hipDy); stanceAt(L.s, C, heelUp, toeOff, edgeT, aS, r0);
+          L.z = lerp(wkP.z, edgeT.z, fly); L.y = lerp(wkP.y, edgeT.y, fly); L.sg = lerp(wkP.sg, edgeT.sg, fly);
+        }
+        const yg = L.y + L.gO - h;
+        legIK(L.z * cl - yg * sl - hipDz, yg * cl + L.z * sl - hipDy);
+        let th = ik.th, kn = ik.kn, f = L.sg - lean - th - kn, ws = L.w, wkEnd = 0, wkLand = 0;
+        // Where a swinging foot comes down (walking, running, or between the two): the same spot its stance starts on.
+        const tSw = (spd * (1 - D) * Tst) / scale;
+        rollAt(C * WK_A, -wkHu, wkP);
+        const landZ = lerp(wkP.z + tSw * (1 - L.w), edgeB.z, fly), landY = lerp(wkP.y, edgeB.y, fly);
+        const swinging = !L.stance && !inAir, gS = planted ? (L.g0 - bodyY) / scale : 0, gE = planted ? (L.gd - bodyY) / scale : 0;
+        if (swinging && wkSwing) {
+          const w = L.w;
+          let wth = keyed(WK_TH_W, WK_TH, w), wkn = Math.max(0, keyed(WK_KN_W, WK_KN, w)), wsg = keyed(WK_FT_W, WK_FT, w);
+          // At both ends the ankle reaches for the very spot it leaves and lands on, on that spot's own ground
+          // and at the hips' height now, so the foot neither pops nor sinks there. (Those spots stay put on
+          // the ground while the body goes on: tSw is how far it goes in a whole swing, own units.)
+          // Coming in, the heel is over its spot just before it comes down onto it, so it never slides in.
+          const kA = 1 - smooth(w / 0.2), kB = smooth((w - 0.72) / 0.22), kY = smooth((w - 0.8) / 0.2);
+          wkEnd = Math.max(kA, kB) * (1 - fly); wkLand = kB * (1 - fly); // (these ends keep the shoe clear themselves)
+          if (kA > 0 || kB > 0) {
+            const az = -TH * Math.sin(wth) - SH * Math.sin(wth + wkn), ay = -TH * Math.cos(wth) - SH * Math.cos(wth + wkn);
+            let Z = ay * sl + az * cl, Y = ay * cl - az * sl;
+            // (lowF: the shoe's lowest point under the ankle, tipped so: the heel or the toes.)
+            if (kA > 0) { // leaving: the toes come up off their spot at once, never dragging forward over it
+              wkReach(L.anc ? anchorRel(L) : C * (WK_A - 1) - tSw * w, wkKnee(1), h, gS, hipDz, hipDy); Z = lerp(Z, wkP.z, kA); wsg = lerp(wsg, wkP.sg, kA);
+              Y = Math.max(lerp(Y, wkP.y + gS - h, kA), gS - h - lowF(wsg) + 0.04 * LL * smooth(w / 0.12) * gait);
+            }
+            const low = lowF(wsg);
+            if (kB > 0) { const ty = landY + gE - h; Z = lerp(Z, landZ, kB); Y = Math.max(lerp(Y, ty, kY), gE - h - low + 0.03 * LL * (1 - kY) * gait); }
+            legIK(Z * cl - Y * sl - hipDz, Y * cl + Z * sl - hipDy); wth = ik.th; wkn = ik.kn;
+          }
+          th = wth; kn = wkn; f = wsg - lean - wth - wkn;
+        }
         if (runSwing && !L.stance) {
-          const gS = planted ? (L.g0 - bodyY) / scale : 0, gE = planted ? (L.gd - bodyY) / scale : 0;
           let y0 = edgeA.y + gS - hEnd; legIK(edgeA.z * cl - y0 * sl, y0 * cl + edgeA.z * sl);
           RUN_TH[0] = -ik.th; RUN_KN[0] = ik.kn; RUN_FT[0] = edgeA.sg - lean - ik.th - ik.kn;
           y0 = edgeB.y + gE - hEnd; legIK(edgeB.z * cl - y0 * sl, y0 * cl + edgeB.z * sl);
@@ -705,26 +917,29 @@ export function createFigure({
           RUN_TH[4] = Math.max(RUN_TH[5] + 0.15, RUN_TH[3] - 0.25); RUN_KN[4] = RUN_KN[5] + 0.3;
           // The curves are timed against the other foot's step: the swinging foot passes under the body as
           // the other leg is halfway through its step and the hips are lowest, however long the steps are.
-          const wm = (0.5 - D / 2) / (1 - D), ws = L.w < wm ? (0.5 * L.w) / wm : 0.5 + (0.5 * (L.w - wm)) / (1 - wm);
+          const wm = (0.5 - D / 2) / (1 - D); ws = L.w < wm ? (0.5 * L.w) / wm : 0.5 + (0.5 * (L.w - wm)) / (1 - wm);
           let rth = -keyed(RUN_TH_W, RUN_TH, ws), rkn = keyed(RUN_KN_W, RUN_KN, ws), rf = keyed(RUN_FT_W, RUN_FT, ws);
           // The last of the swing reaches for the very spot it lands on, from just above and behind it, at the
           // hips' height now, so the foot comes down onto the ground and never through it.
           const kL = smooth((ws - 0.6) / 0.4);
           if (kL > 0) {
             // (Blended as a path of the ankle, which stays above the ground, not of the joint angles, which need not.)
-            const tz = edgeB.z, ty = edgeB.y + gE - Math.min(h, hEnd), rfE = edgeB.sg - lean;
+            const tz = landZ, ty = landY + gE - Math.min(h, hEnd), rfE = lerp(-wkHu, edgeB.sg, fly) - lean;
             const az = -TH * Math.sin(rth) - SH * Math.sin(rth + rkn), ay = -TH * Math.cos(rth) - SH * Math.cos(rth + rkn);
             // In the ground's frame: forward to the spot, and down to it only from above (onto a higher step, or
             // off the edge of the one it left).
             const Z = lerp(ay * sl + az * cl, tz, kL), Y = Math.max(lerp(ay * cl - az * sl, ty, kL), lerp(Math.max(ty, gS + ANK - Math.min(h, hEnd)), ty, kL) + 0.05 * (1 - kL));
-            legIK(Z * cl - Y * sl, Y * cl + Z * sl);
+            legIK(Z * cl - Y * sl - hipDz, Y * cl + Z * sl - hipDy);
             rf = lerp(rf + rth + rkn, rfE, kL) - ik.th - ik.kn; rth = ik.th; rkn = ik.kn;
           }
           th = lerp(th, rth, fly); kn = lerp(kn, Math.max(0.03, rkn), fly); f = lerp(f, rf, fly);
+        }
+        if (swinging && (runSwing || wkSwing)) {
           // Never through the ground on the way: if the shoe would scuff, lift the toes, then fold the knee a
           // little more; let go of that again gently, not all at once.
-          const want = 0.02 * Math.sin(Math.PI * clamp(ws, 0, 1)), k0 = kn, f0 = f, t0 = th, lx = planted ? (i === 0 ? -P.hipX : P.hipX) * scale : null;
-          kn = Math.min(2.3, kn + L.kAdd); f -= L.fAdd; th -= L.tAdd;
+          // (and straight after toe-off the toes clear the ground at once, so they never drag forward over it)
+          const want = Math.max(0.02 * Math.sin(Math.PI * clamp(ws, 0, 1)), L.w < 0.5 ? 0.012 * smooth(L.w / 0.1) : 0) * (1 - wkLand) - 0.05 * wkLand, k0 = kn, f0 = f, t0 = th, lx = planted ? (i === 0 ? -P.hipX : P.hipX) * scale : null;
+          kn = Math.min(2.3, kn + L.kAdd * (1 - wkEnd)); f -= L.fAdd * (1 - wkEnd); th -= L.tAdd * (1 - wkEnd);
           for (let k = 0; k < 5; k++) {
             const low = shoeLow(th, kn, f, lean, h, lx); if (low >= want) break;
             if (toeLow && f > -0.3) {
@@ -912,11 +1127,7 @@ export function createFigure({
 
       // Hips: they turn with the legs (the forward leg's hip comes forward), dip on the side of the swinging
       // leg and shift over the planted foot at a walk; the shoulders turn against them.
-      const reach = (L) => (C > 1e-3 ? clamp(L.z / (C * 0.5 + 0.02), -1.2, 1.2) : 0);
-      const lift = (L) => (L.stance ? 0 : Math.sin(Math.PI * L.w));
-      const walkW = gait * locoLegs * (inAir ? 0 : 1);
-      const yawP = walkW * lerp(0.11, 0.13, run) * (reach(legs[0]) - reach(legs[1])) * 0.5;
-      const rollP = walkW * (1 - run) * 0.045 * (lift(legs[0]) - lift(legs[1]));
+      // (yawP and rollP are worked out before the legs are solved, which allow for them.)
       legL.hip.rotation.set(pose.thL, 0, pose.spreadL - rollP); legR.hip.rotation.set(pose.thR, 0, pose.spreadR - rollP);
       legL.knee.rotation.x = pose.knL; legR.knee.rotation.x = pose.knR;
       legL.foot.rotation.x = pose.fL; legR.foot.rotation.x = pose.fR;
@@ -973,8 +1184,8 @@ export function createFigure({
       mouth.scale.y = 0.1 + 0.9 * mouthOpen; mouth.scale.x = 1 - 0.25 * (gname === 'blow' ? 1 : 0) + 0.1 * mouthOpen;
       // Breathing lifts the chest; faster after a run. Standing still, the weight shifts from foot to foot.
       const breath = Math.sin(e * (1.5 + effort * 2.5)) * (0.012 + effort * 0.012);
-      pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1) + rollP;
-      pelvis.position.x = walkW * (1 - run) * 0.012 * (lift(legs[0]) - lift(legs[1])); // weight over the planted foot
+      pelvis.rotation.z = sway + rollP;
+      pelvis.position.x = walkW * (1 - run) * 0.012 * (lift0 - lift1); // weight over the planted foot
       pelvis.position.y = PELVIS_Y + pose.py;
       pelvis.rotation.y = yawP;
       // The upper body rides the bounce a little softer than the hips, so the head is steadier still.
@@ -1035,7 +1246,7 @@ export function createFigure({
           // Running, the legs and the bounce already put the foot on the ground: this only ever lifts a sole out of it.
           if (pen > -Infinity && legsIK) liftT = lerp(liftT, Math.max(0, liftT), fly);
         }
-        if (dt > 0) { const db = Math.min(dt, 0.04); liftV += (LIFT_W * LIFT_W * (liftT - footLift) - 2 * LIFT_W * liftV) * db; footLift += liftV * db; }
+        if (dt > 0) { critStep(footLift, liftV, liftT, LIFT_W, dt); footLift = cdX; liftV = cdV; }
         inner.position.set(0, base + footLift / scale, 0);
       }
     },

@@ -189,3 +189,20 @@ Measured with `node tools/prof.mjs` (dev server running; limiter off, midday, st
 Frames drawn per second, measured in headless Chrome (a 60 Hz surface): play 60, title 30, pause menu 10. The 120 → 60 cut on the real screen follows from the same limiter but was not measured on it.
 
 Still heavy: a view of the whole camp from 45 to 60 m (the beach) is about 1,240 draw calls, because people who are walking or doing an activity stay in full parts until 70 m. The look-and-feel project should rebuild each person as one skinned mesh, which removes this.
+
+## Look and feel, part A: one skinned body per person (2026-11-16, on `build`, awaiting the owner's look)
+
+Design: `docs/superpowers/specs/2026-11-16-look-and-feel-design.md`.
+
+- `src/actors/figure.js`: every joint is now a `THREE.Bone` (same tree, same rest positions, so `animate()` is unchanged). All loose pieces are baked into one `THREE.SkinnedMesh` (`rigid()` gives a piece to one bone; `tube()` sweeps the trunk, arms and legs through rings whose weights are shared across the waist, elbows and knees so they bend in a curve). Only the torch and a carried crate stay separate (`userData.keep`).
+- Faces: eyes, pupils, mouth, each brow and the mouth's curve ride their own bones. `FACES` holds eight expressions; `animate()` picks one from `o.mood`, the gesture (`GESTURE_FACE`), the pose (`POSE_FACE`), running, or the camp being sleepy (`setSleepy(night)`), and eases to it. The player's mood comes from the stats in `main.js`. `?mood=sad` forces a face for screenshots.
+- The baked far stand-in from the heat project is gone: past 46 m a still person (past 70 m anyone) simply updates once every 30 frames.
+
+| Spot | Draw calls before | After | Frame before | After |
+|---|---|---|---|---|
+| Camp centre | 885 | 609 | 3.5 ms | 2.9 ms |
+| Summit | 496 | 392 | 3.2 ms | 3.2 ms |
+| Jungle, looking at camp | 819 | 732 | 3.8 ms | 4.0 ms |
+| Beach, looking at camp | about 1,240 | 752 | not measured | not measured |
+
+Camp (target 600) and the beach view (target 700) are just over their targets. Not yet done from the design: parts B to G.

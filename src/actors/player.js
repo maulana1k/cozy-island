@@ -193,6 +193,7 @@ export function createPlayer(scene, opts = {}) {
         gesture: gesture ? { name: gesture.name, u: gesture.t / gesture.dur } : null,
         sink: player.surface === 'mud' ? 0.05 : 0,
         hold: player.torch ? 'torch' : null,
+        mood: player.mood || undefined, // how the scout is feeling, set by the game
         look: player.focus, // what you are about to use: the head and eyes turn to it
       });
     },

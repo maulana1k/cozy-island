@@ -9,24 +9,52 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // Every body is drawn with this one material; the colours live in the vertices.
 const BODY = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
 
-// Welds the loose pieces of one body segment (say, a head with its hair, ears, eyes and nose)
-// into a single mesh. A person is then about a dozen things to draw instead of forty.
-function weld(segment, cast = true) {
-  const pieces = segment.children.filter((c) => c.isMesh && !c.userData.keep);
-  if (!pieces.length) return;
-  const geos = pieces.map((c) => {
-    c.updateMatrix();
-    const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
-    g.applyMatrix4(c.matrix);
-    const col = c.material.color, n = g.attributes.position.count, arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    return g;
-  });
-  for (const c of pieces) segment.remove(c);
-  const mesh = new THREE.Mesh(mergeGeometries(geos), BODY);
-  mesh.castShadow = cast;
-  segment.add(mesh);
+// ---- One skin over a skeleton
+// A person is a single mesh that bends with the bones inside it. Limbs and trunk are tubes swept
+// through rings, shared between the two bones either side of each joint so elbows and knees bend
+// in a curve; everything else (head, hair, shoes, pockets) rides rigidly on one bone.
+const smooth = (x) => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
+const tint = new THREE.Color();
+// rings run from the top down: { y, rx, rz, col, w } where w is the share held by bone b (the rest by bone a).
+function tube(cx, cz, rings, a, b, { seg = 12, capTop = false, capBottom = false } = {}) {
+  const pos = [], col = [], si = [], sw = [], idx = [];
+  const ring = (r, rx, rz) => {
+    tint.set(r.col);
+    for (let k = 0; k < seg; k++) {
+      const t = (k / seg) * Math.PI * 2;
+      pos.push(cx + Math.sin(t) * rx, r.y, cz + Math.cos(t) * rz);
+      col.push(tint.r, tint.g, tint.b); si.push(a, b, 0, 0); sw.push(1 - (r.w || 0), r.w || 0, 0, 0);
+    }
+  };
+  const all = [...rings];
+  if (capTop) all.unshift({ ...rings[0], rx: 0.0001, rz: 0.0001 });
+  if (capBottom) all.push({ ...rings[rings.length - 1], rx: 0.0001, rz: 0.0001 });
+  for (const r of all) ring(r, r.rx, r.rz ?? r.rx);
+  for (let i = 0; i < all.length - 1; i++) for (let k = 0; k < seg; k++) {
+    const p0 = i * seg + k, q0 = i * seg + (k + 1) % seg, p1 = p0 + seg, q1 = q0 + seg;
+    idx.push(p0, p1, q0, q0, p1, q1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g.toNonIndexed();
+}
+// A loose piece turned into skin that follows one bone.
+const toGroup = new THREE.Matrix4();
+function rigid(mesh, bone, groupInverse) {
+  const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+  if (!g.attributes.normal) g.computeVertexNormals();
+  g.applyMatrix4(toGroup.multiplyMatrices(groupInverse, mesh.matrixWorld));
+  const n = g.attributes.position.count, c = mesh.material.color, col = new Float32Array(n * 3), si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; si[i * 4] = bone; sw[i * 4] = 1; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  return g;
 }
 
 // Where the player is, so far-off people can be animated less often.
@@ -37,32 +65,12 @@ let groundUnder = null;
 export function setGround(fn) { groundUnder = fn; }
 const solePoint = new THREE.Vector3();
 
-export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; bakesLeft = 1; }
-// A long way off, a whole person is drawn as one welded shape. Making that shape takes a moment,
-// so only one is made per frame.
-let bakesLeft = 1;
+export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; }
+// How sleepy the whole camp is (0 by day, 1 late at night), so faces can show it.
+let sleepy = 0;
+export function setSleepy(v) { sleepy = v; }
+// Past these distances a person holding still, and then anyone at all, keeps the last pose.
 const FAR_IN = 46, FAR_OUT = 42, FAR_ANY = 70;
-const bakeInv = new THREE.Matrix4(), bakeMat = new THREE.Matrix4();
-function bakeFigure(group, inner) {
-  group.updateMatrixWorld(true);
-  bakeInv.copy(group.matrixWorld).invert();
-  const geos = [];
-  inner.traverse((o) => {
-    if (!o.isMesh) return;
-    for (let p = o; p && p !== group; p = p.parent) if (!p.visible) return;
-    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
-    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);
-    if (!g.attributes.normal) g.computeVertexNormals();
-    if (!g.attributes.color) {
-      const col = o.material.color, n = g.attributes.position.count, arr = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
-      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    }
-    g.applyMatrix4(bakeMat.multiplyMatrices(bakeInv, o.matrixWorld));
-    geos.push(g);
-  });
-  return mergeGeometries(geos);
-}
 
 function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, material);
@@ -105,6 +113,19 @@ function buildAccent(kind, accentColor, P) {
 
 const HEAD_ACCENTS = new Set(['hat', 'cap', 'bow']);
 
+// Faces. Each is: how high the brows sit, how far their inner ends tip up (down if negative),
+// the curve of the mouth (1 a smile, -1 a frown) and how wide the eyes are open.
+const FACES = {
+  neutral: [0, 0, 0.75, 1], happy: [0.03, 0.05, 1, 0.95], joy: [0.07, 0.05, 1.25, 0.68], surprised: [0.16, 0.1, 0.3, 1.22],
+  puzzled: [0.06, 0.28, 0.3, 1], sad: [0.05, 0.42, -0.75, 0.82], sleepy: [-0.03, 0.12, 0.45, 0.5], effort: [-0.06, -0.38, 0.22, 0.8],
+};
+const GESTURE_FACE = {
+  cheer: 'joy', laugh: 'joy', wave: 'happy', salute: 'happy', pat: 'happy', clap: 'happy', eat: 'happy', drink: 'happy', catch: 'happy',
+  stumble: 'surprised', bonk: 'surprised', skid: 'surprised', pant: 'effort', pull: 'effort', push: 'effort', shake: 'effort', throw: 'effort', crouch: 'neutral',
+  scratch: 'puzzled', lookabout: 'puzzled', peer: 'puzzled', tapfoot: 'puzzled', yawn: 'sleepy', rub: 'sad',
+};
+const POSE_FACE = { tug: 'effort', hammer: 'effort', jacks: 'effort', clap: 'joy', eat: 'happy', command: 'effort', sleep: 'sleepy', hang: 'joy', binoculars: 'puzzled', bandage: 'puzzled' };
+
 // A person built from tapered pieces with bending knees and elbows. Origin at the feet, facing +z.
 // `scale` above 1 makes a grown-up member of staff.
 export function createFigure({
@@ -116,24 +137,16 @@ export function createFigure({
   const P = scale > 1.05 ? GROWN : KID;
   const PELVIS_Y = P.pelvisY, LEG = P.thigh + P.shin, TALL = P.pelvisY + P.neckY + P.headY + P.headR;
   const group = new THREE.Group();
-  const inner = new THREE.Group();   // leans and squashes
-  const pelvis = new THREE.Group();  // bobs; carries legs and torso
-  const torso = new THREE.Group();   // twists against the hips
-  const neck = new THREE.Group();
+  const inner = new THREE.Bone();   // leans and squashes
+  const pelvis = new THREE.Bone();  // bobs; carries legs and torso
+  const torso = new THREE.Bone();   // twists against the hips
+  const neck = new THREE.Bone();
   group.add(inner); inner.add(pelvis); pelvis.add(torso); torso.add(neck);
   pelvis.position.y = PELVIS_Y; neck.position.y = P.neckY;
 
   const shirt = mat(bodyColor), skin = mat(skinColor), dark = mat(DARK), shorts = mat(shortsColor), shoe = mat(0xf2ede2), sock = mat(0xfafafa);
-  // A limb piece that narrows toward its end, hanging down from y = 0.
-  const taper = (rTop, rBottom, length, material, y = 0) => part(new THREE.CylinderGeometry(rTop * P.limb, rBottom * P.limb, length, 12), material, 0, y - length / 2, 0);
 
-  // Shorts flare out a little at the hem; the body is a soft barrel, widest at the tummy.
-  const seat = part(new THREE.CylinderGeometry(P.belly * 0.98, P.belly * 1.05, 0.13, 16), shorts, 0, -0.005, 0); seat.scale.z = 0.88;
-  pelvis.add(seat);
   const bodyH = P.neckY - 0.04;
-  const body = part(new THREE.CylinderGeometry(P.chest, P.belly, bodyH, 16), shirt, 0, bodyH / 2 + 0.02, 0); body.scale.z = 0.88;
-  const shoulders = part(new THREE.SphereGeometry(P.chest, 16, 10), shirt, 0, bodyH + 0.02, 0); shoulders.scale.set(1.0, 0.5, 0.88);
-  torso.add(body, shoulders, part(new THREE.CylinderGeometry(0.05, 0.06, 0.07, 10), skin, 0, P.neckY - 0.01, 0, false));
   // Uniform details: collar, button placket, a chest pocket with a flap, shoulder straps, a belt with a brass buckle.
   {
     const tone = (k) => mat(new THREE.Color(bodyColor).multiplyScalar(k));
@@ -169,8 +182,8 @@ export function createFigure({
   const earGeo = new THREE.SphereGeometry(R * 0.2, 8, 8);
   const earL = part(earGeo, skin, -R * 1.0, hy - R * 0.05, 0, false), earR = part(earGeo, skin, R * 1.0, hy - R * 0.05, 0, false); earL.scale.x = earR.scale.x = 0.5;
   // Eyes that can blink and look about: whites, a coloured iris, a pupil and a glint of light.
-  const eyeRig = new THREE.Group(); eyeRig.position.set(0, hy + R * 0.08, 0);
-  const whites = new THREE.Group(), pupils = new THREE.Group();
+  const eyeRig = new THREE.Bone(); eyeRig.position.set(0, hy + R * 0.08, 0);
+  const whites = new THREE.Group(), pupils = new THREE.Bone();
   for (const sx of [-1, 1]) {
     const w = part(new THREE.SphereGeometry(R * 0.135, 12, 10), mat(0xffffff), sx * R * 0.36, 0, R * 0.875, false); w.scale.set(0.95, 1.2, 0.5);
     const iris = part(new THREE.SphereGeometry(R * 0.09, 12, 8), mat(eyeColor), sx * R * 0.36, 0, R * 0.925, false); iris.scale.set(0.92, 1.12, 0.4);
@@ -180,13 +193,13 @@ export function createFigure({
   }
   eyeRig.add(whites, pupils);
   const hairMat = mat(hairColor);
-  const browL = part(new THREE.BoxGeometry(R * 0.24, R * 0.04, R * 0.04), hairMat, -R * 0.37, hy + R * 0.33, R * 0.89, false), browR = part(new THREE.BoxGeometry(R * 0.24, R * 0.04, R * 0.04), hairMat, R * 0.37, hy + R * 0.33, R * 0.89, false);
+  const browL = part(new THREE.BoxGeometry(R * 0.27, R * 0.06, R * 0.05), dark, -R * 0.37, hy + R * 0.31, R * 0.93, false), browR = part(new THREE.BoxGeometry(R * 0.27, R * 0.06, R * 0.05), dark, R * 0.37, hy + R * 0.31, R * 0.93, false);
   browL.rotation.set(-0.2, -0.35, 0.1); browR.rotation.set(-0.2, 0.35, -0.1);
   // Upper lashes: a dark line over each eye.
   const lashL = part(new THREE.BoxGeometry(R * 0.26, R * 0.022, R * 0.03), dark, -R * 0.36, hy + R * 0.225, R * 0.925, false), lashR = part(new THREE.BoxGeometry(R * 0.26, R * 0.022, R * 0.03), dark, R * 0.36, hy + R * 0.225, R * 0.925, false);
   lashL.rotation.y = -0.36; lashR.rotation.y = 0.36;
   // A mouth that opens: dark inside, a pink tongue.
-  const mouth = new THREE.Group(); mouth.position.set(0, hy - R * 0.36, R * 0.9);
+  const mouth = new THREE.Bone(); mouth.position.set(0, hy - R * 0.36, R * 0.9);
   { const inside = part(new THREE.SphereGeometry(R * 0.11, 10, 8), mat(0x6e2a2a), 0, 0, 0, false); inside.scale.set(1.25, 1, 0.3);
     const tongue = part(new THREE.SphereGeometry(R * 0.06, 8, 6), mat(0xe58a8a), 0, -R * 0.045, R * 0.012, false); tongue.scale.set(1.2, 0.6, 0.3);
     const teeth = part(new THREE.BoxGeometry(R * 0.15, R * 0.03, R * 0.02), mat(0xffffff), 0, R * 0.075, R * 0.02, false);
@@ -208,20 +221,22 @@ export function createFigure({
   const cheekGeo = new THREE.SphereGeometry(R * 0.15, 8, 8);
   const cheekL = part(cheekGeo, cheekMat, -R * 0.58, hy - R * 0.2, R * 0.77, false), cheekR = part(cheekGeo, cheekMat, R * 0.58, hy - R * 0.2, R * 0.77, false);
   cheekL.scale.z = cheekR.scale.z = 0.35;
-  neck.add(head, hair, earL, earR, earInL, earInR, browL, browR, lashL, lashR, nose, smile, cheekL, cheekR, ...locks);
+  neck.add(head, hair, earL, earR, earInL, earInR, lashL, lashR, nose, cheekL, cheekR, ...locks);
+  // The brows and the curve of the mouth each ride their own little bone, so a face can change.
+  const onBone = (m) => { const b = new THREE.Bone(); b.position.copy(m.position); m.position.set(0, 0, 0); b.add(m); neck.add(b); return b; };
+  const browBoneL = onBone(browL), browBoneR = onBone(browR), smileBone = onBone(smile);
+  const browY = browBoneL.position.y, smileY = smileBone.position.y, smileZ = smileBone.position.z;
   neck.add(eyeRig, mouth);
 
   // Arms: a flared short sleeve, an upper arm, then a forearm ending in a mitten hand.
   function arm(side) {
-    const shoulder = new THREE.Group(); shoulder.position.set(side * P.shX, P.shY, 0);
-    shoulder.add(taper(0.052, 0.068, 0.075, shirt, 0.02), taper(0.046, 0.041, P.upper, skin));
-    const elbow = new THREE.Group(); elbow.position.y = -P.upper;
+    const shoulder = new THREE.Bone(); shoulder.position.set(side * P.shX, P.shY, 0);
+    const elbow = new THREE.Bone(); elbow.position.y = -P.upper;
     const hand = part(new THREE.SphereGeometry(0.048 * P.limb, 10, 8), skin, 0, -P.fore - 0.022, 0, false); hand.scale.set(0.9, 1.1, 0.8);
     // A hand with a thumb and a hint of curled fingers; a turned cuff on the sleeve; a patrol badge on one arm.
     const thumb = part(new THREE.SphereGeometry(0.02 * P.limb, 8, 6), skin, -side * 0.012, -P.fore - 0.012, 0.04 * P.limb, false); thumb.scale.set(0.8, 1.3, 0.9);
     const fingers = part(new THREE.SphereGeometry(0.034 * P.limb, 8, 6), skin, 0, -P.fore - 0.05, 0.008, false); fingers.scale.set(0.95, 0.75, 0.7);
-    elbow.add(part(new THREE.SphereGeometry(0.041 * P.limb, 10, 8), skin, 0, 0, 0, false), taper(0.041, 0.034, P.fore, skin), hand, thumb, fingers);
-    shoulder.add(taper(0.07, 0.071, 0.014, mat(new THREE.Color(bodyColor).multiplyScalar(0.82)), -0.048));
+    elbow.add(hand, thumb, fingers);
     if (side === 1) { const badge = part(new THREE.CylinderGeometry(0.022, 0.022, 0.006, 10), mat(0xf2c94c), side * 0.058 * P.limb, -0.012, 0, false); badge.rotation.z = Math.PI / 2; shoulder.add(badge, part(new THREE.SphereGeometry(0.009, 6, 6), mat(0x3f8f5a), side * 0.063 * P.limb, -0.012, 0, false)); }
     if (armband && side === -1) { // a first-aider's white band with a red cross
       shoulder.add(part(new THREE.CylinderGeometry(0.066, 0.07, 0.06, 10), mat(0xffffff), 0, -0.035, 0, false),
@@ -239,13 +254,10 @@ export function createFigure({
   // Legs: the leg of the shorts, a thigh, then a shin with a sock and a chunky shoe.
   const shoeGeo = new THREE.SphereGeometry(0.066 * P.limb, 12, 8); shoeGeo.scale(1, 0.72, 1.7);
   function leg(side) {
-    const hip = new THREE.Group(); hip.position.set(side * P.hipX, -0.04, 0);
-    hip.add(taper(0.074, 0.084, Math.min(0.1, P.thigh * 0.75), shorts, 0.02), taper(0.058, 0.052, P.thigh, skin));
-    const knee = new THREE.Group(); knee.position.y = -P.thigh;
-    knee.add(part(new THREE.SphereGeometry(0.052 * P.limb, 10, 8), skin, 0, 0, 0, false), taper(0.052, 0.042, P.shin - 0.03, skin),
-      taper(0.046, 0.046, 0.05, sock, -P.shin + 0.065), taper(0.048, 0.048, 0.012, mat(0x3f8f5a), -P.shin + 0.068), taper(0.048, 0.048, 0.008, mat(0xe8563f), -P.shin + 0.05));
+    const hip = new THREE.Bone(); hip.position.set(side * P.hipX, -0.04, 0);
+    const knee = new THREE.Bone(); knee.position.y = -P.thigh;
     // The foot turns at the ankle, so the sole can stay flat on the ground through a stride.
-    const foot = new THREE.Group(); foot.position.y = -P.shin + 0.02;
+    const foot = new THREE.Bone(); foot.position.y = -P.shin + 0.02;
     const sole = part(shoeGeo, mat(0xb98a5e), 0, -0.03 * P.limb, 0.035, false); sole.scale.set(1.05, 0.42, 1.03);
     const toe = part(new THREE.SphereGeometry(0.05 * P.limb, 10, 8), mat(0xffffff), 0, -0.012 * P.limb, 0.105 * P.limb, false); toe.scale.set(1.05, 0.7, 0.8);
     const lace = part(new THREE.BoxGeometry(0.05 * P.limb, 0.008, 0.05 * P.limb), mat(0xe8563f), 0, 0.03 * P.limb, 0.04 * P.limb, false); lace.rotation.x = 0.35;
@@ -274,29 +286,68 @@ export function createFigure({
   // Something carried in both arms: a supply crate.
   let load = null;
   if (carry !== null) { load = part(new THREE.BoxGeometry(0.34, 0.24, 0.24), mat(carry), 0, P.neckY * 0.45, P.belly + 0.13); load.userData.keep = true; torso.add(load); }
-  // Only the trunk, head and legs throw a shadow; that is all a simple shadow needs.
-  for (const seg of [pelvis, torso, neck, legL.hip, legL.knee, legR.hip, legR.knee]) weld(seg, true);
-  for (const seg of [legL.foot, legR.foot, whites, pupils, mouth]) weld(seg, false);
   // A torch for the right hand, shown only while it is switched on.
-  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; torchProp.visible = false; // lies along the forearm, lens leading
+  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; torchProp.visible = false; torchProp.userData.keep = true; // lies along the forearm, lens leading
   { const barrel = part(new THREE.CylinderGeometry(0.02, 0.02, 0.13, 10), mat(0x3a3f47), 0, 0.035, 0, false), headT = part(new THREE.CylinderGeometry(0.036, 0.024, 0.05, 12), mat(0x8a9099), 0, 0.12, 0, false);
     const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false })); lens.position.y = 0.147;
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
-  for (const seg of [armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, ...accents]) weld(seg, false);
+
+  // ---- The skin
+  const bones = [inner, pelvis, torso, neck, armL.shoulder, armL.elbow, armR.shoulder, armR.elbow, legL.hip, legL.knee, legL.foot, legR.hip, legR.knee, legR.foot, eyeRig, pupils, mouth, browBoneL, browBoneR, smileBone];
+  const bi = (b) => bones.indexOf(b);
+  group.updateMatrixWorld(true);
+  const groupInverse = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const geos = [];
+  const collect = (node, index) => { for (const c of [...node.children]) { if (c.userData.keep || c.isBone) continue; if (c.isMesh) { geos.push(rigid(c, index, groupInverse)); node.remove(c); } else collect(c, index); } };
+  bones.forEach((b, i) => collect(b, i));
+  {
+    const L = P.limb, cShirt = bodyColor, cSkin = skinColor, cShorts = shortsColor, cShade = new THREE.Color(bodyColor).multiplyScalar(0.82);
+    // Trunk: shorts, a barrel of shirt widest at the tummy, rounded shoulders, a neck. Hips and chest share the waist.
+    const top = bodyH + 0.02, barrel = (f) => P.belly + (P.chest - P.belly) * f, tr = [];
+    const T = (y, rx, col, rz = rx * 0.88) => tr.push({ y: PELVIS_Y + y, rx, rz, col, w: smooth((y + 0.02) / 0.09) });
+    T(P.neckY + 0.06, 0.05, cSkin, 0.05);
+    const collar = Math.max(0.052, P.chest * Math.cos(1.19));
+    T(top + P.chest * 0.5 * Math.sin(1.19), collar, cSkin, collar); T(top + P.chest * 0.5 * Math.sin(1.19), collar, cShirt, collar);
+    for (const a of [0.87, 0.56, 0.27]) T(top + P.chest * 0.5 * Math.sin(a), P.chest * Math.cos(a), cShirt);
+    for (const f of [1, 0.75, 0.5, 0.25]) T(0.02 + bodyH * f, barrel(f), cShirt);
+    T(0.035, barrel(0.06), cShirt); T(0.035, barrel(0.06), cShorts); T(-0.005, P.belly * 1.01, cShorts); T(-0.07, P.belly * 1.05, cShorts);
+    geos.push(tube(0, 0, tr, bi(pelvis), bi(torso), { seg: 18, capBottom: true }));
+    // Arms: a short flared sleeve with a turned cuff, then one skin from shoulder to wrist, shared at the elbow.
+    for (const [A, side] of [[armL, -1], [armR, 1]]) {
+      const U = P.upper, F = P.fore, b = Math.min(0.03, U * 0.3), sl = Math.min(0.055, U * 0.5), y0 = PELVIS_Y + P.shY, r = [];
+      const R = (y, rad, col) => r.push({ y: y0 + y, rx: rad * L, col, w: smooth((-y - (U - b)) / (2 * b)) });
+      R(0.045, 0.03, cShirt); R(0.03, 0.05, cShirt); R(0, 0.062, cShirt); R(-sl + 0.008, 0.07, cShirt);
+      R(-sl + 0.008, 0.071, cShade); R(-sl - 0.006, 0.071, cShade); R(-sl - 0.006, 0.046, cSkin);
+      if (-(sl + (U - sl) * 0.5) > -U + b + 0.008) R(-(sl + (U - sl) * 0.5), 0.047, cSkin);
+      for (const d of [b, b / 2, 0, -b / 2, -b]) R(-U + d, 0.042, cSkin);
+      R(-U - F * 0.35, 0.044, cSkin); R(-U - F * 0.75, 0.037, cSkin); R(-U - F, 0.031, cSkin);
+      geos.push(tube(side * P.shX, 0, r, bi(A.shoulder), bi(A.elbow), { capTop: true, capBottom: true }));
+    }
+    // Legs: the leg of the shorts, a thigh, a knee that bends in a curve, a calf, and a sock with two bands.
+    for (const [G, side] of [[legL, -1], [legR, 1]]) {
+      const Th = P.thigh, S = P.shin, Ls = Math.min(0.1, Th * 0.75), b = Math.min(0.035, Th * 0.3), y0 = PELVIS_Y - 0.04, r = [];
+      const R = (y, rad, col) => r.push({ y: y0 + y, rx: rad * L, col, w: smooth((-y - (Th - b)) / (2 * b)) });
+      R(0.02, 0.074, cShorts); R(0.02 - Ls, 0.084, cShorts); R(0.02 - Ls, 0.062, cSkin);
+      for (const d of [b, b / 2, 0, -b / 2, -b]) R(-Th + d, d > 0 ? 0.054 : 0.05, cSkin);
+      R(-Th - S * 0.36, 0.056, cSkin); R(-Th - S + 0.079, 0.043, cSkin);
+      R(-Th - S + 0.078, 0.048, 0x3f8f5a); R(-Th - S + 0.066, 0.048, 0x3f8f5a); R(-Th - S + 0.066, 0.046, 0xfafafa); R(-Th - S + 0.058, 0.046, 0xfafafa);
+      R(-Th - S + 0.058, 0.048, 0xe8563f); R(-Th - S + 0.05, 0.048, 0xe8563f); R(-Th - S + 0.05, 0.046, 0xfafafa); R(-Th - S + 0.012, 0.046, 0xfafafa);
+      geos.push(tube(side * P.hipX, 0, r, bi(G.hip), bi(G.knee), { capBottom: true }));
+    }
+  }
+  const body = new THREE.SkinnedMesh(mergeGeometries(geos), BODY);
+  body.castShadow = true;
+  // Wide enough for any pose, lying down included, so the body is never wrongly left out of the picture.
+  body.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, TALL / 2, 0), TALL * 1.3 + 0.3);
+  group.add(body); body.bind(new THREE.Skeleton(bones));
   group.scale.setScalar(scale);
-  // People further off draw more simply: no shadow past 26 m, and no separate shoes past 45 m.
-  const casters = []; group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o); });
-  let lod = 0;
-  // The one-piece stand-in for when this person is far away, one shape per way of being still.
-  const farMesh = new THREE.Mesh(undefined, BODY); farMesh.visible = false; farMesh.castShadow = false; group.add(farMesh);
-  const farShapes = new Map();
-  let farKey = '', isFar = false, settle = 0;
-  const setFar = (on) => { isFar = on; farMesh.visible = on; inner.visible = !on; };
+  let lod = 0, isFar = false;
 
   let phase = 0, lastElapsed = null, gait = 0, run = 0, footLift = 0;
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
   const soleY = -0.051 * P.limb, SOLE = [[-0.075, 0.004], [0.035, 0], [0.145, 0.004]].map(([z, dy]) => new THREE.Vector3(0, soleY + dy, z * P.limb));
   // The little signs of life: blinking, where the eyes are looking, the mouth, noticing someone come close.
+  const face = [0, 0, 0.75, 1]; // eased toward whichever face fits the moment
   let blinkIn = 1 + Math.random() * 4, blink = 0, gaze = 0, gazeUp = 0, headLook = 0, mouthOpen = 0, hello = 0, wasNear = false;
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
@@ -316,21 +367,14 @@ export function createFigure({
       // People a long way off only need a fresh pose every third frame.
       const d2v = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2, far = d2v > 38 * 38;
       const want = d2v > 45 * 45 ? 2 : d2v > 26 * 26 ? 1 : 0;
-      // Far enough, and holding still (or so far it no longer matters): show the one-piece stand-in.
+      // Far enough, and holding still (or so far it no longer matters): keep the last pose.
       const still = speed < 0.05 && (!o.pose || o.pose === 'sleep') && !o.gesture && o.air === undefined && !o.wave && !o.reach && !o.land;
-      const d = Math.sqrt(d2v), wantFar = !self && (d > FAR_ANY || (still && d > (isFar ? FAR_OUT : FAR_IN)));
-      if (wantFar) {
-        const key = (still ? (o.sitGround ? 'g' : o.sitting ? 's' : o.pose === 'sleep' ? 'z' : 'u') : 'x') + (load && load.visible ? 'L' : '') + (torchProp.visible ? 'T' : '');
-        if (key !== farKey) { farKey = key; settle = farShapes.has(key) ? 0 : 10; if (isFar && settle) setFar(false); }
-        if (settle > 0) settle--; // a few frames for the pose to finish easing before it is frozen
-        else {
-          if (!farShapes.has(key) && bakesLeft > 0) { bakesLeft--; farShapes.set(key, bakeFigure(group, inner)); }
-          if (farShapes.has(key)) { if (farMesh.geometry !== farShapes.get(key)) farMesh.geometry = farShapes.get(key); if (!isFar) setFar(true); return; }
-        }
-      } else if (isFar || farKey) { farKey = ''; if (isFar) setFar(false); }
-      if (want !== lod) { lod = want; for (const m of casters) m.castShadow = lod === 0; legL.foot.visible = legR.foot.visible = lod < 2; }
+      const d = Math.sqrt(d2v);
+      isFar = !self && lastElapsed !== null && (d > FAR_ANY || (still && d > (isFar ? FAR_OUT : FAR_IN)));
+      if (want !== lod) { lod = want; body.castShadow = lod === 0; }
+      if (isFar && (frameCount + slot) % 30 !== 0) return;
       if (far && (frameCount + slot) % 3 !== 0) return;
-      const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, 0.1);
+      const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, isFar ? 1 : 0.1); // far-off people move in big, rare steps
       lastElapsed = elapsed;
       const ease = (k) => 1 - Math.exp(-dt * k);
       gait += (clamp(speed / 0.7, 0, 1) - gait) * ease(10);
@@ -500,7 +544,18 @@ export function createFigure({
       blink = Math.max(0, blink - dt / 0.13);
       const gname = o.gesture ? o.gesture.name : '';
       const shut = lying || gname === 'yawn' || gname === 'laugh' ? 1 : Math.sin(Math.min(1, blink) * Math.PI);
-      eyeRig.scale.y = 1 - 0.9 * shut;
+      // The face for this moment: asked for outright, or read from what the body is doing.
+      const mood = o.mood || GESTURE_FACE[gname] || POSE_FACE[o.pose] || (hello > 0 ? 'happy' : run > 0.6 ? 'effort' : sleepy > 0.6 && !self ? 'sleepy' : 'neutral');
+      const F = FACES[mood] || FACES.neutral, fk = ease(mood === 'surprised' ? 18 : 7);
+      for (let i = 0; i < 4; i++) face[i] += (F[i] - face[i]) * fk;
+      const lop = mood === 'puzzled' ? 0.07 : 0; // one brow higher than the other
+      browBoneL.position.y = browY + (face[0] + lop) * R; browBoneR.position.y = browY + (face[0] - lop) * R;
+      browBoneL.rotation.z = face[1]; browBoneR.rotation.z = -face[1];
+      // The mouth's curve flattens out and turns over into a frown.
+      const curve = face[2];
+      smileBone.rotation.z = curve < 0 ? Math.PI : 0; smileBone.position.y = smileY - (curve < 0 ? R * 0.2 * -curve : 0); smileBone.position.z = smileZ + (curve < 0 ? R * 0.07 : 0); // a frown sits lower, clear of the cheeks
+      smileBone.scale.set(0.85 + 0.15 * Math.min(1, Math.abs(curve)), Math.max(0.12, Math.abs(curve)), 1);
+      eyeRig.scale.y = (1 - 0.9 * shut) * face[3];
       // Looking: at whatever you are about to use, or (for everyone else) at you when you come close.
       let wantYaw = 0, near = false;
       const tx = o.look ? o.look.x : self ? null : viewer.x, tz = o.look ? o.look.z : self ? null : viewer.z;
@@ -528,6 +583,7 @@ export function createFigure({
       else if (o.pose === 'command' || o.pose === 'explain') mo = 0.15 + 0.45 * Math.abs(Math.sin(e * 6.5) * Math.sin(e * 1.9));
       else if (o.pose === 'jacks' || o.pose === 'tug') mo = 0.3;
       else if (hello > 0) mo = 0.6 * Math.sin((hello / 0.7) * Math.PI);
+      else if (mood === 'surprised') mo = 0.55; else if (mood === 'joy') mo = 0.5;
       else if (run > 0.5) mo = 0.22;
       mouthOpen += (mo - mouthOpen) * ease(16);
       mouth.scale.y = 0.1 + 0.9 * mouthOpen; mouth.scale.x = 1 - 0.25 * (gname === 'blow' ? 1 : 0) + 0.1 * mouthOpen;
@@ -535,8 +591,6 @@ export function createFigure({
       const breath = Math.sin(e * (1.5 + run * 2.5)) * (0.012 + run * 0.012);
       torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 1.2);
       pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
-      // Small details are not worth drawing on people a long way off.
-      eyeRig.visible = mouth.visible = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2 < 15 * 15;
       armL.shoulder.rotation.set(pose.shLx, 0, pose.shLz); armR.shoulder.rotation.set(pose.shRx, 0, pose.shRz);
       armL.elbow.rotation.x = pose.elL; armR.elbow.rotation.x = pose.elR;
       pelvis.position.y = PELVIS_Y + pose.py;

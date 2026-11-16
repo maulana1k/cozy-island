@@ -21,7 +21,7 @@ import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
 import { createCrowd, blockAt, blockProgress, JOIN } from './actors/schedule.js';
-import { setViewer, setGround } from './actors/figure.js';
+import { setViewer, setGround, setSleepy } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
 import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
 import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
@@ -504,6 +504,9 @@ function step() {
   const filming = director.active;
   if (filming) { input.consumeInteract(); input.consumeJoin(); input.consumeSit(); input.consumeLook(); input.consumeZoom(); }
   if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${bag.slots.findIndex((s) => s.id === 'torch') + 1} to switch on your torch.`);
+  setSleepy(night);
+  // The scout's face shows how they are doing.
+  player.mood = params.get('mood') || (vitals.hungry || vitals.thirsty ? 'sad' : vitals.winded ? 'effort' : vitals.cheer >= 85 ? 'happy' : null); // ?mood= is a debug aid
   setViewer(camera.position.x, camera.position.z); // detail is judged from the camera, so the films look right
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 

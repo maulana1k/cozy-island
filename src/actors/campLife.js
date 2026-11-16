@@ -35,7 +35,7 @@ export function createCampLife(scene, deps) {
   const face = (from, to) => Math.atan2(to.x - from.x, to.z - from.z);
   const near = (x, z, d) => Math.hypot(player.position.x - x, player.position.z - z) < d;
   const react = (p, name, dur = 1.1) => { p.react = { name, t: 0, dur }; };
-  const emote = (p, icon) => ui.emote(new THREE.Vector3(p.x, groundAt(p.x, p.z) + (p.figure.group.scale.y > 1 ? 2.0 : 1.5), p.z), icon);
+  const emote = (p, icon) => ui.emote(new THREE.Vector3(p.x, groundAt(p.x, p.z) + (p.figure.group.scale.y > 1 ? 2.0 : 1.6), p.z), icon);
 
   // ---- The chief scout drills a squad on the parade ground --------------------
   const mid = SALUTE_LINE[1];
@@ -119,7 +119,7 @@ export function createCampLife(scene, deps) {
         // Not everyone is paying attention all the time.
         const late = drill.timer > 4.5 - 0.35 * (k + 1) * 0.6 && drill.timer > 3.6;
         const o = late ? ORDERS[(drill.order + ORDERS.length - 1) % ORDERS.length] : order;
-        if (o === 'march') s.speed = 1.6; else s.opts = { pose: o };
+        if (o === 'march') s.speed = 1.4; else s.opts = { pose: o };
       });
       trainer.opts = { pose: Math.sin(elapsed * 0.25) > 0.3 ? 'command' : 'jacks' };
       for (const s of beachSquad) s.opts = { pose: 'jacks' };
@@ -132,7 +132,7 @@ export function createCampLife(scene, deps) {
         if (d < 0.2) {
           if (haul.leg === haul.route.length - 1 || haul.leg === 0) { haul.dir = -haul.dir; haul.loaded = haul.leg === 0; carrier.figure.setCarry(haul.loaded); haul.wait = 2.2; react(carrier, 'crouch', 1.2); }
           haul.leg += haul.dir;
-        } else { carrier.speed = haul.loaded ? 1.5 : 1.9; carrier.x += (dx / d) * carrier.speed * dt; carrier.z += (dz / d) * carrier.speed * dt; carrier.rot = Math.atan2(dx, dz); if (haul.loaded) carrier.opts = { pose: 'carry' }; }
+        } else { carrier.speed = haul.loaded ? 1.3 : 1.5; carrier.x += (dx / d) * carrier.speed * dt; carrier.z += (dz / d) * carrier.speed * dt; carrier.rot = Math.atan2(dx, dz); if (haul.loaded) carrier.opts = { pose: 'carry' }; }
       }
 
       // First aid
@@ -175,7 +175,7 @@ export function createCampLife(scene, deps) {
       }
 
       // Catch
-      const hand = (p, out) => out.set(p.x + Math.sin(p.rot) * 0.3, groundAt(p.x, p.z) + 1.25, p.z + Math.cos(p.rot) * 0.3);
+      const hand = (p, out) => out.set(p.x + Math.sin(p.rot) * 0.3, groundAt(p.x, p.z) + 1.35, p.z + Math.cos(p.rot) * 0.3);
       if (busy(catchers)) { /* the game waits */ } else if (game.state === 'held') {
         const h = catchers[game.holder], o = catchers[1 - game.holder];
         // walk back to your own spot if a wild throw took you away from it

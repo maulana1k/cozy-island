@@ -98,10 +98,10 @@ function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   return m;
 }
 
-// Two builds. Scouts are small with a big head (about 1.05 m to the crown, legs about a third of
+// Two builds. Scouts are small with a big head (about 1.15 m to the crown, legs about 0.4 m, a bit over a third of
 // that, a child's long-ish trunk); staff are taller and slimmer. `belly` is the waist at the belt,
 // `hips` the seat of the shorts, `chest` the ribcage under the arms.
-const KID = { thigh: 0.168, shin: 0.162, pelvisY: 0.38, neckY: 0.3, headR: 0.2, headY: 0.18, shX: 0.172, shY: 0.232, upper: 0.126, fore: 0.116, hipX: 0.072, chest: 0.15, belly: 0.136, hips: 0.146, limb: 1 };
+const KID = { thigh: 0.21, shin: 0.21, pelvisY: 0.47, neckY: 0.3, headR: 0.2, headY: 0.18, shX: 0.172, shY: 0.232, upper: 0.126, fore: 0.116, hipX: 0.072, chest: 0.15, belly: 0.136, hips: 0.146, limb: 1 };
 const GROWN = { thigh: 0.25, shin: 0.25, pelvisY: 0.55, neckY: 0.42, headR: 0.15, headY: 0.15, shX: 0.2, shY: 0.345, upper: 0.2, fore: 0.18, hipX: 0.085, chest: 0.158, belly: 0.142, hips: 0.152, limb: 0.95 };
 const KID_LEG = KID.thigh + KID.shin - 0.02; // a scout's hip-to-ankle length, the yardstick for every stride
 
@@ -403,7 +403,7 @@ export function createFigure({
   // The ground at a spot given in the body's own frame (x across, z forward, in metres), with no allocation.
   let gX = 0, gZ = 0, gCos = 1, gSin = 0, gSink = 0;
   const groundLocal = (lx, lz) => groundUnder(gX + lx * gCos + lz * gSin, gZ - lx * gSin + lz * gCos) - gSink;
-  const edgeA = { z: 0, y: 0, sg: 0, zf: 0 }, edgeB = { z: 0, y: 0, sg: 0, zf: 0 };
+  const edgeT = { z: 0, y: 0, sg: 0, zf: 0 }, edgeA = { z: 0, y: 0, sg: 0, zf: 0 }, edgeB = { z: 0, y: 0, sg: 0, zf: 0 };
   // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
   const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0] };
   const pull = (sp, target, w, z, dt, force = 0) => {
@@ -418,12 +418,12 @@ export function createFigure({
     // Walking: cadence climbs from 2.2 to about 3.9 steps a second by a brisk walk (v about 2.1 on a scout's legs),
     // and each foot is down about half of every stride. Running (above about 2.2): the legs turn over a little
     // slower than the quickest walk and every step has a moment in the air; the blend runs over 2.15 to 2.9.
-    const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.8;
+    const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.85;
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
     const Dw = 0.6 - 0.1 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
-    const Cw = 0.46, Cr = 0.43;                           // the longest footprint a scout's leg sweeps walking, running (m)
+    const Cw = 0.72, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
     const r = smooth((vk - 2.15) / 0.75);                  // 0 walking .. 1 running
-    const cWk = Math.min(4.5, Math.max(cWalk, (vk * 2 * Dw) / Cw));
+    const cWk = Math.min(4.4, Math.max(cWalk, (vk * 2 * Dw) / Cw));
     const cK = lerp(cWk, cRun, r);
     const Sk = vk / cK;
     const D = lerp(Dw, Math.min(0.45, Cr / (2 * Math.max(Sk, 1e-4))), r);
@@ -554,7 +554,7 @@ export function createFigure({
       const Tst = 2 / G.c, D = G.D, C = (2 * D * G.S) / scale; // a stride's time; the footprint each foot sweeps (own units)
       // How much of a real run this is: a moment in the air between steps (none walking, so walking is untouched).
       fly = run * smooth((0.5 - D) / 0.12);
-      const heelUp = 0.3 * gait, toeOff = lerp(lerp(0.6, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
+      const heelUp = 0.3 * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
       // Leaning: forward into a run, a touch more while speeding up, back a little while braking. Never into bends.
       const accLean = inAir ? 0 : clamp(acc * 0.008, -0.08, 0.08);
       const crouch = o.crouch || 0, land = o.land || 0;
@@ -598,9 +598,12 @@ export function createFigure({
       // has a corner at every footfall and read as a jiggle).
       const hOver = (L, kL) => Math.sqrt(Math.max(0, (kL * LL) ** 2 - L.z * L.z)) + L.y;
       const kE = lerp(0.99, 0.97, run);
-      const hLow = Math.min(hOver(stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0), kE), hOver(stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0), kE));
+      let hLow = Math.min(hOver(stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0), kE), hOver(stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0), kE));
+      // the heel coming up and the toes rolling over lift the ankle, so check a point short of each end too
+      hLow = Math.min(hLow, hOver(stanceAt(0.9, C, heelUp, toeOff, edgeT, aS, r0), kE), hOver(stanceAt(0.08, C, heelUp, toeOff, edgeT, aS, r0), kE));
       const beat = 0.5 + 0.5 * Math.cos(4 * Math.PI * (phase - D / 2)); // 1 over the middle of each footfall
-      let h = hLow + gait * going * (1 - run) * 0.04 * beat * LL; // walking: a calm rise and fall of about a centimetre a step
+      // walking: the hips vault over the planted leg, up to nearly straight mid-step and down toward the footfalls: a long step costs a bob, not a crouch
+      let h = hLow + gait * going * (1 - run) * Math.max(0.04 * LL, 0.7 * (kE * LL + ANK - hLow)) * beat;
       // Running: a bounce. Off the ground the body flies a true arc under the game's gravity, highest halfway
       // between the steps. On the ground the leg takes the weight like a spring: the hips sink to their lowest
       // halfway through the step (the knee bending to about 40 degrees) and rise again to push off at the
@@ -912,7 +915,7 @@ export function createFigure({
       const reach = (L) => (C > 1e-3 ? clamp(L.z / (C * 0.5 + 0.02), -1.2, 1.2) : 0);
       const lift = (L) => (L.stance ? 0 : Math.sin(Math.PI * L.w));
       const walkW = gait * locoLegs * (inAir ? 0 : 1);
-      const yawP = walkW * lerp(0.1, 0.13, run) * (reach(legs[0]) - reach(legs[1])) * 0.5;
+      const yawP = walkW * lerp(0.11, 0.13, run) * (reach(legs[0]) - reach(legs[1])) * 0.5;
       const rollP = walkW * (1 - run) * 0.045 * (lift(legs[0]) - lift(legs[1]));
       legL.hip.rotation.set(pose.thL, 0, pose.spreadL - rollP); legR.hip.rotation.set(pose.thR, 0, pose.spreadR - rollP);
       legL.knee.rotation.x = pose.knL; legR.knee.rotation.x = pose.knR;

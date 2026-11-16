@@ -363,7 +363,7 @@ export function create(scene, deps) {
   const interactables = people.map((p) => ({
     id: `local-${p.k}`, kind: 'local', position: p,
     get enabled() { return !p.hidden && village.visible; },
-    get markerY() { return groundAt(p.x, p.z) + (p.def.scale > 1.05 ? 2.0 : 1.5); },
+    get markerY() { return groundAt(p.x, p.z) + (p.def.scale > 1.05 ? 2.0 : 1.6); },
     prompt: () => 'E — say hello',
     interact() {
       const lines = p.def.role === 'kid' && Math.random() < 0.6 ? KID_LINES : LINES;
@@ -431,7 +431,7 @@ export function create(scene, deps) {
     if (ox * ox + oz * oz < 1.0 && ox * dx + oz * dz > 0) { p.go = 0; return; }
     const kid = p.def.role === 'kid';
     p.go += (1 - p.go) * (1 - Math.exp(-dt * 2.5));
-    const cruise = (kid ? 2.2 : 1.35) * p.pace * Math.max(0.25, p.go) * (last ? Math.min(1, 0.4 + d / 1.8) : 1);
+    const cruise = (kid ? 1.3 : 1.35) * p.pace * Math.max(0.25, p.go) * (last ? Math.min(1, 0.4 + d / 1.8) : 1);
     const step = Math.min(cruise * dt, d);
     let next = { x: p.x + (dx / d) * step, z: p.z + (dz / d) * step };
     // Near the very end, walk straight in (a keeper behind a counter, a sitter onto the bench).

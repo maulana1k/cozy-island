@@ -39,12 +39,12 @@ export function createVillagers(scene, deps) {
     v.react = { name: REACTIONS[Math.floor(Math.random() * REACTIONS.length)], t: -0.45, dur: 1.1 };
     audio.play('squeak');
     const y = heightAt(v.brain.x, v.brain.z);
-    ui.emote(new THREE.Vector3(v.brain.x, y + 1.5, v.brain.z), EMOTES[Math.floor(Math.random() * EMOTES.length)]);
+    ui.emote(new THREE.Vector3(v.brain.x, y + 1.6, v.brain.z), EMOTES[Math.floor(Math.random() * EMOTES.length)]);
   }
 
   const interactables = villagers.map((v) => ({
     id: v.brain.id, kind: 'villager', position: v.position,
-    get markerY() { return heightAt(v.brain.x, v.brain.z) + 1.4; },
+    get markerY() { return heightAt(v.brain.x, v.brain.z) + 1.5; },
     prompt: () => 'E — nudge',
     interact() { nudge(v, { x: deps.player.position.x, z: deps.player.position.z }); },
   }));
@@ -91,7 +91,7 @@ export function createVillagers(scene, deps) {
             const dur = 3 + Math.random() * 3.5, l = Math.sqrt(bd);
             b.facing.x = (best.x - b.x) / l; b.facing.z = (best.z - b.z) / l; b.timer = Math.max(b.timer, dur + 0.5);
             v.chat = { t: 0, dur, with: best };
-            if (d < 25) ui.emote(new THREE.Vector3(b.x, groundAt(b.x, b.z) + 1.5, b.z), 'note');
+            if (d < 25) ui.emote(new THREE.Vector3(b.x, groundAt(b.x, b.z) + 1.6, b.z), 'note');
           }
         }
 

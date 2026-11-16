@@ -56,10 +56,10 @@ export function createActivities(scene, deps) {
   });
 
   const interactables = scouts.map((s) => ({
-    id: `scout-${s.i}`, kind: 'villager', position: s.member, get markerY() { return groundAt(s.member.x, s.member.z) + 1.4; },
+    id: `scout-${s.i}`, kind: 'villager', position: s.member, get markerY() { return groundAt(s.member.x, s.member.z) + 1.5; },
     get enabled() { return !s.member.hidden; },
     prompt: () => 'E — say hello',
-    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.member.x, groundAt(s.member.x, s.member.z) + 1.5, s.member.z), s.i % 2 ? 'note' : 'heart'); },
+    interact() { s.react = { name: HELLO[s.hellos++ % HELLO.length], t: 0, dur: 1.3 }; audio.play(s.hellos % 2 ? 'squeak' : 'cheer'); ui.emote(new THREE.Vector3(s.member.x, groundAt(s.member.x, s.member.z) + 1.6, s.member.z), s.i % 2 ? 'note' : 'heart'); },
   }));
   const colliders = [];
 

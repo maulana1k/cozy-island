@@ -239,7 +239,7 @@ player.onStep = (surface, running) => {
   if (surface === 'water' && pondDistance(player.position.x, player.position.z) < POND.rw) discover('place-pond');
 };
 // Little accidents: a puff of dust, a squeak and a startled look.
-const overHead = () => new THREE.Vector3(player.position.x, player.position.y + 1.5, player.position.z);
+const overHead = () => new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
 player.onOops = (kind) => {
   const p = player.position;
   if (kind === 'skid') { effects.puff(p.x, p.y, p.z, 5, 0xe9d3a0, 0.35, 0.3); audio.play('step:sand'); return; }
@@ -646,7 +646,7 @@ function step() {
   audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
-  torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.72, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
+  torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.82, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
   // The beam follows the hand a moment late and bobs a little with each step.
   const bob = Math.sin(elapsed * 9) * 0.25 * Math.min(1, player.speed / 2);
   torchAim.set(player.position.x + player.facing.x * 9, player.position.y - 0.6 + bob, player.position.z + player.facing.z * 11);

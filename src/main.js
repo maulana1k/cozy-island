@@ -29,7 +29,7 @@ import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
 import { pickInteractable } from './logic/interact.js';
 import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
-import { START_TIME, POND, AREAS } from './config.js';
+import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector } from './cutscene.js';
 import { createStoryRuntime } from './story/runtime.js';
@@ -437,7 +437,9 @@ storyRt = createStoryRuntime({
   snapshot: () => ({ player: { x: player.position.x, z: player.position.z, yaw: rig.yaw }, day: dayNumber, time: timeOfDay, weather: weather.kind, bag: bag.slots.map((b) => ({ id: b.id, count: b.count })), sips,
     vitals: Object.fromEntries(STAT_KEYS.map((k) => [k, Math.round(vitals[k])])), journal: journal.list().filter((d) => d.done).map((d) => d.id), guide: guideOn }),
   restore(doc) {
-    if (doc.player && Number.isFinite(doc.player.x) && Number.isFinite(doc.player.z)) { player.position.set(doc.player.x, groundAt(doc.player.x, doc.player.z), doc.player.z); rig.yaw = Number(doc.player.yaw) || 0; }
+    // Back where you were, unless that spot has no ground under it now (the ferry's deck only exists on a fresh journey): then camp.
+    const at = doc.player && Number.isFinite(doc.player.x) && Number.isFinite(doc.player.z) && groundAt(doc.player.x, doc.player.z) > 0.15 ? doc.player : PLAYER_START;
+    player.position.set(at.x, groundAt(at.x, at.z), at.z); rig.yaw = Number(at.yaw) || 0;
     if (Number.isFinite(doc.time)) timeOfDay = ((doc.time % 1) + 1) % 1;
     if (Number.isFinite(doc.day)) dayNumber = Math.max(1, Math.floor(doc.day));
     if (['sun', 'wind', 'rain', 'fog'].includes(doc.weather) && !weather.forced) weather.setKind(doc.weather, timeOfDay * 24, true);

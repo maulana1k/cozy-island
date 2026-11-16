@@ -78,6 +78,7 @@ function buildDisc(color, size) {
 
 export function createSky(scene, renderer) {
   renderer.shadowMap.enabled = true;
+  renderer.shadowMap.autoUpdate = false; // main.js asks for a fresh one when it is due
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.toneMappingExposure = 1.0;

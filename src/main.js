@@ -42,8 +42,10 @@ import { createStats, STAT_LABEL } from './logic/stats.js';
 import { heightAt } from './logic/terrain.js';
 
 const canvas = document.getElementById('game');
+// Drawing sharper than this heats the machine for little gain on a high-density screen.
+const MAX_RATIO = 1.5;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_RATIO));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true; // lets a tent be sliced open while you are inside it
 
@@ -264,6 +266,8 @@ const speechPos = new THREE.Vector3(), wayPos = new THREE.Vector3();
 // ---- The journey, tips and little films -----------------------------------------
 const journey = createJourney();
 const director = createDirector(camera);
+const noLimit = params.has('nolimit'); // debug: draw as fast as possible, for measuring
+let saver = false; try { saver = localStorage.getItem('saver') === '1'; } catch { /* private window */ }
 let guideOn = false, filmsOn = true, collected = 0, filmDue = null;
 const tipsSeen = new Set(), filmsSeen = new Set();
 // One line of help, the first time something comes up.
@@ -361,12 +365,13 @@ const hud = createHUD({
   onStart: (mode) => begin(mode),
   onToggleGuide: toggleGuide,
   onToggleFilms: () => { filmsOn = !filmsOn; hud.setFilms(filmsOn); audio.play('ui'); },
+  onToggleSaver: () => { saver = !saver; hud.setSaver(saver); audio.play('ui'); try { localStorage.setItem('saver', saver ? '1' : '0'); } catch { /* private window */ } },
   onUseItem: (id, plain) => useItem(id, plain),
   onDropItem: (id) => dropItem(id),
   describeItem: (id) => describeItem(id),
   onSetTime: (t) => { timeOfDay = t; },
 });
-refreshProgress(); refreshQuest(); hud.setFilms(true);
+refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver);
 // What every scout sets out with.
 bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
 refreshBag();
@@ -424,7 +429,7 @@ if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0,
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });
 
 function onResize() {
-  renderer.setPixelRatio(Math.min(ratio, window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(ratio, window.devicePixelRatio, MAX_RATIO));
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -439,12 +444,13 @@ let lastBlock = null;
 
 // ---- Keeping it smooth: if frames start taking too long, draw at a slightly lower resolution;
 // when there is headroom again, sharpen back up.
-const maxRatio = Math.min(window.devicePixelRatio, 2);
+const maxRatio = Math.min(window.devicePixelRatio, MAX_RATIO);
 let ratio = maxRatio, slow = 0, quick = 0;
 function tuneResolution(raw) {
   if (raw > 0.25) return; // a hitch from switching tabs, not a slow machine
-  slow = raw > 1 / 48 ? slow + raw : Math.max(0, slow - raw * 2);
-  quick = raw < 1 / 58 ? quick + raw : 0;
+  const want = 1 / frameRate(); // judged against the rate we are aiming for, not a fixed 60
+  slow = raw > want * 1.25 ? slow + raw : Math.max(0, slow - raw * 2);
+  quick = raw < want * 1.04 ? quick + raw : 0;
   let next = ratio;
   if (slow > 1.2 && ratio > 1) next = Math.max(1, ratio - 0.25);
   else if (quick > 8 && ratio < maxRatio) next = Math.min(maxRatio, ratio + 0.25);
@@ -457,7 +463,7 @@ function step() {
   const raw = (now - last) / 1000;
   last = now;
   stats.frames++; stats.total += raw; stats.worst = Math.max(stats.worst, raw);
-  if (hud.started) tuneResolution(raw);
+  if (hud.started && !hud.menuOpen) tuneResolution(raw);
   const paused = !hud.started || hud.menuOpen;
   // While paused the world stands still; only the picture keeps refreshing.
   const dt = paused ? 0 : clampDt(raw);
@@ -498,7 +504,7 @@ function step() {
   const filming = director.active;
   if (filming) { input.consumeInteract(); input.consumeJoin(); input.consumeSit(); input.consumeLook(); input.consumeZoom(); }
   if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${bag.slots.findIndex((s) => s.id === 'torch') + 1} to switch on your torch.`);
-  setViewer(player.position.x, player.position.z);
+  setViewer(camera.position.x, camera.position.z); // detail is judged from the camera, so the films look right
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
   // F joins in with whatever the camp is doing right now.
@@ -647,16 +653,32 @@ function step() {
   effects.update(dt);
   ui.update(dt, elapsed);
 
+  // Shadows are redrawn every second picture at the smooth rate: nobody sees a shadow one frame late.
+  renderer.shadowMap.needsUpdate = saver || (stats.frames & 1) === 0;
   renderer.render(scene, camera);
+  // Counted over two pictures, since only every other one redraws the shadows.
+  drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;
+  drawn.lastCalls = renderer.info.render.calls; drawn.lastTris = renderer.info.render.triangles;
 }
-function frame() { step(); requestAnimationFrame(frame); }
+const drawn = { calls: 0, tris: 0, lastCalls: 0, lastTris: 0 };
+// ---- Not working harder than needed: a fast screen would otherwise have every refresh drawn.
+// Smooth is 60 pictures a second, saver 30; the title turns at 30 and the pause menu barely ticks over.
+function frameRate() { return hud.menuOpen ? 10 : !hud.started || saver ? 30 : 60; }
+let lastDraw = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  // The 3 ms of slack lets a 60 Hz screen draw on every refresh, not every other one.
+  if (!noLimit && now - lastDraw < 1000 / frameRate() - 3) return;
+  lastDraw = now;
+  step();
+}
 // Debug aid for screenshots: ?settle runs a few seconds of game time before the first picture.
 if (params.has('settle')) for (let i = 0, n = (Number(params.get('settle')) || 3.5) / 0.05; i < n; i++) { last = performance.now() - 50; step(); }
-frame();
+requestAnimationFrame(frame);
 
 // Handles for automated checks in the browser.
 window.__game = {
   wilds, player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
 };
-if (params.has('dbg')) setInterval(() => { const i = renderer.info; document.title = JSON.stringify({ calls: i.render.calls, tris: i.render.triangles, ratio }); }, 300);
+if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio }); }, 300);

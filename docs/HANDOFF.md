@@ -163,3 +163,29 @@ within 36 m, chosen per tree, not per tile; lumps and tiles out to 230 m with th
 the edge; a lighter bush; people beyond 26 m cast no shadow, beyond 45 m have no separate shoes,
 and beyond 15 m have no eyes or mouth drawn. Frame rate itself was not measured.
 The camp is now the heaviest place, mostly the 70 people (about 1,400 draw calls).
+
+## Heat and speed (2026-11-16)
+
+Design: `docs/superpowers/specs/2026-11-16-heat-and-speed-design.md`. The laptop ran hot because the game drew every refresh of a 120 Hz screen at 2× resolution, and drew about 1,400 separate objects in camp.
+
+What changed:
+
+- **Frame limit** (`frame` and `frameRate` in `src/main.js`): 60 a second in play, 30 with "Battery saver" on (pause menu, remembered in `localStorage` as `saver`), 30 on the title, 10 in the pause menu. `?nolimit` switches the limit off for measuring.
+- **Resolution**: pixel ratio capped at 1.5 (`MAX_RATIO`). The automatic tuning now judges against the chosen rate.
+- **Shadows**: the shadow map is redrawn every second frame (`shadowMap.autoUpdate = false` in `sky.js`, `needsUpdate` set in `main.js`), every frame in saver mode.
+- **Hidden torches**: every person was drawing a torch that should have been hidden (a `visible = false` swallowed by a comment in `figure.js`). About 500 draw calls in camp.
+- **Far-away people are one piece** (`bakeFigure`, `farMesh` in `figure.js`): past 46 m a person holding still, and past 70 m anyone, is shown as one welded mesh frozen in the current pose (standing, sitting, lying each cached per person). One is made per frame at most.
+- **Far-away buildings drop small parts** (`userData.big` from `mergeStatic`, used in `buildings.update`): past 48 m only pieces at least 0.9 m across are drawn.
+- Detail levels for people are judged from the camera, not the player.
+
+Measured with `node tools/prof.mjs` (dev server running; limiter off, midday, standing still):
+
+| Spot | Frame before | Frame after | Draw calls before | Draw calls after |
+|---|---|---|---|---|
+| Camp centre | 6.0 ms | 3.5 ms | 1,404 | 885 |
+| Summit | 5.4 ms | 3.2 ms | 764 | 496 |
+| Jungle, looking back at camp | 6.7 ms | 3.8 ms | 1,682 | 819 |
+
+Frames drawn per second, measured in headless Chrome (a 60 Hz surface): play 60, title 30, pause menu 10. The 120 → 60 cut on the real screen follows from the same limiter but was not measured on it.
+
+Still heavy: a view of the whole camp from 45 to 60 m (the beach) is about 1,240 draw calls, because people who are walking or doing an activity stay in full parts until 70 m. The look-and-feel project should rebuild each person as one skinned mesh, which removes this.

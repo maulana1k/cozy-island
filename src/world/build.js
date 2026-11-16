@@ -121,13 +121,15 @@ export function mergeStatic(root) {
     for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
     if (!g.attributes.normal) g.computeVertexNormals();
-    if (!byMaterial.has(o.material)) byMaterial.set(o.material, { geos: [], cast: false });
+    if (!byMaterial.has(o.material)) byMaterial.set(o.material, { geos: [], cast: false, big: 0 });
     const entry = byMaterial.get(o.material); entry.geos.push(g); entry.cast = entry.cast || o.castShadow;
+    g.computeBoundingSphere(); entry.big = Math.max(entry.big, g.boundingSphere.radius);
   });
   root.clear();
-  for (const [material, { geos, cast }] of byMaterial) {
+  for (const [material, { geos, cast, big }] of byMaterial) {
     const mesh = new THREE.Mesh(mergeGeometries(geos), material);
     mesh.castShadow = cast; mesh.receiveShadow = true;
+    mesh.userData.big = big; // the size of its largest single piece, so small things can be left out far away
     root.add(mesh);
   }
   return root;

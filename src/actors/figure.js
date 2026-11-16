@@ -37,7 +37,32 @@ let groundUnder = null;
 export function setGround(fn) { groundUnder = fn; }
 const solePoint = new THREE.Vector3();
 
-export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; }
+export function setViewer(x, z) { viewer.x = x; viewer.z = z; frameCount++; bakesLeft = 1; }
+// A long way off, a whole person is drawn as one welded shape. Making that shape takes a moment,
+// so only one is made per frame.
+let bakesLeft = 1;
+const FAR_IN = 46, FAR_OUT = 42, FAR_ANY = 70;
+const bakeInv = new THREE.Matrix4(), bakeMat = new THREE.Matrix4();
+function bakeFigure(group, inner) {
+  group.updateMatrixWorld(true);
+  bakeInv.copy(group.matrixWorld).invert();
+  const geos = [];
+  inner.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let p = o; p && p !== group; p = p.parent) if (!p.visible) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.color) {
+      const col = o.material.color, n = g.attributes.position.count, arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { arr[i * 3] = col.r; arr[i * 3 + 1] = col.g; arr[i * 3 + 2] = col.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    }
+    g.applyMatrix4(bakeMat.multiplyMatrices(bakeInv, o.matrixWorld));
+    geos.push(g);
+  });
+  return mergeGeometries(geos);
+}
 
 function part(geo, material, x = 0, y = 0, z = 0, shadow = true) {
   const m = new THREE.Mesh(geo, material);
@@ -253,7 +278,7 @@ export function createFigure({
   for (const seg of [pelvis, torso, neck, legL.hip, legL.knee, legR.hip, legR.knee]) weld(seg, true);
   for (const seg of [legL.foot, legR.foot, whites, pupils, mouth]) weld(seg, false);
   // A torch for the right hand, shown only while it is switched on.
-  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; // lies along the forearm, lens leading torchProp.visible = false;
+  const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; torchProp.visible = false; // lies along the forearm, lens leading
   { const barrel = part(new THREE.CylinderGeometry(0.02, 0.02, 0.13, 10), mat(0x3a3f47), 0, 0.035, 0, false), headT = part(new THREE.CylinderGeometry(0.036, 0.024, 0.05, 12), mat(0x8a9099), 0, 0.12, 0, false);
     const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false })); lens.position.y = 0.147;
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
@@ -262,6 +287,11 @@ export function createFigure({
   // People further off draw more simply: no shadow past 26 m, and no separate shoes past 45 m.
   const casters = []; group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o); });
   let lod = 0;
+  // The one-piece stand-in for when this person is far away, one shape per way of being still.
+  const farMesh = new THREE.Mesh(undefined, BODY); farMesh.visible = false; farMesh.castShadow = false; group.add(farMesh);
+  const farShapes = new Map();
+  let farKey = '', isFar = false, settle = 0;
+  const setFar = (on) => { isFar = on; farMesh.visible = on; inner.visible = !on; };
 
   let phase = 0, lastElapsed = null, gait = 0, run = 0, footLift = 0;
   // The underside of a shoe, in the shin's own frame: heel, middle and toe.
@@ -286,6 +316,18 @@ export function createFigure({
       // People a long way off only need a fresh pose every third frame.
       const d2v = (group.position.x - viewer.x) ** 2 + (group.position.z - viewer.z) ** 2, far = d2v > 38 * 38;
       const want = d2v > 45 * 45 ? 2 : d2v > 26 * 26 ? 1 : 0;
+      // Far enough, and holding still (or so far it no longer matters): show the one-piece stand-in.
+      const still = speed < 0.05 && (!o.pose || o.pose === 'sleep') && !o.gesture && o.air === undefined && !o.wave && !o.reach && !o.land;
+      const d = Math.sqrt(d2v), wantFar = !self && (d > FAR_ANY || (still && d > (isFar ? FAR_OUT : FAR_IN)));
+      if (wantFar) {
+        const key = (still ? (o.sitGround ? 'g' : o.sitting ? 's' : o.pose === 'sleep' ? 'z' : 'u') : 'x') + (load && load.visible ? 'L' : '') + (torchProp.visible ? 'T' : '');
+        if (key !== farKey) { farKey = key; settle = farShapes.has(key) ? 0 : 10; if (isFar && settle) setFar(false); }
+        if (settle > 0) settle--; // a few frames for the pose to finish easing before it is frozen
+        else {
+          if (!farShapes.has(key) && bakesLeft > 0) { bakesLeft--; farShapes.set(key, bakeFigure(group, inner)); }
+          if (farShapes.has(key)) { if (farMesh.geometry !== farShapes.get(key)) farMesh.geometry = farShapes.get(key); if (!isFar) setFar(true); return; }
+        }
+      } else if (isFar || farKey) { farKey = ''; if (isFar) setFar(false); }
       if (want !== lod) { lod = want; for (const m of casters) m.castShadow = lod === 0; legL.foot.visible = legR.foot.visible = lod < 2; }
       if (far && (frameCount + slot) % 3 !== 0) return;
       const dt = lastElapsed === null ? 0 : clamp(elapsed - lastElapsed, 0, 0.1);

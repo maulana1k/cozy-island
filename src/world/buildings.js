@@ -194,6 +194,9 @@ export function createBuildings(scene, deps) {
         const wx = player.position.x - b.c.x, wz = player.position.z - b.c.z;
         const lx = wx * cos - wz * sin, lz = wx * sin + wz * cos;
         b.inside = Math.abs(lx) < b.W / 2 - 0.05 && Math.abs(lz) < b.D / 2 + 0.1;
+        // From far off only the big pieces are drawn: nobody can make out a pillow at sixty metres.
+        const far = wx * wx + wz * wz > (b.far ? 44 * 44 : 48 * 48);
+        if (far !== b.far) { b.far = far; for (const m of b.g.children) if (m.userData.big !== undefined) m.visible = !far || m.userData.big >= 0.9; }
         b.state.inside = b.inside;
         if (b.inside) this.inside = b.c;
         // The slice glides down when you walk in and back up when you leave.

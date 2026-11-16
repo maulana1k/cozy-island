@@ -1372,12 +1372,13 @@ export function createFigure({
       // back with a little overshoot, and it wobbles and rolls a beat behind the body. Walking: a slight sway only.
       if (lastBnc !== null && dt > 0 && dt < 0.06) { const v = (bounce - lastBnc) / dt; bncAcc += (clamp((v - bncVel) / dt, -60, 60) - bncAcc) * ease(40); bncVel = v; }
       lastBnc = bounce;
-      const jk = rg * rg, jolt = pull(spring.jolt, 0, 24, 0.22, dt, bncAcc * 0.9 * jk);
-      const joltX = pull(spring.joltX, 0, 14, 0.25, dt, (-Math.cos(2 * Math.PI * phase) * 3 + bncAcc * 0.03) * jk + Math.cos(2 * Math.PI * phase) * 0.4 * gait * (1 - rg));
-      const joltR = pull(spring.joltR, 0, 15, 0.22, dt, (bncAcc * 0.05 + Math.sin(2 * Math.PI * phase) * 3) * jk);
-      pack.position.y += clamp(jolt, -0.02, 0.05); pack.position.x = clamp(joltX, -0.02, 0.02); pack.rotation.z = clamp(joltR, -0.2, 0.2);
+      const jk = rg * rg, sw = Math.cos(2 * Math.PI * (phase - D / 2)), jolt = pull(spring.jolt, 0, 30, 0.9, dt, bncAcc * 0.3 * jk);
+      // Side sway and roll follow the torso's own waddle (same stride phase), about 50 ms behind it.
+      const joltX = pull(spring.joltX, -sw * (0.008 * jk + 0.002 * gait * (1 - rg)), 30, 0.9, dt);
+      const joltR = pull(spring.joltR, -sw * 0.07 * jk, 30, 0.9, dt);
+      pack.position.y += clamp(jolt, -0.007, 0.02); pack.position.x = clamp(joltX, -0.008, 0.008); pack.rotation.z = clamp(joltR, -0.07, 0.07);
       pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.004, -0.04, 0.08) + Math.max(0, packRel) * PACK_S, 12, 0.3, dt), 0, 0.22);
-      pack.rotation.x = clamp(pack.rotation.x + clamp(jolt, -0.02, 0.05) * 2.5, 0, 0.3);
+      pack.rotation.x = clamp(pack.rotation.x + clamp(jolt, -0.007, 0.02) * 2.5, 0, 0.3);
 
       const w = o.wobble || 0;
       inner.rotation.x = pose.lean + (o.pitch || 0);

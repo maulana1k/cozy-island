@@ -446,7 +446,7 @@ function begin(mode, opts = {}) {
     player.position.x = at.x; player.position.z = at.z; player.position.y = groundAt(at.x, at.z);
     rig.yaw = at.yaw; player.gesture('wave', 1.0, at.look);
     if (!params.has('t')) timeOfDay = 0.52;
-    const hello = () => { tip('arrive', 'Welcome to the island! Walk down the gangway and follow the trail up to camp: the arrow shows the way.'); tip('move', 'W A S D to walk, hold Shift to run. Drag the mouse to look around.'); tip('guide', 'The journey, top right, suggests what to try next. Follow it or ignore it: press G to hide it.'); };
+    const hello = () => { tip('arrive', 'Welcome to the island! Walk down the gangway and follow the trail up to camp: the arrow shows the way.'); tip('move', 'W A S D to walk, press Shift to switch between walking and running. Drag the mouse to look around.'); tip('guide', 'The journey, top right, suggests what to try next. Follow it or ignore it: press G to hide it.'); };
     if (opts.skipIntro) hello(); else film('intro', { onEnd: hello });
   } else tip('free', 'No guide this time. Press G if you would like the journey after all.');
   refreshQuest();
@@ -581,7 +581,7 @@ function step() {
   else {
     if (join) hintList.push(['F', player.act ? `${join.verb} (move to stop)` : join.verb, false]);
     hintList.push(['X', player.sitting ? 'stand up' : 'sit down', false]);
-    if (elapsed < 14) hintList.push(['W A S D', 'move', false], ['Shift', 'run', false], ['Space', 'hop', false]);
+    if (elapsed < 14) hintList.push(['W A S D', 'move', false], ['Shift', 'walk / run', false], ['Space', 'hop', false]);
   }
   hud.setHints(hud.started ? hintList : []);
 

@@ -12,6 +12,7 @@ export function createInput(keyTarget, pointerTarget) {
   let hop = false, interact = false, mute = false, sit = false, join = false;
   let dragging = false, lookX = 0, lookY = 0, zoom = 0;
   let anyKey = false, freeLook = false;
+  let running = false; // Shift switches between walking and running; it stays that way until pressed again
 
   keyTarget.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -20,6 +21,7 @@ export function createInput(keyTarget, pointerTarget) {
     if (e.repeat) return;
     held.add(e.code);
     if (e.code === 'Space') hop = true;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') running = !running;
     if (e.code === 'KeyE') interact = true;
     if (e.code === 'KeyN') mute = true;
     if (e.code === 'KeyX') sit = true;
@@ -31,7 +33,7 @@ export function createInput(keyTarget, pointerTarget) {
     if (e.code === 'MetaLeft' || e.code === 'MetaRight' || e.key === 'Meta') held.clear();
   });
   // A key held while the window loses focus never sends keyup, so drop everything.
-  keyTarget.addEventListener('blur', () => { held.clear(); dragging = false; });
+  keyTarget.addEventListener('blur', () => { held.clear(); dragging = false; running = false; }); // leaving the window drops back to a walk
 
   // Capturing the pointer keeps a drag alive when the cursor slides over a button or off the picture.
   pointerTarget.addEventListener('pointerdown', (e) => {
@@ -61,7 +63,7 @@ export function createInput(keyTarget, pointerTarget) {
       const len = Math.hypot(x, z);
       return len > 0 ? { x: x / len, z: z / len } : { x: 0, z: 0 };
     },
-    get run() { return held.has('ShiftLeft') || held.has('ShiftRight'); },
+    get run() { return running; },
     get anyKeyPressed() { return anyKey; },
     // Turned on while the mouse is captured for free look.
     setFreeLook(on) { freeLook = !!on; },

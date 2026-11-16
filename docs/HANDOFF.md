@@ -206,3 +206,9 @@ Design: `docs/superpowers/specs/2026-11-16-look-and-feel-design.md`.
 | Beach, looking at camp | about 1,240 | 752 | not measured | not measured |
 
 Camp (target 600) and the beach view (target 700) are just over their targets. Not yet done from the design: parts B to G.
+
+## Look and feel, parts C, D, E: torch, sea, grass (2026-11-16, on `build`)
+
+- **Torch** (`src/main.js`): wider cone (0.6), fully soft edge, gentle fall-off (decay 0.45, reach 42 m) at much lower intensity, so the pool spreads and fades with distance instead of burning the near ground. `torchGlow` is a small point light round the scout. The aim follows the facing a moment late and bobs with the stride.
+- **Sea** (`src/world/island.js`): three long slow waves instead of short ripples. The shore foam was a hard 3.4 m band at 85% white, which is what made the sea look white from the beach; it is now a soft band about a stride wide that swells and fades with each wash. Not done: the wet-sand line on the beach.
+- **Grass** (`ribbonClump`, `tuftGeometry` and the grass shader in `src/world/scatter.js`): blades keep their width and end blunt, bend over along their length, sway in slow waves with gusts, and lean away from the player's feet (`uWalker`). 7 blades of 4 segments per clump (56 triangles, was 36).

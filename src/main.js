@@ -89,7 +89,10 @@ const bag = createBag(12);
 const vitals = createStats();
 let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 // The torch throws a cone of light ahead of you, not a glow all round.
-const torch = new THREE.SpotLight(0xfff0c8, 0, 30, 0.42, 0.55, 1.1); scene.add(torch, torch.target);
+// A wide, soft-edged beam that spreads and fades the further it lands, and a faint glow round the scout.
+const torch = new THREE.SpotLight(0xfff0c8, 0, 42, 0.6, 1, 0.45); scene.add(torch, torch.target);
+const torchGlow = new THREE.PointLight(0xffe2b0, 0, 4.5, 1.6); scene.add(torchGlow);
+const torchAim = new THREE.Vector3();
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
 const say = (text, pic) => hud.note(text, pic);
@@ -586,8 +589,14 @@ function step() {
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
   torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.62, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
-  torch.target.position.set(player.position.x + player.facing.x * 9, player.position.y + 0.1, player.position.z + player.facing.z * 9);
-  torch.intensity += ((torchOn && !player.asleep ? 30 + night * 190 : 0) - torch.intensity) * 0.25;
+  // The beam follows the hand a moment late and bobs a little with each step.
+  const bob = Math.sin(elapsed * 9) * 0.25 * Math.min(1, player.speed / 2);
+  torchAim.set(player.position.x + player.facing.x * 11, player.position.y - 0.3 + bob, player.position.z + player.facing.z * 11);
+  torch.target.position.lerp(torchAim, 1 - Math.exp(-clampDt(raw) * 9));
+  const torchLit = torchOn && !player.asleep ? 1 : 0;
+  torch.intensity += (torchLit * (2.2 + night * 7.5) - torch.intensity) * 0.25;
+  torchGlow.position.set(player.position.x, player.position.y + 0.9, player.position.z);
+  torchGlow.intensity += (torchLit * night * 1.6 - torchGlow.intensity) * 0.25;
 
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
@@ -651,7 +660,7 @@ function step() {
   village.update(elapsed);
   village.setNight(night);
   buildings.setNight(night);
-  scatter.update(elapsed);
+  scatter.update(elapsed, player.position);
   props.update(dt, elapsed, night);
   effects.update(dt);
   ui.update(dt, elapsed);

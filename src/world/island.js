@@ -67,8 +67,9 @@ const waterVertex = /* glsl */ `
   varying float vWave;
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
-    float w = sin(world.x * 0.35 + uTime * 0.9) * 0.06 + sin(world.z * 0.27 - uTime * 0.7) * 0.06
-            + sin((world.x + world.z) * 0.6 + uTime * 1.3) * 0.025;
+    // A slow, broad swell: three long waves crossing each other, none of them tall.
+    float w = sin(world.x * 0.085 + world.z * 0.03 + uTime * 0.42) * 0.085 + sin(world.z * 0.07 - world.x * 0.025 - uTime * 0.34) * 0.075
+            + sin((world.x * 0.6 + world.z * 0.8) * 0.17 + uTime * 0.58) * 0.035;
     world.y += w;
     vWave = w;
     vWorld = world.xyz;
@@ -100,7 +101,7 @@ const waterFragment = /* glsl */ `
     // Soft sparkle bands
     float band = sin(vWorld.x * 0.11 + vWorld.z * 0.07 + uTime * 0.25) * sin(vWorld.z * 0.09 - vWorld.x * 0.05 - uTime * 0.2);
     col += band * 0.035;
-    col += vWave * 0.5;
+    col += vWave * 0.3;
 
     // Foam lines that breathe in and out along the shore
     float wobble = sin(ang * 14.0 + uTime * 0.6) * 0.35 + sin(ang * 31.0 - uTime * 0.9) * 0.18;
@@ -108,14 +109,16 @@ const waterFragment = /* glsl */ `
     float edge = r - (uShore + 0.25 + wobble + tide);
     // A broad band of white surf lapping at the shore, with a broken leading edge.
     float surf = edge + sin(ang * 60.0 + uTime * 1.4) * 0.25 + sin(ang * 133.0 - uTime) * 0.12;
-    float foam = step(-0.9, surf) * (1.0 - smoothstep(1.6, 2.5, surf));
+    // Soft at both edges and only a stride wide, fading as each wave draws back.
+    float wash = 0.55 + 0.45 * sin(uTime * 0.5 + 1.2);
+    float foam = smoothstep(-0.55, 0.0, surf) * (1.0 - smoothstep(0.15, 1.25, surf)) * (0.45 + 0.4 * wash);
     float edge2 = r - (uShore + 2.6 + wobble * 1.4 - tide);
-    foam += (1.0 - smoothstep(0.0, 0.35, abs(edge2))) * 0.55;
-    col = mix(col, uFoam, clamp(foam, 0.0, 1.0) * 0.85);
+    foam += (1.0 - smoothstep(0.0, 0.5, abs(edge2))) * 0.28 * (1.0 - wash * 0.6);
+    col = mix(col, uFoam, clamp(foam, 0.0, 1.0) * 0.8);
 
     col *= uLight;
     float alpha = mix(0.62, 0.96, depthT);
-    alpha = max(alpha, clamp(foam, 0.0, 1.0) * 0.9);
+    alpha = max(alpha, clamp(foam, 0.0, 1.0) * 0.85);
 
     float dist = length(vWorld - cameraPosition);
     float fog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);

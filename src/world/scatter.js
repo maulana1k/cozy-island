@@ -37,7 +37,8 @@ function ribbonClump({ blades, height, width, spread, droop, rows = 4, shape = '
     const pts = [];
     for (let i = 0; i <= rows; i++) {
       const t = i / rows, out = r0 + bend * hb * t * t, y = hb * (t - 0.22 * bend * t * t);
-      const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : (1 - t * t * 0.92));
+      // A blade keeps its width most of the way up and ends blunt and rounded, not in a spike.
+      const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : Math.max(0.3, Math.pow(1 - Math.pow(t, 2.6), 0.6)));
       pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, 0.8 + 0.2 * t]);
     }
     for (let i = 0; i < rows; i++) {
@@ -121,7 +122,7 @@ export const TREE_KINDS = [
 export const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
 // Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
-export const tuftGeometry = () => ribbonClump({ blades: 9, height: 0.8, width: 0.05, spread: 0.2, droop: 0.42, rows: 2 });
+export const tuftGeometry = () => ribbonClump({ blades: 7, height: 0.72, width: 0.06, spread: 0.2, droop: 0.85, rows: 4 });
 
 // A chunky angular block of stone with a flat top.
 export function rockGeometry() {
@@ -210,16 +211,23 @@ export function createScatter(scene) {
 
   // ---- Tall dry grass, swaying in the breeze
   const rng = createRng(SEED + 21);
-  const grassTime = { value: 0 };
+  const grassTime = { value: 0 }, grassWalker = { value: new THREE.Vector3(0, 0, 9999) };
   const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true });
   grassMat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = grassTime;
-    shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    shader.uniforms.uTime = grassTime; shader.uniforms.uWalker = grassWalker;
+    shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWalker;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
-        float swayA = sin(uTime * 1.5 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.27);
-        float swayB = cos(uTime * 1.1 + instanceMatrix[3].x * 0.21 - instanceMatrix[3].z * 0.18);
-        transformed.x += swayA * 0.1 * position.y * position.y;
-        transformed.z += swayB * 0.07 * position.y * position.y;
+        // The breeze crosses the field as slow waves, with gusts; tips move most.
+        vec2 at = instanceMatrix[3].xz;
+        float gust = 0.55 + 0.45 * sin(uTime * 0.23 + at.x * 0.03 + at.y * 0.02);
+        float swayA = sin(uTime * 1.05 + at.x * 0.16 + at.y * 0.11) * gust;
+        float swayB = cos(uTime * 0.8 + at.x * 0.09 - at.y * 0.13) * gust;
+        float tip = position.y * position.y;
+        transformed.x += swayA * 0.16 * tip;
+        transformed.z += swayB * 0.1 * tip;
+        // Grass leans away from feet walking through it.
+        vec2 away = at - uWalker.xz; float near = 1.0 - smoothstep(0.2, 1.3, length(away));
+        transformed.xz += normalize(away + 0.0001) * near * 0.45 * tip;
       #endif`);
   };
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
@@ -277,7 +285,8 @@ export function createScatter(scene) {
     // Position of a tree's canopy, for leaf particles.
     treeTop(id) { const t = treeById.get(id); return t ? new THREE.Vector3(t.x, t.y + TREE_KINDS[t.kind].top * t.scale, t.z) : null; },
     shakeTree(id, elapsed) { const t = treeById.get(id); if (t) t.shakeStart = elapsed; },
-    update(elapsed) {
+    update(elapsed, walker) {
+      if (walker) grassWalker.value.copy(walker);
       grassTime.value = elapsed;
       // The slow sway of the trees is refreshed every other frame; a shaken tree every frame.
       const shaking = trees.some((t) => elapsed - t.shakeStart < SHAKE_TIME);

@@ -328,9 +328,9 @@ export function createScatter(scene) {
       for (const t of trees) {
         // A slow breeze, plus a quick fading wobble when shaken.
         // The shared wind (src/world/weather.js): a stronger sway and a lean the way it blows, gusting in waves.
-        const wv = WIND.value, ws = wv.z, amp = 0.012 * (1 + ws * 1.6);
-        let tiltX = Math.sin(elapsed * (0.6 + ws * 0.35) + t.phase) * amp, tiltZ = Math.cos(elapsed * (0.45 + ws * 0.3) + t.phase) * amp;
-        { const gust = (0.55 + 0.45 * Math.sin(wv.w * 0.35 + (t.x * wv.x + t.z * wv.y) * 0.05)) * (0.5 + 0.5 * Math.sin(wv.w * (0.7 + 0.5 * ws) + t.x * 0.31 + t.z * 0.23)), lean = (0.004 + 0.045 * ws * ws) * gust / Math.sqrt(t.scale);
+        const wv = WIND.value, ws = wv.z, amp = 0.012 * (1 + ws * 3.0);
+        let tiltX = Math.sin(elapsed * (0.6 + ws * 0.6) + t.phase) * amp, tiltZ = Math.cos(elapsed * (0.45 + ws * 0.5) + t.phase) * amp;
+        { const gust = (0.55 + 0.45 * Math.sin(wv.w * 0.35 + (t.x * wv.x + t.z * wv.y) * 0.05)) * (0.5 + 0.5 * Math.sin(wv.w * (0.7 + 0.5 * ws) + t.x * 0.31 + t.z * 0.23)), lean = (0.004 + 0.09 * ws * ws) * gust / Math.sqrt(t.scale);
           const c = Math.cos(t.rot), sn = Math.sin(t.rot), lx = wv.x * c - wv.y * sn, lz = wv.x * sn + wv.y * c; // the lean in the tree's own frame (rotation order YXZ)
           tiltX += lz * lean; tiltZ -= lx * lean; }
         const since = elapsed - t.shakeStart;

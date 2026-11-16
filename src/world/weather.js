@@ -1,5 +1,5 @@
 // Dynamic weather: a director that picks the next weather, a blender that fades between looks without
-// popping, and three particle kinds (rain streaks, swirling wind streaks, low ground mist), each ONE
+// popping, and three particle kinds (rain streaks, straight wind streaks, low ground mist), each ONE
 // instanced mesh whose motion is computed entirely in its vertex shader. Per frame the CPU only writes
 // a few uniforms and a handful of numbers: no allocations.
 //
@@ -26,7 +26,7 @@ export const WIND_GLSL = /* glsl */`
 vec2 windPush(vec2 at, float t, float s) {
   float gust = 0.55 + 0.45 * sin(t * 0.35 + dot(at, uWind.xy) * 0.05);
   float ph = t * (0.7 + 0.5 * s) + at.x * 0.31 + at.y * 0.23;
-  float amp = 0.02 + 0.3 * s * s;
+  float amp = 0.02 + 0.5 * s * s;
   vec2 along = uWind.xy * (0.5 + 0.5 * sin(ph)) * gust;
   vec2 across = vec2(-uWind.y, uWind.x) * sin(ph * 0.7 + 1.3) * 0.25 * gust;
   return (along + across) * amp;
@@ -200,29 +200,23 @@ function buildWindStreaks(rng) {
     vertexShader: /* glsl */`
       attribute vec4 aSeed; attribute vec4 aSeed2; uniform float uTime, uAmt; uniform vec3 uCenter; uniform vec4 uWind; varying float vA;
       const vec3 BOX = vec3(30.0, 7.0, 30.0);
-      vec3 swirl(float t) { // a lazy, chaotic loop: two frequencies per axis, different for every streak
-        float r = 0.2 + aSeed2.x * 0.45, w1 = 0.35 + aSeed2.y * 0.4, w2 = 0.25 + aSeed2.z * 0.3, ph = aSeed2.w * 6.2832;
-        return vec3(sin(t * w1 + ph) * r + sin(t * w2 * 2.3 + aSeed.x * 9.0) * r * 0.5,
-                    sin(t * w2 + aSeed.y * 6.28) * r * 0.3 + sin(t * 0.6 * w1 + aSeed.z * 20.0) * 0.15,
-                    cos(t * w1 + ph) * r + cos(t * w2 * 1.7 + aSeed.z * 9.0) * r * 0.5);
-      }
       void main() {
         if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
-        float speed = 1.8 + uWind.z * 1.6 + aSeed2.x * 0.8; // a steady breeze, not a gale
+        float speed = 4.5 + uWind.z * 2.0 + aSeed2.x * 1.5; // straight streaks gliding with the wind
         vec3 drift = vec3(uWind.x, 0.0, uWind.y) * speed;
         vec3 hb = aSeed.xyz * BOX + drift * uTime;
         vec3 rel = mod(hb - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
         vec3 shift = (uCenter + rel) - hb;
-        float s = position.y, tau = uTime - s * 1.1;
-        vec3 p = aSeed.xyz * BOX + drift * tau + swirl(tau) + shift;
-        vec3 q = aSeed.xyz * BOX + drift * (tau - 0.03) + swirl(tau - 0.03) + shift;
+        float s = position.y, tau = uTime - s * 0.6;
+        vec3 p = aSeed.xyz * BOX + drift * tau + shift; // straight and level: no curls, no bobbing
+        vec3 q = aSeed.xyz * BOX + drift * (tau - 0.03) + shift;
         vec4 a = viewMatrix * vec4(p, 1.0), b = viewMatrix * vec4(q, 1.0);
         vec3 side = normalize(cross(b.xyz - a.xyz, a.xyz) + 1e-5);
         float dist = length(a.xyz), taper = sin(3.14159 * s);
         vec4 v = a; v.xyz += side * position.x * 0.05 * taper * (1.0 + dist * 0.03);
         gl_Position = projectionMatrix * v;
         float edge = (1.0 - smoothstep(0.7, 1.0, abs(rel.y) / 3.5)) * (1.0 - smoothstep(0.65, 1.0, length(rel.xz) / 15.0));
-        vA = edge * smoothstep(1.2, 4.0, dist) * taper;
+        vA = edge * smoothstep(3.0, 7.0, dist) * taper; // none right in front of the lens, where they read as big diagonals
       }`,
     fragmentShader: /* glsl */`
       uniform float uAlpha; varying float vA;

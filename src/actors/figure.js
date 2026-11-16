@@ -405,7 +405,7 @@ export function createFigure({
   const groundLocal = (lx, lz) => groundUnder(gX + lx * gCos + lz * gSin, gZ - lx * gSin + lz * gCos) - gSink;
   const edgeA = { z: 0, y: 0, sg: 0, zf: 0 }, edgeB = { z: 0, y: 0, sg: 0, zf: 0 };
   // Arms, head nod and backpack carry on a moment after the body moves: small damped springs [value, velocity].
-  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0] };
+  const spring = { shL: [0, 0], shR: [0, 0], elL: [-0.15, 0], elR: [-0.15, 0], nod: [0, 0], pack: [0, 0], bob: [0, 0], flap: [0, 0], headB: [0, 0] };
   const pull = (sp, target, w, z, dt, force = 0) => {
     if (dt > 0.06 || dt <= 0) { if (dt > 0.06) { sp[0] = target; sp[1] = 0; } return sp[0]; }
     sp[1] += (-(w * w) * (sp[0] - target) - 2 * z * w * sp[1] + force) * dt; sp[0] += sp[1] * dt; return sp[0];
@@ -415,12 +415,16 @@ export function createFigure({
   // body, so past a brisk walk the only way to go faster is a moment in the air between steps: running.
   function gaitOf(v) {
     const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
-    const cPref = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : vk < 2.3 ? 3.1 + ((vk - 1.35) / 0.95) * 0.15 : 3.25 + Math.min(1, (vk - 2.3) / 1.6) * 0.2;
-    const Dw = 0.6 - 0.06 * smooth(vk / 1.35);           // share of a stride each foot is down when walking
-    const Cw = 0.44, Cr = 0.43;                           // the longest footprint a scout's leg sweeps walking, running (m)
-    const needD = vk > 0.01 ? (Cw * cPref) / (2 * vk) : 1; // what walking would need at the preferred cadence
-    const r = smooth((0.52 - needD) / 0.16);              // 0 walking .. 1 running
-    const cK = lerp(Math.max(cPref, (vk * 2 * Dw) / Cw), cPref, r);
+    // Walking: cadence climbs from 2.2 to about 3.9 steps a second by a brisk walk (v about 2.1 on a scout's legs),
+    // and each foot is down about half of every stride. Running (above about 2.2): the legs turn over a little
+    // slower than the quickest walk and every step has a moment in the air; the blend runs over 2.15 to 2.9.
+    const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.8;
+    const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
+    const Dw = 0.6 - 0.1 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
+    const Cw = 0.46, Cr = 0.43;                           // the longest footprint a scout's leg sweeps walking, running (m)
+    const r = smooth((vk - 2.15) / 0.75);                  // 0 walking .. 1 running
+    const cWk = Math.min(4.5, Math.max(cWalk, (vk * 2 * Dw) / Cw));
+    const cK = lerp(cWk, cRun, r);
     const Sk = vk / cK;
     const D = lerp(Dw, Math.min(0.45, Cr / (2 * Math.max(Sk, 1e-4))), r);
     return { r, vk, c: cK / sqK, S: Sk * legK, D };
@@ -584,7 +588,7 @@ export function createFigure({
           // Walking, the foot skims through. (Running, the swing is set by the joints further down; this path
           // still says where the foot is for the arms and the ground under it.)
           const e = lerp(smooth(w), smooth(Math.pow(w, 1.35)), run);
-          L.lift = gait * lerp(0.17 * LL * Math.pow(Math.sin(Math.PI * w), 1.3), LL * (0.3 + 0.3 * smooth((G.vk - 2) / 1.9)) * Math.sin(Math.PI * Math.pow(w, 0.7)), run);
+          L.lift = gait * lerp(0.17 * LL * Math.pow(Math.sin(Math.PI * w), 0.8), LL * (0.3 + 0.3 * smooth((G.vk - 2) / 1.9)) * Math.sin(Math.PI * Math.pow(w, 0.7)), run);
           L.z = lerp(edgeA.z, edgeB.z, e); L.y = lerp(edgeA.y, edgeB.y, w) + L.lift;
           L.sg = lerp(edgeA.sg, edgeB.sg, smooth(w)) + run * 0.35 * Math.sin(Math.PI * w);
         }
@@ -596,13 +600,13 @@ export function createFigure({
       const kE = lerp(0.99, 0.97, run);
       const hLow = Math.min(hOver(stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0), kE), hOver(stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0), kE));
       const beat = 0.5 + 0.5 * Math.cos(4 * Math.PI * (phase - D / 2)); // 1 over the middle of each footfall
-      let h = hLow + gait * going * (1 - run) * 0.05 * beat * LL;
+      let h = hLow + gait * going * (1 - run) * 0.04 * beat * LL; // walking: a calm rise and fall of about a centimetre a step
       // Running: a bounce. Off the ground the body flies a true arc under the game's gravity, highest halfway
       // between the steps. On the ground the leg takes the weight like a spring: the hips sink to their lowest
       // halfway through the step (the knee bending to about 40 degrees) and rise again to push off at the
       // speed they landed with, so the height and its rate of change are smooth all the way round.
       // The bounce, as an offset from the hips' height at touchdown and toe-off (hE).
-      const gU = GRAVITY / scale, tc = D * Tst, tf = Math.max(0, (0.5 - D) * Tst), V = (gU * tf) / 2;
+      const gU = (GRAVITY * (1 + 0.5 * fly)) / scale, tc = D * Tst, tf = Math.max(0, (0.5 - D) * Tst), V = (gU * tf) / 2;
       const dip = V * tc * 0.16; stAl = 2 * dip - (V * tc) / 4; stBe = (V * tc) / 4 - dip;
       // hE: as high as it can be with the planted leg still reaching the ground all through the step (landing
       // with the knee a little bent, pushing off nearly straight).
@@ -740,11 +744,11 @@ export function createFigure({
       // degrees each way. Running: elbows at about a right angle, the hand coming forward to the chest and
       // back past the hip (further back than forward), not an athlete's punch.
       const fR = C > 1e-3 ? clamp(legs[0].z / (C * 0.5 + 0.02), -1, 1) : 0, fL = C > 1e-3 ? clamp(legs[1].z / (C * 0.5 + 0.02), -1, 1) : 0;
-      const aSw = lerp(0.27, 0.58, run) * gait * going, aOff = lerp(0.025, 0.13, run) * gait - (lean + t.trunk) * 0.85 + clamp(acc * 0.012, -0.15, 0.12);
+      const aSw = lerp(0.27, 0.1, run) * gait * going, aOff = lerp(0.025, 0.35, run) * gait - (lean + t.trunk) * 0.85 + clamp(acc * 0.012, -0.15, 0.12);
       t.shLx = aOff - aSw * fL; t.shRx = aOff - aSw * fR;
-      const elOf = (f) => -(0.15 * (1 - gait) + gait * (lerp(0.2, 1.45, run) + lerp(0.15 * Math.max(0, f), 0.12 * f, run) * going));
+      const elOf = (f) => -(0.15 * (1 - gait) + gait * (lerp(0.2, 0.3, run) + lerp(0.15 * Math.max(0, f), 0.04 * f, run) * going));
       t.elL = elOf(fL); t.elR = elOf(fR);
-      t.shLz = -(0.12 + 0.07 * run); t.shRz = 0.12 + 0.07 * run;
+      t.shLz = -(0.12 + 0.56 * run); t.shRz = 0.12 + 0.56 * run; // running: both arms out to the sides like little wings (about 40 degrees)
       // Winding up for a jump: arms swing back. Landing from a standing jump: arms out for balance.
       t.shLx += crouch * 0.9; t.shRx += crouch * 0.9; t.elL -= crouch * 0.25; t.elR -= crouch * 0.25;
       const armsOut = landRun ? 0 : land;
@@ -966,14 +970,18 @@ export function createFigure({
       mouth.scale.y = 0.1 + 0.9 * mouthOpen; mouth.scale.x = 1 - 0.25 * (gname === 'blow' ? 1 : 0) + 0.1 * mouthOpen;
       // Breathing lifts the chest; faster after a run. Standing still, the weight shifts from foot to foot.
       const breath = Math.sin(e * (1.5 + effort * 2.5)) * (0.012 + effort * 0.012);
-      torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 1.2);
       pelvis.rotation.z = Math.sin(e * 0.55) * 0.035 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1) + rollP;
       pelvis.position.x = walkW * (1 - run) * 0.012 * (lift(legs[0]) - lift(legs[1])); // weight over the planted foot
       pelvis.position.y = PELVIS_Y + pose.py;
       pelvis.rotation.y = yawP;
       // The upper body rides the bounce a little softer than the hips, so the head is steadier still.
-      torso.position.y = -bounce * 0.28; neck.position.y = P.neckY - bounce * 0.14;
-      torso.rotation.set(pose.trunk, -yawP * 1.8 + clamp(turn * 0.08, -0.25, 0.25) * gait, -rollP * 1.1);
+      const rg = fly * going, lagB = pull(spring.headB, bounce, 12, 0.4, dt);
+      // Torso, neck and head ride the hips rigidly (no separate vertical motion, so the neck never stretches).
+      torso.position.y = 0; neck.position.y = P.neckY / (1 + breath);
+      const waddle = 0.09 * rg * Math.cos(2 * Math.PI * (phase - D / 2));
+      torso.rotation.set(pose.trunk, -yawP * 1.8 + clamp(turn * 0.08, -0.25, 0.25) * gait, -rollP * 1.1 + waddle);
+      torso.scale.set(1 + breath * 0.5, 1 + breath, 1 + breath * 1.2);
+      neck.scale.set(1 / (1 + breath * 0.5), 1 / (1 + breath), 1 / (1 + breath * 1.2)); // breathing swells the chest only: the neck and head keep their size and place
       // How hard the hips are being lifted and dropped: it jolts the head, the arms and the backpack.
       // (The steady running bounce counts for only a little: the body is ready for it.)
       const pyB = pose.py - bounce * 0.75;
@@ -982,10 +990,11 @@ export function createFigure({
       // Arms: damped springs toward their pose, loose while swinging free, firm when doing something.
       const loose = locoArms * Math.max(gait, inAir ? 0.6 : 0);
       const wS = lerp(24, 19, loose), zS = lerp(0.8, 0.7, loose), wE = lerp(26, 20, loose);
-      armL.shoulder.rotation.set(pull(spring.shL, pose.shLx, wS, zS, dt), 0, pose.shLz);
-      armR.shoulder.rotation.set(pull(spring.shR, pose.shRx, wS, zS, dt), 0, pose.shRz);
-      armL.elbow.rotation.x = Math.min(0, pull(spring.elL, pose.elL, wE, 0.55, dt, pyAcc * 0.25 * loose));
-      armR.elbow.rotation.x = Math.min(0, pull(spring.elR, pose.elR, wE, 0.55, dt, pyAcc * 0.25 * loose));
+      const flap = pull(spring.flap, rg * 1.8 * bounce, 15, 0.3, dt) * 1.0; // wings flop up and down a beat behind the hops
+      armL.shoulder.rotation.set(pull(spring.shL, pose.shLx, wS, zS, dt), 0, pose.shLz - flap);
+      armR.shoulder.rotation.set(pull(spring.shR, pose.shRx, wS, zS, dt), 0, pose.shRz + flap);
+      armL.elbow.rotation.x = Math.min(0, pull(spring.elL, pose.elL, wE, 0.55, dt, pyAcc * 0.25 * loose) - Math.abs(flap) * 1.5);
+      armR.elbow.rotation.x = Math.min(0, pull(spring.elR, pose.elR, wE, 0.55, dt, pyAcc * 0.25 * loose) - Math.abs(flap) * 1.5);
       // The backpack jogs on its straps and swings out a touch when the body is jolted.
       pack.position.y = P.neckY * 0.86 + pull(spring.bob, 0, 20, 0.35, dt, -pyAcc * 0.4) * 0.5;
       pack.rotation.x = clamp(pull(spring.pack, clamp(-acc * 0.006, -0.05, 0.12), 11, 0.4, dt, Math.max(0, -pyAcc) * 0.5), 0, 0.3);
@@ -994,11 +1003,11 @@ export function createFigure({
       inner.rotation.x = pose.lean + (o.pitch || 0);
       inner.rotation.z = (o.roll || 0) + Math.sin(elapsed * 26) * 0.28 * w; // no banking into bends
       const stretch = inAir ? Math.abs(o.air) * 0.035 : 0, sq = land * (landRun ? 0.03 : 0.07);
-      inner.scale.set(1 + sq * 0.6 - stretch * 0.5, 1 - sq + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.006, 1 + sq * 0.6 - stretch * 0.5);
+      inner.scale.set(1 + sq * 0.6 - stretch * 0.5, 1 - sq + stretch - w * 0.06 + Math.sin(elapsed * 1.8 + seed) * 0.006 * (1 - gait), 1 + sq * 0.6 - stretch * 0.5);
       // The head steadies itself: it stays near level whatever the body does, nods a moment late when the
       // hips are jolted, and turns into a bend before the body does.
       const nod = pull(spring.nod, 0, 13, 0.45, dt, pyAcc * 1.2);
-      neck.rotation.x = -pose.lean * 0.6 - pose.trunk * 0.85 + pose.hp + nod;
+      neck.rotation.x = -pose.lean * 0.6 - pose.trunk * 0.85 + pose.hp + nod + rg * 1.6 * (bounce - lagB); // running: the head nods a beat behind the hops (rotation only)
       neck.rotation.y = Math.sin(e * 0.45) * 0.28 * (1 - gait) * (o.pose ? 0.3 : 1) * (headLook ? 0.15 : 1) + pose.hy + headLook + clamp(turn * 0.28, -0.55, 0.55) * Math.max(gait, 0.4) + yawP * 0.8;
       neck.rotation.z = -inner.rotation.z * 0.6 + rollP * 0.6;
       // Asleep: flat on the back, centred on the bed, chest rising and falling.

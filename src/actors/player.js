@@ -99,7 +99,7 @@ export function createPlayer(scene, opts = {}) {
           // Mud and soft sand are slower going; a trodden trail is a touch quicker.
           const top = (input.run && player.canRun ? RUN_SPEED : WALK_SPEED) * player.speedFactor * wadeSpeedFactor(groundAt(position.x, position.z)) * ((surfaces[surface] && surfaces[surface].speed) || 1);
           tx = (rx * move.x + fx * move.z) * top; tz = (rz * move.x + fz * move.z) * top;
-          if (player.auto) { tx = player.auto.x * WALK_SPEED * 1.25; tz = player.auto.z * WALK_SPEED * 1.25; }
+          if (player.auto) { tx = player.auto.x * WALK_SPEED * 0.9; tz = player.auto.z * WALK_SPEED * 0.9; }
         }
         // Speed builds up and bleeds off instead of switching on and off.
         const dvx = tx - vel.x, dvz = tz - vel.z, dv = Math.hypot(dvx, dvz);

@@ -73,6 +73,20 @@ const lunchSpots = (() => {
 const lunchStaff = (k) => ({ x: 12.4 + k * 0.9, z: 20.9 - (k % 2) * 0.7, rot: 0.4 + k * 0.5 });
 // Lessons: rows sitting in front of the headquarters tent.
 const classSpot = (i) => ({ x: 9.4 + (i % 5) * 1.05, z: -2.6 + Math.floor(i / 5) * 1.1, rot: Math.PI });
+// Where each joinable activity happens, so F is only offered (and only works) when you are near it.
+// 'free' has no single spot (everyone is scattered over the island), so it offers no F.
+const LUNCH_CIRCLES = [{ x: 15.2, z: 20.6 }, { x: 6, z: 23 }, { x: 21.5, z: 25.3 }, { x: 20.6, z: 21.0 }, { x: 4, z: 19 }, { x: 23.8, z: 28.6 }];
+const JOIN_AT = {
+  exercise: { at: [FORM], r: 10 },
+  ceremony: { at: [FORM], r: 10 },
+  work: { at: [{ x: 11.5, z: -2.1 }], r: 9 },
+  lunch: { at: LUNCH_CIRCLES, r: 8 },
+  campfire: { at: [VILLAGE_FIRE], r: 10 },
+};
+export function nearJoinSpot(id, x, z) {
+  const j = JOIN_AT[id];
+  return !!j && j.at.some((p) => Math.hypot(x - p.x, z - p.z) <= j.r);
+}
 // Bed: a camp bed each in the patrol tents for scouts, and in the staff tent for the teachers.
 const beds = allBeds();
 const scoutBeds = beds.filter((b) => !b.staff && !b.yours), staffBeds = beds.filter((b) => b.staff);

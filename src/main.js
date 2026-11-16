@@ -21,7 +21,7 @@ import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
-import { createCrowd, blockAt, blockProgress, JOIN } from './actors/schedule.js';
+import { createCrowd, blockAt, blockProgress, JOIN, nearJoinSpot } from './actors/schedule.js';
 import { setViewer, setGround, setSleepy } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
 import { getColliders, groundAt, addPlatform, removePlatform, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
@@ -667,7 +667,7 @@ function step() {
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
   // F joins in with whatever the camp is doing right now.
-  const join = JOIN[block.id] || null;
+  const join = JOIN[block.id] && (player.act || nearJoinSpot(block.id, player.position.x, player.position.z)) ? JOIN[block.id] : null; // only near the activity (or while already joined: then moving away stops it)
   if (!paused && input.consumeJoin() && join && !player.riding && !player.asleep && !player.sitting) {
     player.act = player.act ? null : { pose: join.pose, sit: !!join.sit };
     if (player.act) { audio.play('ui'); discover('join'); }

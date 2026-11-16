@@ -83,8 +83,8 @@ export function create(scene, deps) {
   const stones = new THREE.Group();
   const stoneMats = ROCK_TONES.map((c) => mat(c, 'stone'));
   STONES.forEach((s, i) => {
-    const rt = s.r * (1.0 + hash(i * 3.1) * 0.08), SEG = 9, prof = [[1.2, -0.95], [1.24, -0.45], [1.1, -0.16], [1.0, -0.035], [0.88, 0]];
-    const geo = new THREE.LatheGeometry([new THREE.Vector2(0, s.top - 0.95), ...prof.map(([k, dy]) => new THREE.Vector2(rt * k, s.top + dy)), new THREE.Vector2(0, s.top)], SEG);
+    const rt = s.r * (1.0 + hash(i * 3.1) * 0.08), SEG = 9, prof = [[0.5, -0.95], [0.55, -0.45], [0.3, -0.16], [0.14, -0.04], [0.04, 0]]; // radius beyond the platform circle, drop below the top: the flat top covers the whole circle
+    const geo = new THREE.LatheGeometry([new THREE.Vector2(0, s.top - 0.95), ...prof.map(([k, dy]) => new THREE.Vector2(s.r + k, s.top + dy)), new THREE.Vector2(0, s.top)], SEG);
     // The top is a flat disc: centre and the inner ring stay exactly at `top`. The sides are lumpy.
     const pos = geo.attributes.position;
     for (let v = 0; v < pos.count; v++) {

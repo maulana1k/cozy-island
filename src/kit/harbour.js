@@ -142,7 +142,7 @@ export function buildFerry() {
   const AZ0 = -5.9, AZ1 = -3.2, poleHi = 2.4, poleLo = 2.1;
   for (const x of [-1.4, 1.4]) {
     detail.add(cyl(0.04, 0.045, poleHi, WOOD, x, DECK + poleHi / 2, AZ1 - 0.2, 6), cyl(0.04, 0.045, poleLo, WOOD, x, DECK + poleLo / 2, AZ0 + 0.3, 6));
-    colliders.push({ x, z: AZ1 - 0.2, r: 0.06 }, { x, z: AZ0 + 0.3, r: 0.06 });
+    // (no colliders for these thin poles: the front pair would close the side deck off from the stern)
   }
   const stripes = 6, sw = (AZ1 - AZ0) / stripes, tilt = Math.atan((poleHi - poleLo) / (AZ1 - AZ0));
   for (let i = 0; i < stripes; i++) { // alternating red and cream strips of cloth, sloping back toward the stern
@@ -176,7 +176,7 @@ export function buildFerry() {
   // The deck you can stand on, kept inside the rails as the hull narrows: the waist (wide enough to walk round the
   // cabin), the stern, the bow in two steps, and a landing patch out to the hull side at the gangway opening.
   platforms.push({ x: 0, z: -1.25, hw: 1.78, hd: 3.25, rot: 0, top: DECK }, { x: 0, z: -5.25, hw: 1.3, hd: 0.75, rot: 0, top: DECK },
-    { x: 0, z: 2.8, hw: 1.25, hd: 0.8, rot: 0, top: DECK }, { x: 0, z: 4.2, hw: 0.8, hd: 0.6, rot: 0, top: DECK },
+    { x: 0, z: 2.35, hw: 1.68, hd: 0.35, rot: 0, top: DECK }, { x: 0, z: 2.8, hw: 1.25, hd: 0.8, rot: 0, top: DECK }, { x: 0, z: 4.2, hw: 0.8, hd: 0.6, rot: 0, top: DECK },
     { x: 1.65, z: 0, hw: 0.35, hd: 0.6, rot: 0, top: DECK });
 
   // Gentle bob (up and down), roll (side to side along the length) and a little pitch; the flag ripples.

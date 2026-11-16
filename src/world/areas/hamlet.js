@@ -98,7 +98,7 @@ function phaseOf(t) {
   if (t < 0.21 || t >= 0.86) return 'night';
   if (t < 0.42) return 'morning';
   if (t < 0.64) return 'midday';
-  if (t < 0.8) return 'afternoon';
+  if (t < 0.78) return 'afternoon';
   return 'dusk';
 }
 

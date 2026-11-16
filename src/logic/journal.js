@@ -22,6 +22,11 @@ export const DISCOVERIES = [
   { id: 'chickens', cat: 'friends', label: 'Shoo the chickens', hint: 'They live in a pen near the farm.' },
   { id: 'cat', cat: 'friends', label: 'Pet the camp cat', hint: 'It likes the parade ground.' },
   { id: 'sheep', cat: 'friends', label: 'Pet a sheep', hint: 'They graze below the windmill.' },
+  { id: 'local', cat: 'friends', label: 'Say hello in the village', hint: 'Cross the river by the plank bridge.' },
+  { id: 'goat', cat: 'friends', label: 'Pet a goat', hint: 'There is a pen on the farm across the river.' },
+  { id: 'buffalo', cat: 'friends', label: 'Pet the water buffalo', hint: 'It likes its mud wallow on the farm.' },
+  { id: 'ducks', cat: 'friends', label: 'Shoo the river ducks', hint: 'They paddle along the river.' },
+  { id: 'monkey', cat: 'friends', label: 'Watch the monkeys', hint: 'They live on the rocks by the waterfall.' },
   { id: 'place-inside', cat: 'places', label: 'Step inside a tent', hint: 'Open a flap and walk in.' },
   { id: 'place-pond', cat: 'places', label: 'Wade through the pond', hint: 'West of camp, in the jungle.' },
   { id: 'place-beach', cat: 'places', label: 'Leave footprints on the beach', hint: 'Head for the sea.' },
@@ -29,6 +34,13 @@ export const DISCOVERIES = [
   { id: 'place-camp', cat: 'places', label: 'Visit the beach camp', hint: 'South-west, down on the sand.' },
   { id: 'place-windmill', cat: 'places', label: 'Visit the windmill', hint: 'On the knoll to the north-east.' },
   { id: 'place-lookout', cat: 'places', label: 'Reach the summit camp', hint: 'Take the winding hill trail.' },
+  { id: 'place-bridge', cat: 'places', label: 'Cross the river on the plank bridge', hint: 'North-east of camp, past the windmill.' },
+  { id: 'place-stones', cat: 'places', label: 'Hop across the stepping stones', hint: 'Follow the river up toward the lake.' },
+  { id: 'place-waterfall', cat: 'places', label: 'Feel the spray of the waterfall', hint: 'At the lake, under the cliffs.' },
+  { id: 'place-cliff', cat: 'places', label: 'Climb to the cliff lookout', hint: 'The cliff path starts on the lake shore.' },
+  { id: 'place-village', cat: 'places', label: 'Visit the village square', hint: 'Over the bridge, up the rise.' },
+  { id: 'place-farm', cat: 'places', label: 'Walk among the rice fields', hint: 'Beyond the village, toward the far shore.' },
+  { id: 'place-jetty', cat: 'places', label: 'Walk out on the fishing jetty', hint: 'On the far shore of the farm.' },
   { id: 'place-wild', cat: 'places', label: 'Go as deep into the wild jungle as you dare', hint: 'Behind the hill, where the trees get huge.' },
   { id: 'collect', cat: 'pack', label: 'Pick something up', hint: 'Shells, sticks, flowers: look on the ground.' },
   { id: 'eat', cat: 'pack', label: 'Eat a snack', hint: 'Open your backpack with B.' },
@@ -41,7 +53,7 @@ export const DISCOVERIES = [
 // Ranks are earned by how much you have found.
 export const RANKS = [
   { at: 0, name: 'New Scout' }, { at: 5, name: 'Tenderfoot' }, { at: 10, name: 'Pathfinder' },
-  { at: 17, name: 'Explorer' }, { at: DISCOVERIES.length, name: 'Camp Legend' },
+  { at: 17, name: 'Explorer' }, { at: 27, name: 'Trailblazer' }, { at: DISCOVERIES.length, name: 'Camp Legend' },
 ];
 
 export function rankFor(count) {

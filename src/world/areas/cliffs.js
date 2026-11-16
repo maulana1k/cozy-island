@@ -73,10 +73,11 @@ export function create(scene, deps) {
   const reserved = [];
   const reserve = (x, z, r) => reserved.push({ x, z, r });
   // Is a round footprint (x, z, r) clear of everything walkable or reserved?
-  function clear(x, z, r, { notch = true } = {}) {
+  function clear(x, z, r, { notch = true, top = Infinity } = {}) {
     if (pathD(x, z) - r < 1.6) return false;                                   // the cliff path's level bed and a margin
     if (trailD(x, z) - r < 1.3) return false;                                  // the riverside trail where it reaches the lake
-    if (Math.hypot(x - LOOK.x, z - LOOK.z) - r < LOOK.r + 0.7) return false;    // the lookout floor
+    const dk = Math.hypot(x - LOOK.x, z - LOOK.z);                             // the lookout floor (rock below its rim is fine)
+    if (dk - r < LOOK.r + 0.7 && !(top < LOOK_TOP - 0.8 && dk > LOOK.r + 0.3)) return false;
     if (notch && Math.abs(x - FALL.top.x) - r < FALL_W / 2 + 0.25 && z > FALL.top.z - 1.5 && z < FALL.foot.z + 2.5) return false; // the waterfall's notch and pool
     if (distToLine(streamPts, x, z).d - r < 0.9 && z < FALL.top.z + 0.5) return false; // the stream channel
     for (const q of reserved) if (Math.hypot(x - q.x, z - q.z) - r < q.r) return false;
@@ -151,9 +152,9 @@ export function create(scene, deps) {
     if (sl > 1.0) {
       // A riser: a block whose front stands out of the slope and whose top meets the shelf above.
       if (r0 > 0.9 * far) continue;
-      const w = 1.4 + rng() * 1.4, d = 1.0 + rng() * 0.8;
-      if (!clear(x, z, Math.hypot(w, d) / 2)) continue;
-      addBlock(x, z, w, d, down + (rng() - 0.5) * 0.5, { lift: (rng() - 0.3) * 0.55 });
+      const w = 1.4 + rng() * 1.4, d = 1.0 + rng() * 0.8, rot = down + (rng() - 0.5) * 0.5, lift = (rng() - 0.3) * 0.55;
+      if (!clear(x, z, Math.hypot(w, d) / 2, { top: footprint(x, z, w / 2, d / 2, rot).hi + lift })) continue;
+      addBlock(x, z, w, d, rot, { lift });
     } else if (sl > 0.4) {
       if (r0 > (face ? 0.3 : 0.16) * far) continue;
       if (rng() < 0.5) {
@@ -271,7 +272,7 @@ export function create(scene, deps) {
   // Splashes where the water lands on each ledge on the way down.
   const splashAt = [];
   for (let i = 1; i < n; i++) if (front[i - 1] - front[i] > 0.45 && i * STEPY > 1) splashAt.push({ y: i * STEPY - 0.15, z: front[i - 1] + 0.5 });
-  const SPL = 7, splashes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), flat(0xffffff, { emissive: 0x4a545c }), Math.max(1, splashAt.length * SPL));
+  const SPL = 7, splashes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xeef7fc }), Math.max(1, splashAt.length * SPL));
   splashes.count = splashAt.length * SPL; splashes.frustumCulled = false; root.add(splashes);
 
   // ---- The stream on the top: a flowing ribbon laid on the ground from the spring to the lip.
@@ -294,14 +295,14 @@ export function create(scene, deps) {
     return g;
   })();
   const streamMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } }, side: THREE.DoubleSide,
+    uniforms: { uTime: { value: 0 }, uLight: { value: 1 } }, side: THREE.DoubleSide,
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform float uTime; varying vec2 vUv;
+    fragmentShader: `uniform float uTime; uniform float uLight; varying vec2 vUv;
       void main() { float e = abs(vUv.x - 0.5) * 2.0;
         float s = sin(vUv.y * 2.6 - uTime * 4.0 + sin(vUv.x * 9.0 + vUv.y) * 0.8) * 0.5 + 0.5;
         vec3 c = mix(vec3(0.42, 0.70, 0.84), vec3(0.72, 0.90, 0.97), smoothstep(0.35, 0.9, s));
         c = mix(c, vec3(0.95, 0.98, 1.0), smoothstep(0.82, 1.0, e) * 0.7);
-        gl_FragColor = vec4(c, 1.0);
+        gl_FragColor = vec4(c * uLight, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
@@ -452,7 +453,7 @@ export function create(scene, deps) {
     return { dx: (p1.x - p0.x) * m.dir, dy: (p1.y - p0.y) * m.dir, dz: (p1.z - p0.z) * m.dir };
   };
   const interactables = monkeys.map((m, i) => ({
-    id: `monkey-${i}`, kind: 'telescope', position: m.pos,
+    id: `monkey-${i}`, kind: 'monkey', position: m.pos,
     get markerY() { return m.y + (m.def.hang && m.s < 0.01 ? 1.3 : 0.85); },
     get enabled() { return m.kit.group.visible && m.dir === 0; },
     prompt: () => 'E — watch monkey',
@@ -472,7 +473,7 @@ export function create(scene, deps) {
   });
   const viewAt = railPt(0.15);
   interactables.push({
-    id: 'cliffs-view', kind: 'telescope', position: { x: LOOK.x + (viewAt.x - LOOK.x) * 0.8, z: LOOK.z + (viewAt.z - LOOK.z) * 0.8 }, markerY: LOOK_TOP + 1.4,
+    id: 'cliffs-view', kind: 'view', position: { x: LOOK.x + (viewAt.x - LOOK.x) * 0.8, z: LOOK.z + (viewAt.z - LOOK.z) * 0.8 }, markerY: LOOK_TOP + 1.4,
     prompt: () => 'E — take in the view',
     interact() { audio.play('ui'); say('The whole river winds away to the sea. You can see the bridge, the village and, far off, the camp flag.', '🏞️'); },
   });
@@ -501,6 +502,7 @@ export function create(scene, deps) {
       for (const f of fish) { const d = Math.hypot(p.x - f.x, p.z - f.z), on = d < ANIMAL_R; f.k.group.visible = on; if (on) f.k.update(dt, elapsed + f.off); }
       if (!show) { for (const m of monkeys) m.kit.group.visible = false; return; }
       fall.update(dt, elapsed); streamMat.uniforms.uTime.value = elapsed;
+      const light = 1 - 0.72 * night; fall.setLight(light); streamMat.uniforms.uLight.value = light; splashes.material.color.setScalar(0.95 * light);
       // Ledge splashes heave and spit.
       for (let j = 0; j < splashAt.length; j++) for (let k = 0; k < SPL; k++) {
         const q = splashAt[j], i = j * SPL + k, a = k * 0.9 + j, s = (0.22 + 0.12 * hash3(k, j, 1)) * (1 + 0.3 * Math.sin(elapsed * 4.1 + i * 1.3));

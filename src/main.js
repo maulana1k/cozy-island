@@ -28,7 +28,7 @@ import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
 import { pickInteractable } from './logic/interact.js';
 import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
-import { START_TIME, POND } from './config.js';
+import { START_TIME, POND, AREAS } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector } from './cutscene.js';
 import { createJourney } from './logic/journey.js';
@@ -276,6 +276,7 @@ const GESTURES = {
   lantern: ['reachUp', 0.8], door: ['push', 0.7], bell: ['pull', 1.1], flag: ['pull', 1.3], tree: ['shake', 0.9], campfire: ['crouch', 1.0],
   pickup: ['crouch', 0.8], station: ['reach', 0.8],
   chickens: ['shoo', 0.9], cat: ['crouch', 1.1], sheep: ['pat', 0.9], telescope: ['peer', 1.5],
+  local: ['wave', 0.9], goat: ['pat', 0.9], buffalo: ['pat', 0.9], ducks: ['shoo', 0.9], monkey: ['peer', 1.2], view: ['peer', 1.5],
 };
 const GREETINGS = [['wave', 0.9], ['salute', 0.9], ['cheer', 1.0], ['clap', 0.9]];
 let greetings = 0;
@@ -328,6 +329,11 @@ const FILMS = {
   campfire: () => [{ at: on(VILLAGE_FIRE), r: 11, r1: 8.5, h: 3.4, h1: 2.6, a0: 0.3, a1: 1.6, lookH: 1.2, dur: 8, title: 'Campfire night', sub: 'Songs and stories round the big fire' }],
   sleep: () => [{ at: on({ x: 10, z: 8 }), r: 38, r1: 32, h: 17, h1: 14, a0: 0.9, a1: 1.5, lookH: 0, dur: 6, title: 'Lights out', sub: 'Two scouts keep the night watch' }],
   summit: () => [{ at: on(LOOKOUT), r: 15, r1: 13, h: 9.5, h1: 10.5, a0: wildAngle + Math.PI - 0.6, a1: wildAngle + Math.PI + 0.5, lookH: 0.5, dur: 7, title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
+  // The cliff lookout: round the front past the waterfall, then over your shoulder to the lake, the river and the village.
+  cliff: () => [
+    { at: on(AREAS.lookout), r: 18, r1: 14, h: 3, h1: 6, a0: 1.05, a1: 1.85, lookH: -2, dur: 6, title: 'The cliff lookout', sub: 'The river starts here, at the foot of the falls' },
+    { at: on(AREAS.lookout), r: 6, r1: 7.5, h: 3.2, h1: 4.2, a0: -1.85, a1: -1.3, lookH: 0.4, dur: 6, title: '', sub: 'The village and the far shore, all the way to the sea' },
+  ],
   flag: () => [{ at: on(FLAGPOLE), r: 7.5, r1: 6, h: 1.3, h1: 1.8, a0: 2.4, a1: 2.0, lookH: 4.4, dur: 4.5, title: 'The flag goes up', sub: '' }],
   finale: () => [{ at: () => player.position, r: 5, r1: 10, h: 2, h1: 6, a0: 0, a1: 3.1, lookH: 1, dur: 7, title: 'A true scout', sub: 'Your first day is done. The island is yours.' }],
 };
@@ -408,7 +414,12 @@ refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver);
 bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
 refreshBag();
 const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.z + Math.cos(DOCK.rot) * (DOCK.length - 1.5) };
-const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 5.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5]];
+const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 5.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5],
+  // The bigger island: the middle of the bridge and of the stones, the foot of the fall, the cliff top, the square, the paddies, the jetty's end.
+  ['place-bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 2.2],
+  ['place-stones', AREAS.ford, 1.6], ['place-waterfall', { x: AREAS.waterfall.foot.x, z: AREAS.waterfall.foot.z + 4 }, 7],
+  ['place-cliff', AREAS.lookout, AREAS.lookout.r + 1], ['place-village', AREAS.village, 8], ['place-farm', AREAS.paddies, 12],
+  ['place-jetty', { x: AREAS.jetty.x + 8, z: AREAS.jetty.z }, 3]];
 
 // The first key press or click leaves the start screen. Browsers only allow sound after that.
 // 'journey' starts you on the ferry at the dock with a short film and a guide; 'free' drops you in camp.
@@ -666,6 +677,10 @@ function step() {
     for (const [id, p, r] of PLACES) if (!journal.has(id) && Math.hypot(playerXZ.x - p.x, playerXZ.z - p.z) < r) discover(id);
     if (buildings.inside) { discover('place-inside'); tip('bed', 'The bed with the gold pillow is yours. Lie down in it to sleep until morning.'); }
     if (Math.hypot(playerXZ.x - FLAGPOLE.x, playerXZ.z - FLAGPOLE.z) < 10) progress('arrive');
+    if (journal.has('place-cliff') && !filmsSeen.has('cliff') && !filming) { if (!film('cliff')) filmsSeen.add('cliff'); }
+    // The river is too deep to wade: say so the first time you come down to its bank.
+    if (!tipsSeen.has('river')) for (const p of AREAS.river) if (Math.hypot(playerXZ.x - p.x, playerXZ.z - p.z) < p.w + 3) { tip('river', 'The river is too deep to wade. Cross by the plank bridge, or by the stepping stones up near the lake.'); break; }
+    if (Math.hypot(playerXZ.x - AREAS.cliffPath[0].x, playerXZ.z - AREAS.cliffPath[0].z) < 4) tip('cliffpath', 'The cliff path climbs to a lookout beside the waterfall. Take it slowly.');
     if (journal.has('place-lookout') && !filmsSeen.has('summit') && !filming) { if (!film('summit')) filmsSeen.add('summit'); tip('fox', 'The flying fox starts here: climb the launch tower and press E.'); }
   }
   const ground = SURFACES[player.riding ? 'wood' : player.surface] || SURFACES.grass;

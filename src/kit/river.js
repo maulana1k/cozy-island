@@ -38,7 +38,7 @@ const FALL_VERT = /* glsl */`
   varying vec2 vUv; varying float vKind; varying float vSeed;
   void main() { vUv = uv; vKind = aKind; vSeed = aSeed; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const FALL_FRAG = /* glsl */`
-  uniform float uTime; uniform float uHeight;
+  uniform float uTime; uniform float uHeight; uniform float uLight;
   varying vec2 vUv; varying float vKind; varying float vSeed;
   float hash(float n) { return fract(sin(n * 127.1) * 43758.5453); }
   void main() {
@@ -57,7 +57,7 @@ const FALL_FRAG = /* glsl */`
       if (sin(y * 0.9 - uTime * 9.0 + vSeed * 40.0) < -0.15) discard;
       c = mix(vec3(0.9, 0.97, 1.0), vec3(1.0), s);
     }
-    gl_FragColor = vec4(c, 1.0);
+    gl_FragColor = vec4(c * uLight, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }`;
@@ -102,7 +102,7 @@ export function buildWaterfall(height = 12, width = 4, { wall = true, profile = 
   // A few loose streaks in front of the sheets.
   const r = rngFrom(11);
   for (let i = 0; i < 7; i++) slabs.push(slab((r() - 0.5) * W * 0.9, 0.1 + r() * 0.06, 0.15 + r() * 0.06, 0.08, 0.08, 0.1 + r() * 0.08, 7 + i * 1.7, 1, 1, Math.round(rowCount * 0.85)));
-  const fallMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uHeight: { value: H } }, vertexShader: FALL_VERT, fragmentShader: FALL_FRAG, side: THREE.DoubleSide });
+  const fallMat = new THREE.ShaderMaterial({ uniforms: { uTime: { value: 0 }, uHeight: { value: H }, uLight: { value: 1 } }, vertexShader: FALL_VERT, fragmentShader: FALL_FRAG, side: THREE.DoubleSide });
   const water = new THREE.Mesh(mergeGeometries(slabs), fallMat); // the falling water: 1 draw call
   group.add(water);
 
@@ -150,14 +150,14 @@ export function buildWaterfall(height = 12, width = 4, { wall = true, profile = 
   });
   const ringMat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { uTime: { value: 0 }, uCentre: { value: new THREE.Vector3(0, 0, fz + 0.3) }, uSize0: { value: new THREE.Vector2(W * 0.5, 0.7) }, uSize1: { value: new THREE.Vector2(W * 1.3 + 0.8, 2.6) } },
+    uniforms: { uTime: { value: 0 }, uLight: { value: 1 }, uCentre: { value: new THREE.Vector3(0, 0, fz + 0.3) }, uSize0: { value: new THREE.Vector2(W * 0.5, 0.7) }, uSize1: { value: new THREE.Vector2(W * 1.3 + 0.8, 2.6) } },
     vertexShader: `attribute float aPhase; uniform float uTime; uniform vec3 uCentre; uniform vec2 uSize0; uniform vec2 uSize1; varying float vA; varying float vAng;
       void main() { float ph = fract(uTime * 0.28 + aPhase); vec2 sz = mix(uSize0, uSize1, ph);
         vec3 p = vec3(position.x * sz.x, 0.04, position.z * sz.y) + uCentre; vAng = atan(position.z, position.x);
         vA = (1.0 - ph) * smoothstep(0.0, 0.08, ph); gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
-    fragmentShader: `uniform float uTime; varying float vA; varying float vAng;
+    fragmentShader: `uniform float uTime; uniform float uLight; varying float vA; varying float vAng;
       void main() { if (sin(vAng * 9.0 + uTime) + sin(vAng * 17.0 - uTime * 1.3) * 0.7 < -1.0) discard;   // broken, lacy edge
-        gl_FragColor = vec4(1.0, 1.0, 1.0, vA * 0.85);
+        gl_FragColor = vec4(vec3(uLight), vA * 0.85);
         #include <tonemapping_fragment>
         #include <colorspace_fragment> }`,
   });
@@ -172,6 +172,8 @@ export function buildWaterfall(height = 12, width = 4, { wall = true, profile = 
   const dummy = new THREE.Object3D();
   return {
     group,
+    // How much light falls on the water (1 by day, lower at night): the sheets are not lit by the scene.
+    setLight(v) { fallMat.uniforms.uLight.value = v; mist.material.color.setScalar(v); ringMat.uniforms.uLight.value = v; },
     update(dt, elapsed) {
       fallMat.uniforms.uTime.value = elapsed; ringMat.uniforms.uTime.value = elapsed;
       for (let i = 0; i < frothN; i++) {

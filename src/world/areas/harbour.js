@@ -105,7 +105,7 @@ export function create(scene, { keepClear, addPlatform, removePlatform, dayTime,
       speed = Math.min(4, speed + dt * 0.25); sail += speed * dt;
       ferry.group.position.set(FERRY.x - sail * 0.12, 0, FERRY.z + sail); ferry.group.rotation.y = -Math.min(0.25, sail * 0.006);
       ferry.update(dt, elapsed);
-      if (far || sail > 160) { state = 'gone'; ferry.group.visible = false; }
+      if (far || sail > 110) { state = 'gone'; ferry.group.visible = false; }
     },
   };
 }

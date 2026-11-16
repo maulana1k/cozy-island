@@ -420,8 +420,8 @@ export function createFigure({
     // slower than the quickest walk and every step has a moment in the air; the blend runs over 2.15 to 2.9.
     const cWalk = vk < 0.6 ? 2.2 + (vk / 0.6) * 0.5 : vk < 1.35 ? 2.7 + ((vk - 0.6) / 0.75) * 0.4 : 3.1 + Math.min(1, (vk - 1.35) / 0.8) * 0.85;
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
-    const Dw = 0.6 - 0.1 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
-    const Cw = 0.42, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
+    const Dw = 0.62 - 0.04 * smooth(vk / 2.0);              // share of a stride each foot is down when walking
+    const Cw = 0.48, Cr = 0.50;                           // the longest footprint a scout's leg sweeps walking (about 0.75 of its length, so the knee stays nearly straight), running (m)
     const r = smooth((vk - 2.15) / 0.75);                  // 0 walking .. 1 running
     const cWk = Math.min(4.4, Math.max(cWalk, (vk * 2 * Dw) / Cw));
     const cK = lerp(cWk, cRun, r);
@@ -587,7 +587,7 @@ export function createFigure({
           stanceAt(1, C, heelUp, toeOff, edgeA, aS, r0); stanceAt(0, C, heelUp, toeOff, edgeB, aS, r0);
           // Walking, the foot skims through. (Running, the swing is set by the joints further down; this path
           // still says where the foot is for the arms and the ground under it.)
-          const e = lerp(smooth(w), smooth(Math.pow(w, 1.35)), run);
+          const e = lerp(smooth(Math.min(1, w * 1.18)), smooth(Math.pow(w, 1.35)), run); // walking, the foot reaches forward early and comes down on a straight leg
           L.lift = gait * lerp(0.17 * LL * Math.pow(Math.sin(Math.PI * w), 0.8), LL * (0.3 + 0.3 * smooth((G.vk - 2) / 1.9)) * Math.sin(Math.PI * Math.pow(w, 0.7)), run);
           L.z = lerp(edgeA.z, edgeB.z, e); L.y = lerp(edgeA.y, edgeB.y, w) + L.lift;
           L.sg = lerp(edgeA.sg, edgeB.sg, smooth(w)) + run * 0.35 * Math.sin(Math.PI * w);

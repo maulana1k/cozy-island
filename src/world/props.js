@@ -15,6 +15,7 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
+const FIRE_SHADOW_EVERY = 0.03, LAMP_SHADOW_EVERY = 0.1; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
 
 export function createProps(scene, deps) {
   let lampDark = 0; // 0 in daylight .. 1 at night: how much a lit lamp shows against the day
@@ -295,7 +296,7 @@ export function createProps(scene, deps) {
         // the redraw itself happens in main.js's alternate-frame shadow pass, never as an extra pass.
         const on = fire.level > 0.3 && Math.hypot(player.position.x - f.x, player.position.z - f.z) < 40;
         shadowAge += dt;
-        if (on && (!shadowWas || shadowAge > 1.2)) { light.shadow.needsUpdate = true; shadowAge = 0; }
+        if (on && (!shadowWas || shadowAge > FIRE_SHADOW_EVERY)) { light.shadow.needsUpdate = true; shadowAge = 0; }
         shadowWas = on;
       }
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
@@ -366,7 +367,7 @@ export function createProps(scene, deps) {
       { // the first lamp light's shadow: rebuilt when it moves to another lamp, else about every 1.5 s
         const l0 = dark > 0.3 ? byDistance[0] : null, sh = lampLights[0].shadow;
         lampShadowAge += dt;
-        if (l0 && (l0 !== lampShadowTarget || lampShadowAge > 1.5)) { sh.needsUpdate = true; lampShadowAge = 0; }
+        if (l0 && (l0 !== lampShadowTarget || lampShadowAge > LAMP_SHADOW_EVERY)) { sh.needsUpdate = true; lampShadowAge = 0; }
         lampShadowTarget = l0;
       }
       lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && dark > 0.01) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * dark; } else light.intensity = 0; });

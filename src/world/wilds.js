@@ -1,12 +1,14 @@
-// The wild jungle. Most of the island is jungle, far too much to draw at once, so it is kept in
+// The land beyond the camp's own ground mesh: the wild jungle, the locals' land across the river
+// and the rock massif. Far too much to draw at once, so it is kept in
 // square tiles and only the tiles near you exist. Near tiles get real trees (the same kinds that
 // grow round the camp, plus jungle giants), bushes, rocks, ferns and grass; far tiles get a simple
 // lump per treetop. There is no fence: the camp's woods just thicken into it.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { heightAt, landR, wildDepth, wildness } from '../logic/terrain.js';
+import { heightAt, landR, wildDepth, wildness, groundKind } from '../logic/terrain.js';
+import { paintNewGround } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
-import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE } from '../config.js';
+import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
 const TILE = 48, VIEW = 230, NEAR = 58, UNDER = 36; // tile size; how far tiles exist; how far real trees and undergrowth go
@@ -29,6 +31,18 @@ const giant = {
     .concat([[1.9, 5.3, 0.7, 3.2], [-1.6, 5.5, -1.0, 2.4]].map(([x, y, z, len]) => { const g = new THREE.CylinderGeometry(0.03, 0.03, len, 4).toNonIndexed(); g.translate(x, y, z); return g; }))),
 };
 const KINDS = [...TREE_KINDS, giant];
+const MAX_ROCK = AREAS.massif.height;
+// Too steep for a tree to stand: the cliff faces.
+const steep = (x, z, y) => Math.max(Math.abs(heightAt(x + 1, z) - y), Math.abs(heightAt(x, z + 1) - y)) > 0.75;
+
+// Ground kept clear of streamed plants (villages, fields, jetties): {x, z, r}. Areas add to it
+// while they are being made, before the first tiles are built.
+const KEEP_CLEAR = [
+  { x: AREAS.village.x, z: AREAS.village.z, r: AREAS.village.r + 5 }, { x: AREAS.paddies.x, z: AREAS.paddies.z, r: AREAS.paddies.r + 2 },
+  { x: AREAS.orchard.x, z: AREAS.orchard.z, r: AREAS.orchard.r + 2 }, { x: AREAS.jetty.x, z: AREAS.jetty.z, r: 8 },
+];
+export const keepClear = (x, z, r) => { KEEP_CLEAR.push({ x, z, r }); };
+const cleared = (x, z) => KEEP_CLEAR.some((k) => Math.hypot(x - k.x, z - k.z) < k.r);
 
 export function createWilds(scene) {
   const group = new THREE.Group(); scene.add(group);
@@ -62,7 +76,16 @@ export function createWilds(scene) {
     // Ground, unless the camp's own mesh already covers the whole tile.
     const inside = (x, z) => Math.max(Math.abs(x), Math.abs(z)) < MAIN_HALF - 3;
     if (!(inside(x0, z0) && inside(x0 + TILE, z0 + TILE))) {
-      const seg = 12, geo = new THREE.PlaneGeometry(TILE, TILE, seg, seg);
+      // A vertex every 4 m is plenty for rolling ground; river banks, the lake shore, cliffs and
+      // the cliff path get one every metre, the rest of the new land one every 2 m.
+      let seg = 12;
+      for (let u = 0; u <= 6 && seg < 48; u++) for (let v = 0; v <= 6; v++) {
+        const g = groundKind(x0 + u * TILE / 6, z0 + v * TILE / 6);
+        if (!g) continue;
+        if (g.river < 12 || g.lake < 14 || g.trail < 6 || (g.rock > 0.02 && g.rockHeight < MAX_ROCK - 0.5)) { seg = 48; break; }
+        if (g.locals > 0.2 || g.rock > 0.02) seg = 24;
+      }
+      const geo = new THREE.PlaneGeometry(TILE, TILE, seg, seg);
       geo.rotateX(-Math.PI / 2); geo.translate(tile.cx, 0, tile.cz);
       const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3);
       for (let i = 0; i < pos.count; i++) {
@@ -75,6 +98,7 @@ export function createWilds(scene) {
           color.copy(cJungle).lerp(cSoil, smooth(wave(x, z, 9, 0.7) * 0.5 + 0.2) * 0.5).lerp(cGreen, damp * 0.75).lerp(cDeep, deep * damp * 0.6).lerp(cHigh, smooth((h - 9) / 12) * 0.7);
           color.lerp(cSand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
         } else color.copy(cSand).lerp(cWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
+        paintNewGround(color, x, z, h);
         colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -92,7 +116,7 @@ export function createWilds(scene) {
       const glade = smooth((wave(x, z, 31, 2.9) + 0.75) / 0.5); // 0 in a clearing
       if (chance > w * (0.1 + 0.9 * glade)) continue;
       const y = heightAt(x, z);
-      if (y < 0.5) continue;
+      if (y < 0.5 || steep(x, z, y)) continue;
       const biome = wave(x, z, 52, 0.4), damp = wave(x, z, 46, 1.3);
       let kind;
       if (pick < 0.22) kind = Math.floor((pick / 0.22) * 7);                    // a bit of everything everywhere
@@ -111,13 +135,26 @@ export function createWilds(scene) {
       const w = grows(x, z);
       if (!w || what > w * 1.2) continue;
       const y = heightAt(x, z);
-      if (y < 0.5) continue;
+      if (y < 0.5 || steep(x, z, y)) continue;
       const item = { x, y, z, s: 0.7 + size * 0.8, rot: turn * 6.283, tint: size };
       const glade = wave(x, z, 31, 2.9) < -0.5;
       if (what < 0.035) tile.rocks.push(item);
       else if (what < 0.2) tile.bushes.push(item);
       else if (what < 0.55 && !glade) tile.ferns.push(item);
       else tile.tufts.push(item);
+    }
+    // The locals' land: a few palms, fruit trees and bushes, far sparser than the jungle,
+    // never on the trails, the beaches, the village square or the fields.
+    for (let n = 0; n < 26; n++) {
+      const x = x0 + rng() * TILE, z = z0 + rng() * TILE, what = rng(), size = rng(), turn = rng();
+      const g = groundKind(x, z);
+      if (!g || g.locals < 0.8 || g.trail < 3 || g.river < 4 || cleared(x, z)) continue;
+      const y = heightAt(x, z), r = landR(x, z);
+      if (y < 0.7 || steep(x, z, y)) continue;
+      if (what < 0.32) tile.trees.push({ x, y: y - 0.1, z, kind: r > 40 || what < 0.12 ? 3 : 1, scale: 0.85 + size * 0.45, rot: turn * 6.283, tint: size - 0.5 });
+      else if (what < 0.4) tile.trees.push({ x, y: y - 0.05, z, kind: 5, scale: 0.8 + size * 0.5, rot: turn * 6.283, tint: size - 0.5 });
+      else if (what < 0.75) tile.bushes.push({ x, y, z, s: 0.6 + size * 0.6, rot: turn * 6.283, tint: size });
+      else if (what < 0.8) tile.rocks.push({ x, y, z, s: 0.5 + size * 0.5, rot: turn * 6.283, tint: size });
     }
     return tile;
   }
@@ -140,7 +177,7 @@ export function createWilds(scene) {
           const i = counts[t.kind]++;
           put(trees[t.kind].trunk, i, t.x, t.y, t.z, t.scale, t.rot); trees[t.kind].canopy.setMatrixAt(i, dummy.matrix);
           trees[t.kind].canopy.setColorAt(i, color.setHex(def.color).offsetHSL(t.tint * 0.03, 0, t.tint * 0.07));
-          if (Math.hypot(t.x, t.z) < WILD.border + WILD.limit + 3) colliders.push({ x: t.x, z: t.z, r: (t.kind === 6 ? 0.5 : 0.4) * t.scale });
+          colliders.push({ x: t.x, z: t.z, r: (t.kind === 6 ? 0.5 : 0.4) * t.scale }); // safe ground now reaches deep into the jungle
         } else if (nLump < 26000 && t.kind !== 5) {
           // Far away a tree is just its crown: one lump at treetop height.
           const r = (t.kind === 6 ? 3.3 : t.kind === 3 ? 1.9 : 2.5) * t.scale;

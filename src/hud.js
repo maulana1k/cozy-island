@@ -1,7 +1,8 @@
 // On-screen interface. During play it is just white text and line icons over the picture,
 // with no panels. The journal is a notebook and the map is a paper sheet you hold up.
-import { ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from './config.js';
-import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, TOWER, getScatter } from './logic/layout.js';
+import { GRASS_RADIUS, HILL, POND, AREAS } from './config.js';
+import { heightAt, landR, shoreR, wildness, groundKind } from './logic/terrain.js';
+import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, getScatter } from './logic/layout.js';
 import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
@@ -28,80 +29,101 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const icon = (name, cls = 'ico') => { const s = el('span', cls); s.innerHTML = ICONS[name]; return s; };
 
 // ---- The paper map ---------------------------------------------------------------
-const MAP = 720, MK = 4.25, MCX = 362, MCY = 378;
-const mx = (x) => MCX + x * MK, mz = (z) => MCY + z * MK;
+// The whole island on one sheet: camp, jungle, the river and lake, the locals' land, the massif.
+// The land itself is painted by sampling the terrain on a coarse grid (smoothed when scaled up),
+// so it always matches the ground; the camp's details are drawn on top.
+const MAP = 720, MK = 2.2, MX0 = -118, MZ0 = -208;
+const mx = (x) => (x - MX0) * MK, mz = (z) => (z - MZ0) * MK;
+// [text, place, label offset in px from the place]
 const LABELS = [
-  ['Summit camp', LOOKOUT, 92, 196], ['Pond', POND, 66, 404], ['Beach camp', CAMPFIRE, 96, 612], ['Food tent', { x: 12, z: 25 }, 318, 668],
-  ['Flying fox landing', ZIPLINE.bottom, 556, 652], ['Farm', { x: 33, z: 27 }, 652, 566], ['Dock', { x: DOCK.x + 6, z: DOCK.z + 2 }, 662, 474],
-  ['Guard post', TOWER, 650, 388], ['First aid', { x: 19.5, z: -9 }, 646, 300], ['Windmill', WINDMILL, 604, 186], ['Headquarters', { x: 11.6, z: -7.3 }, 404, 96], ['Flagpole', FLAGPOLE, 226, 104],
+  ['Summit camp', LOOKOUT, -78, -26], ['Pond', POND, -56, 22], ['Beach camp', CAMPFIRE, -40, 44], ['Dock', { x: DOCK.x + 6, z: DOCK.z + 2 }, 52, 30],
+  ['Windmill', WINDMILL, 30, -46], ['Headquarters', { x: 11.6, z: -7.3 }, -34, -58], ['Flagpole', FLAGPOLE, 40, 64],
+  ['Bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 64, 30],
+  ['River', AREAS.river[6], -70, 4], ['Lake', AREAS.lake, -64, 30], ['Waterfall', AREAS.waterfall.foot, 60, 22], ['Lookout', AREAS.lookout, -64, -26],
+  ['Stepping stones', AREAS.ford, -92, -6], ['Village', AREAS.village, 0, 48], ['Fields', AREAS.paddies, 18, 50], ['Orchard', AREAS.orchard, 60, -18], ['Jetty', AREAS.jetty, -6, 40],
 ];
 
 function drawPaperMap(c) {
   c.clearRect(0, 0, MAP, MAP);
   c.fillStyle = '#bfe6f6'; c.fillRect(0, 0, MAP, MAP);
+  // The land, sampled every 3 px (about 1.4 m) into a small picture and scaled up smoothly.
+  const STEP = 3, n = MAP / STEP, img = new ImageData(n, n), px = img.data;
+  const hex = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+  const SEA = hex(0xbfe6f6), SURF = hex(0xffffff), SAND = hex(0xf6e3b6), GRASS = hex(0xc7cf8a), JUNGLE = hex(0x7da36a), DEEP = hex(0x6a9460),
+    WATER = hex(0x8fd0e6), ROCK = hex(0xb9ab98), ROCKD = hex(0x9c8f80), LOCAL = hex(0xd5d48c), FARM = hex(0xa9c47a), EARTH = hex(0xe2c18c), TRAIL = hex(0xb98a55);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = MX0 + ((i + 0.5) * STEP) / MK, z = MZ0 + ((j + 0.5) * STEP) / MK, h = heightAt(x, z), r = shoreR(x, z);
+    let col = SEA;
+    if (h < 0) col = r < 58 ? WATER : r < 62.4 ? SURF : SEA;
+    else {
+      const g = groundKind(x, z), w = wildness(x, z), lr = landR(x, z);
+      col = lr > GRASS_RADIUS ? SAND : w > 0.55 ? ((i * 7 + j * 13) % 11 < 3 ? DEEP : JUNGLE) : GRASS;
+      if (g) {
+        if (g.locals > 0.5 && lr < GRASS_RADIUS) col = Math.hypot(x - AREAS.village.x, z - AREAS.village.z) < AREAS.village.r * 0.55 ? EARTH : Math.hypot(x - AREAS.farm.x, z - AREAS.farm.z) < AREAS.farm.r ? FARM : LOCAL;
+        if (g.rock > 0.5 && h > 2) col = h > AREAS.massif.height - 1.5 && w > 0.4 ? JUNGLE : (i + j) % 4 ? ROCK : ROCKD;
+        if (g.trail < 1.4) col = TRAIL;
+      }
+    }
+    const k = (j * n + i) * 4; px[k] = col[0]; px[k + 1] = col[1]; px[k + 2] = col[2]; px[k + 3] = 255;
+  }
+  const small = document.createElement('canvas'); small.width = small.height = n; small.getContext('2d').putImageData(img, 0, 0);
+  c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(small, 0, 0, MAP, MAP); c.restore();
   // faint fold lines
-  c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 3;
+  c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 3;
   for (const x of [MAP / 3, (2 * MAP) / 3]) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, MAP); c.stroke(); }
   c.beginPath(); c.moveTo(0, MAP / 2); c.lineTo(MAP, MAP / 2); c.stroke();
-  // the island: surf, sand with a wobbly edge, then the land
-  const blobPath = (radius, wob) => { c.beginPath(); for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2, r = radius + Math.sin(a * 7) * wob + Math.sin(a * 13 + 1) * wob * 0.6; const x = MCX + Math.cos(a) * r * MK, y = MCY + Math.sin(a) * r * MK; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.closePath(); };
-  // the wild jungle behind the hill, running off the edge of the sheet
-  const wildBlob = (radius, wob) => { c.beginPath(); for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2, r = radius + Math.sin(a * 9) * wob + Math.sin(a * 17 + 2) * wob * 0.6; const x = mx(WILD.x) + Math.cos(a) * r * MK, y = mz(WILD.z) + Math.sin(a) * r * MK; if (i) c.lineTo(x, y); else c.moveTo(x, y); } c.closePath(); };
-  c.fillStyle = 'rgba(255,255,255,0.75)'; wildBlob(WILD.radius + 2.2, 0.9); c.fill();
-  c.fillStyle = '#f6e3b6'; wildBlob(WILD.radius, 0.8); c.fill();
-  c.fillStyle = 'rgba(255,255,255,0.75)'; blobPath(ISLAND_RADIUS + 2.2, 0.9); c.fill();
-  c.fillStyle = '#f6e3b6'; blobPath(ISLAND_RADIUS, 0.8); c.fill();
-  c.fillStyle = '#c7cf8a'; blobPath(GRASS_RADIUS, 0.7); c.fill();
-  { const ax = Math.atan2(WILD.z, WILD.x); c.fillStyle = '#f6e3b6'; c.beginPath(); c.arc(mx(Math.cos(ax) * 57), mz(Math.sin(ax) * 57), 29 * MK, 0, Math.PI * 2); c.fill();
-    const g = c.createLinearGradient(mx(Math.cos(ax) * 40), mz(Math.sin(ax) * 40), mx(Math.cos(ax) * 72), mz(Math.sin(ax) * 72)); g.addColorStop(0, '#c7cf8a'); g.addColorStop(1, '#7da36a');
-    c.fillStyle = g; c.beginPath(); c.arc(mx(Math.cos(ax) * 57), mz(Math.sin(ax) * 57), 22 * MK, 0, Math.PI * 2); c.fill(); }
-  c.fillStyle = '#7da36a'; wildBlob(WILD.radius - 12, 0.7); c.fill();
-  c.fillStyle = '#6a9460'; for (let i = 0; i < 260; i++) { const a = i * 2.39996, d = Math.sqrt((i + 0.5) / 260) * (WILD.radius - 15), x = mx(WILD.x + Math.cos(a) * d), y = mz(WILD.z + Math.sin(a) * d); if (Math.hypot(x - MCX, y - MCY) > WILD.border * MK + 5) { c.beginPath(); c.arc(x, y, 5.5, 0, Math.PI * 2); c.fill(); } }
-  c.fillStyle = '#ecd58f'; c.beginPath(); c.arc(mx(10), mz(8), 26 * MK, 0, Math.PI * 2); c.fill(); // the camp clearing
+  c.fillStyle = 'rgba(236,213,143,0.75)'; c.beginPath(); c.arc(mx(10), mz(8), 26 * MK, 0, Math.PI * 2); c.fill(); // the camp clearing
   // the hill, in rings
   for (const [r, col] of [[1, '#b9c383'], [0.72, '#cfc98c'], [0.45, '#e0d29a'], [0.22, '#efe0b0']]) { c.fillStyle = col; c.beginPath(); c.ellipse(mx(HILL.x), mz(HILL.z), HILL.radius * r * MK, HILL.radius * r * MK * 0.94, 0.5, 0, Math.PI * 2); c.fill(); }
-  c.fillStyle = '#8fd0e6'; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(mx(POND.x), mz(POND.z), POND.rw * MK, 0, Math.PI * 2); c.fill(); c.stroke();
-  // trees as little dots
-  for (const t of getScatter().trees) { c.fillStyle = t.kind === 3 ? '#8aa35c' : '#6f8f55'; c.beginPath(); c.arc(mx(t.x), mz(t.z), 2.2 + t.scale * 1.6, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = '#8fd0e6'; c.strokeStyle = '#ffffff'; c.lineWidth = 1.5; c.beginPath(); c.arc(mx(POND.x), mz(POND.z), POND.rw * MK, 0, Math.PI * 2); c.fill(); c.stroke();
+  // camp trees as little dots
+  for (const t of getScatter().trees) { c.fillStyle = t.kind === 3 ? '#8aa35c' : '#6f8f55'; c.beginPath(); c.arc(mx(t.x), mz(t.z), 1.3 + t.scale * 1.1, 0, Math.PI * 2); c.fill(); }
   // trails
-  c.strokeStyle = '#b98a55'; c.lineWidth = 3.2; c.lineCap = 'round'; c.lineJoin = 'round';
+  c.strokeStyle = '#b98a55'; c.lineWidth = 2.2; c.lineCap = 'round'; c.lineJoin = 'round';
   for (const path of PATHS) { c.beginPath(); path.forEach((p, i) => (i ? c.lineTo(mx(p.x), mz(p.z)) : c.moveTo(mx(p.x), mz(p.z)))); c.stroke(); }
   c.fillStyle = '#f7e9c0'; c.beginPath(); c.arc(mx(10), mz(8), 5.2 * MK, 0, Math.PI * 2); c.fill();
-  // dock and the flying fox cable
-  c.strokeStyle = '#8c6444'; c.lineWidth = 5; c.beginPath(); c.moveTo(mx(DOCK.x), mz(DOCK.z)); c.lineTo(mx(DOCK.x + Math.sin(DOCK.rot) * DOCK.length), mz(DOCK.z + Math.cos(DOCK.rot) * DOCK.length)); c.stroke();
-  c.strokeStyle = '#5b4a7a'; c.lineWidth = 2; c.setLineDash([7, 5]); c.beginPath(); c.moveTo(mx(ZIPLINE.top.x), mz(ZIPLINE.top.z)); c.lineTo(mx(ZIPLINE.bottom.x), mz(ZIPLINE.bottom.z)); c.stroke(); c.setLineDash([]);
+  // dock, bridge, stepping stones and the flying fox cable
+  c.strokeStyle = '#8c6444'; c.lineWidth = 4; c.beginPath(); c.moveTo(mx(DOCK.x), mz(DOCK.z)); c.lineTo(mx(DOCK.x + Math.sin(DOCK.rot) * DOCK.length), mz(DOCK.z + Math.cos(DOCK.rot) * DOCK.length)); c.stroke();
+  const br = AREAS.bridge; c.lineWidth = 5; c.beginPath(); c.moveTo(mx(br.a.x), mz(br.a.z)); c.lineTo(mx(br.b.x), mz(br.b.z)); c.stroke();
+  c.strokeStyle = '#f3e2b8'; c.lineWidth = 1.2; for (let k = 1; k < 9; k++) { const u = k / 9, x = br.a.x + (br.b.x - br.a.x) * u, z = br.a.z + (br.b.z - br.a.z) * u; c.beginPath(); c.moveTo(mx(x) - 2, mz(z) - 4); c.lineTo(mx(x) + 2, mz(z) + 4); c.stroke(); }
+  c.fillStyle = '#8d8478'; for (const st of AREAS.stones) { c.beginPath(); c.arc(mx(st.x), mz(st.z), 1.6, 0, Math.PI * 2); c.fill(); }
+  c.strokeStyle = '#5b4a7a'; c.lineWidth = 1.5; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(mx(ZIPLINE.top.x), mz(ZIPLINE.top.z)); c.lineTo(mx(ZIPLINE.bottom.x), mz(ZIPLINE.bottom.z)); c.stroke(); c.setLineDash([]);
+  // the waterfall: a white stroke down the cliff
+  const wf = AREAS.waterfall; c.strokeStyle = '#ffffff'; c.lineWidth = 3; c.beginPath(); c.moveTo(mx(wf.top.x), mz(wf.top.z)); c.lineTo(mx(wf.foot.x), mz(wf.foot.z)); c.stroke();
   // tents
   for (const h of COTTAGES) {
     c.save(); c.translate(mx(h.x), mz(h.z)); c.rotate(-h.rot);
     const w = h.width * MK * 1.15, d = h.depth * MK * 1.15;
     c.fillStyle = h.type === 'aid' ? '#ffffff' : h.type === 'mess' ? '#f0a070' : h.type === 'hall' ? '#fff3d6' : h.type === 'farm' ? '#9fb878' : '#f6efe0';
-    c.strokeStyle = '#7a5a3c'; c.lineWidth = 1.5; c.fillRect(-w / 2, -d / 2, w, d); c.strokeRect(-w / 2, -d / 2, w, d);
-    c.beginPath(); c.moveTo(0, -d / 2); c.lineTo(0, d / 2); c.stroke();
-    if (h.type === 'aid') { c.fillStyle = '#d9453a'; c.fillRect(-1.5, -5, 3, 10); c.fillRect(-5, -1.5, 10, 3); }
+    c.strokeStyle = '#7a5a3c'; c.lineWidth = 1; c.fillRect(-w / 2, -d / 2, w, d); c.strokeRect(-w / 2, -d / 2, w, d);
+    if (h.type === 'aid') { c.fillStyle = '#d9453a'; c.fillRect(-1, -3.5, 2, 7); c.fillRect(-3.5, -1, 7, 2); }
     c.restore();
   }
-  for (const t of TENTS) { c.fillStyle = '#e99a72'; c.strokeStyle = '#7a5a3c'; c.lineWidth = 1; c.beginPath(); c.moveTo(mx(t.x), mz(t.z) - 6); c.lineTo(mx(t.x) + 5.5, mz(t.z) + 4.5); c.lineTo(mx(t.x) - 5.5, mz(t.z) + 4.5); c.closePath(); c.fill(); c.stroke(); }
-  for (const f of CAMPFIRES) { c.fillStyle = '#ff7a2c'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 4.5, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd24a'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 2, 0, Math.PI * 2); c.fill(); }
+  for (const t of TENTS) { c.fillStyle = '#e99a72'; c.strokeStyle = '#7a5a3c'; c.lineWidth = 1; c.beginPath(); c.moveTo(mx(t.x), mz(t.z) - 4); c.lineTo(mx(t.x) + 3.6, mz(t.z) + 3); c.lineTo(mx(t.x) - 3.6, mz(t.z) + 3); c.closePath(); c.fill(); c.stroke(); }
+  for (const f of CAMPFIRES) { c.fillStyle = '#ff7a2c'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 3.2, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd24a'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 1.4, 0, Math.PI * 2); c.fill(); }
   // windmill and flag
-  c.strokeStyle = '#7a5a3c'; c.lineWidth = 2; c.fillStyle = '#fff'; c.beginPath(); c.arc(mx(WINDMILL.x), mz(WINDMILL.z), 6, 0, Math.PI * 2); c.fill(); c.stroke();
-  c.beginPath(); c.moveTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) + 10); c.moveTo(mx(WINDMILL.x) + 10, mz(WINDMILL.z) - 10); c.lineTo(mx(WINDMILL.x) - 10, mz(WINDMILL.z) + 10); c.stroke();
-  c.fillStyle = '#6a3f9c'; c.fillRect(mx(FLAGPOLE.x), mz(FLAGPOLE.z) - 12, 11, 7); c.fillStyle = '#7a5a3c'; c.fillRect(mx(FLAGPOLE.x) - 1, mz(FLAGPOLE.z) - 12, 2, 13);
-  // the rope across the neck of land, and a warning
+  c.strokeStyle = '#7a5a3c'; c.lineWidth = 1.5; c.fillStyle = '#fff'; c.beginPath(); c.arc(mx(WINDMILL.x), mz(WINDMILL.z), 4, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(mx(WINDMILL.x) - 7, mz(WINDMILL.z) - 7); c.lineTo(mx(WINDMILL.x) + 7, mz(WINDMILL.z) + 7); c.moveTo(mx(WINDMILL.x) + 7, mz(WINDMILL.z) - 7); c.lineTo(mx(WINDMILL.x) - 7, mz(WINDMILL.z) + 7); c.stroke();
+  c.fillStyle = '#6a3f9c'; c.fillRect(mx(FLAGPOLE.x), mz(FLAGPOLE.z) - 9, 8, 5); c.fillStyle = '#7a5a3c'; c.fillRect(mx(FLAGPOLE.x) - 1, mz(FLAGPOLE.z) - 9, 1.5, 10);
+  // the jungle, and a warning
   {
-    c.save(); c.translate(118, 62); c.rotate(-0.05); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 22px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('WILD JUNGLE', 0, 0); c.fillStyle = '#c62f24'; c.font = '800 14px ui-rounded, system-ui, sans-serif'; c.fillText('DANGER · KEEP OUT', 0, 22); c.restore(); }
+    c.save(); c.translate(150, 240); c.rotate(-0.05); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 22px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('WILD JUNGLE', 0, 0); c.fillStyle = '#c62f24'; c.font = '800 14px ui-rounded, system-ui, sans-serif'; c.fillText('DANGER · KEEP OUT', 0, 22); c.restore();
+    c.save(); c.translate(mx(AREAS.locals.x + 18), mz(AREAS.locals.z - 4)); c.rotate(0.04); c.textAlign = 'center'; c.fillStyle = '#6b5a2e'; c.font = '800 17px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText("THE LOCALS' LAND", 0, 0); c.restore();
+    c.save(); c.translate(mx(AREAS.massif.b.x - 6), mz(AREAS.massif.b.z + 1)); c.textAlign = 'center'; c.fillStyle = '#5e5348'; c.font = '800 13px ui-rounded, system-ui, sans-serif'; c.fillText('ROCK CLIFFS', 0, 0); c.restore();
+  }
   // labels on paper tags, each with a line to its place
-  c.font = '700 15px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
-  for (const [text, at, lx, ly] of LABELS) {
-    const w = c.measureText(text).width + 22, tx = mx(at.x), ty = mz(at.z);
-    c.strokeStyle = 'rgba(60,50,70,0.35)'; c.lineWidth = 5; c.beginPath(); c.moveTo(lx, ly); c.lineTo(tx, ty); c.stroke();
-    c.strokeStyle = '#ffffff'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(lx, ly); c.lineTo(tx, ty); c.stroke();
-    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(tx, ty, 4, 0, Math.PI * 2); c.fill();
+  c.font = '700 13px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const [text, at, dx, dy] of LABELS) {
+    const tx = mx(at.x), ty = mz(at.z), lx = tx + dx, ly = ty + dy, w = c.measureText(text).width + 18;
+    c.strokeStyle = 'rgba(60,50,70,0.35)'; c.lineWidth = 4; c.beginPath(); c.moveTo(lx, ly); c.lineTo(tx, ty); c.stroke();
+    c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.moveTo(lx, ly); c.lineTo(tx, ty); c.stroke();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(tx, ty, 3, 0, Math.PI * 2); c.fill();
     c.save(); c.translate(lx, ly); c.rotate(((text.length % 5) - 2) * 0.012);
-    c.shadowColor = 'rgba(40,50,70,0.25)'; c.shadowBlur = 6; c.shadowOffsetY = 2; c.fillStyle = '#ffffff'; c.beginPath(); c.roundRect(-w / 2, -15, w, 30, 5); c.fill();
+    c.shadowColor = 'rgba(40,50,70,0.25)'; c.shadowBlur = 5; c.shadowOffsetY = 2; c.fillStyle = '#ffffff'; c.beginPath(); c.roundRect(-w / 2, -12, w, 24, 5); c.fill();
     c.shadowColor = 'transparent'; c.fillStyle = '#3d4a5c'; c.fillText(text, 0, 1); c.restore();
   }
   // title and compass
-  c.save(); c.translate(690, 46); c.rotate(0.03); c.textAlign = 'right'; c.fillStyle = '#3f6f9a'; c.font = '800 34px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('SCOUT CAMP ISLAND', 0, 0); c.restore();
+  c.save(); c.translate(704, 40); c.rotate(0.03); c.textAlign = 'right'; c.fillStyle = '#3f6f9a'; c.font = '800 32px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('SCOUT CAMP ISLAND', 0, 0); c.restore();
   c.save(); c.translate(56, 668); c.strokeStyle = '#3f6f9a'; c.fillStyle = '#3f6f9a'; c.lineWidth = 2;
   c.beginPath(); c.moveTo(0, -24); c.lineTo(6, 0); c.lineTo(0, 24); c.lineTo(-6, 0); c.closePath(); c.fill();
   c.beginPath(); c.moveTo(-24, 0); c.lineTo(0, -5); c.lineTo(24, 0); c.lineTo(0, 5); c.closePath(); c.stroke();
@@ -177,7 +199,8 @@ export function createHUD(handlers) {
   const paper = el('div', 'paper');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const baseMap = document.createElement('canvas'); baseMap.width = baseMap.height = MAP * dpr;
-  const bctx = baseMap.getContext('2d'); bctx.scale(dpr, dpr); drawPaperMap(bctx);
+  const bctx = baseMap.getContext('2d'); bctx.scale(dpr, dpr);
+  let mapDrawn = false; // the sheet is painted the first time it is opened (it samples the whole island)
   const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.height = MAP * dpr;
   const mctx = mapCanvas.getContext('2d');
   paper.append(mapCanvas); sheet.append(paper);
@@ -375,16 +398,17 @@ export function createHUD(handlers) {
     // Marks where you and the other scouts are, on the paper map while it is open.
     drawMap(player, facing, villagers) {
       if (!hud.mapOpen || frame++ % 3) return;
+      if (!mapDrawn) { drawPaperMap(bctx); mapDrawn = true; }
       mctx.setTransform(1, 0, 0, 1, 0, 0);
       mctx.drawImage(baseMap, 0, 0);
       mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       mctx.fillStyle = '#ffffff'; mctx.strokeStyle = 'rgba(60,50,70,0.7)'; mctx.lineWidth = 1.2;
-      for (const v of villagers) { mctx.beginPath(); mctx.arc(mx(v.x), mz(v.z), 3.4, 0, Math.PI * 2); mctx.fill(); mctx.stroke(); }
+      for (const v of villagers) { mctx.beginPath(); mctx.arc(mx(v.x), mz(v.z), 2.6, 0, Math.PI * 2); mctx.fill(); mctx.stroke(); }
       mctx.save(); mctx.translate(mx(player.x), mz(player.z));
-      mctx.fillStyle = 'rgba(255,90,60,0.22)'; mctx.beginPath(); mctx.arc(0, 0, 17 + Math.sin(performance.now() / 300) * 3, 0, Math.PI * 2); mctx.fill();
+      mctx.fillStyle = 'rgba(255,90,60,0.22)'; mctx.beginPath(); mctx.arc(0, 0, 13 + Math.sin(performance.now() / 300) * 3, 0, Math.PI * 2); mctx.fill();
       mctx.rotate(Math.atan2(facing.x, -facing.z));
       mctx.fillStyle = '#ff5a3c'; mctx.strokeStyle = '#ffffff'; mctx.lineWidth = 2.5;
-      mctx.beginPath(); mctx.moveTo(0, -13); mctx.lineTo(9, 9); mctx.lineTo(0, 4); mctx.lineTo(-9, 9); mctx.closePath(); mctx.stroke(); mctx.fill();
+      mctx.beginPath(); mctx.moveTo(0, -10); mctx.lineTo(7, 7); mctx.lineTo(0, 3); mctx.lineTo(-7, 7); mctx.closePath(); mctx.stroke(); mctx.fill();
       mctx.restore();
     },
   };

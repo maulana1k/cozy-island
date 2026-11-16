@@ -23,7 +23,7 @@ import { createEffects } from './effects.js';
 import { createCrowd, blockAt, blockProgress, JOIN } from './actors/schedule.js';
 import { setViewer, setGround, setSleepy } from './actors/figure.js';
 import { createJournal, clockText, phaseLabel } from './logic/journal.js';
-import { getColliders, groundAt, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
+import { getColliders, groundAt, addPlatform, removePlatform, DOCK, LOOKOUT, CAMPFIRE, WINDMILL, SEATS } from './logic/layout.js';
 import { surfaceAt, SURFACES, pondDistance } from './logic/surface.js';
 import { pickInteractable } from './logic/interact.js';
 import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
@@ -33,8 +33,13 @@ import { createPickups } from './world/pickups.js';
 import { createDirector } from './cutscene.js';
 import { createJourney } from './logic/journey.js';
 import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
-import { createWilds } from './world/wilds.js';
-import { wildDepth, wildness, landR } from './logic/terrain.js';
+import { createWilds, keepClear } from './world/wilds.js';
+// ---- Areas of the bigger island: one file each under src/world/areas/. To add one, import it
+// here and add it to AREA_LIST; nothing else in this file needs to change.
+import * as crossings from './world/areas/crossings.js';
+import * as signpost from './world/areas/signpost.js';
+const AREA_LIST = [crossings, signpost];
+import { nearestSafe, wildness, shoreR } from './logic/terrain.js';
 import { WILD } from './config.js';
 import { ITEMS, FLASK_SIPS, SIP } from './logic/items.js';
 import { createBag } from './logic/bag.js';
@@ -235,10 +240,28 @@ player.onOops = (kind) => {
 };
 player.onLand = (surface) => { audio.play(`step:${surface}`); effects.land(surface, player.position); };
 
+// What an area may use. Only call the functions from inside update() or an interaction, not while
+// the area is being made (the interface is not built yet at that point).
+const areaDeps = {
+  ui, audio, effects, player, scatter,
+  groundAt, heightAt,
+  addPlatform, removePlatform,             // register a walkable deck, stone or gangway (see PLATFORMS in layout.js)
+  keepClear,                               // keepClear(x, z, r): no streamed palms or bushes here (call it in create)
+  give,                                    // give(id, n, at): put things in the backpack, returns how many fitted
+  say: (text, pic) => say(text, pic),      // a short note at the bottom of the screen
+  tip: (id, text) => tip(id, text),        // a one-line tip, shown once per id
+  discover: (id) => discover(id),          // tick a journal entry or journey step by id (unknown ids are ignored)
+  later: (seconds, fn) => later(seconds, fn),
+  shakeFruit: (t) => shakeFruit(t),        // t = { id, kind, x, y, z }: maybe drop an apple (or a coconut, kind 3)
+  now: () => elapsed, dayTime: () => timeOfDay,
+};
+const areas = AREA_LIST.map((m) => m.create(scene, areaDeps) || {});
+const areaColliders = () => areas.flatMap((a) => (typeof a.colliders === 'function' ? a.colliders() : a.colliders || []));
+
 // Buildings are hollow for the player (walls with a doorway); everyone else treats them as solid.
 const allStatic = getColliders();
 const openStatic = allStatic.filter((c) => !c.building);
-const interactables = [...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
+const interactables = [...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 const playerXZ = { x: 0, z: 0 };
 const hintList = [];
 let hintTarget = null;
@@ -543,7 +566,7 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders());
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
     player.update(dt, filming && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
@@ -556,36 +579,41 @@ function step() {
     pond.update(dt, elapsed, night);
     pickups.update(dt, player.position);
     wilds.update(elapsed, night, player.position);
+    for (const a of areas) if (a.update) a.update(dt, elapsed, player, night);
     if (!sleeping) feel(dt);
     for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] <= elapsed) { const fn = pending[i][1]; pending.splice(i, 1); fn(); }
   }
-  // Past the rope into the wild jungle: a warning that grows, then a firm stop.
+  // Off safe ground into the wild jungle: a warning that grows, then a firm stop. Safe ground is the
+  // camp, the locals' land, the river banks, the riverside path, the lake shore and the cliff path.
   if (!paused && !player.riding) {
-    const depth = wildDepth(player.position.x, player.position.z);
+    const safe = nearestSafe(player.position.x, player.position.z), depth = safe.depth;
     if (depth > 0) {
       if (!inWild) { inWild = true; audio.play('alarm'); discover('place-wild'); growlAt = elapsed + 1.5; }
       hud.setDanger(Math.min(1, 0.4 + depth / WILD.limit * 0.6));
       if (elapsed > growlAt) { growlAt = elapsed + 3 + Math.random() * 3; audio.play('growl'); }
       // Keep going despite the warning and the game takes over: a stop screen, and you are walked back out.
       if (depth > WILD.limit && !turnedBack) {
-        const r0 = Math.hypot(player.position.x, player.position.z);
-        turnedBack = 3.2; player.auto = { x: -player.position.x / r0, z: -player.position.z / r0 };
+        turnedBack = 8; // at most; it ends as soon as you are back on safe ground
         hud.setStop(true); audio.play('alarm'); player.gesture('bonk', 0.7); vitals.add({ cheer: -6 });
         if (hud.bagOpen) hud.toggleBag(); if (hud.mapOpen) hud.toggleMap(); if (hud.journalOpen) hud.toggleJournal();
       }
     } else if (inWild) { inWild = false; hud.setDanger(0); say('Phew. Back on safe ground.', '😮‍💨'); }
     if (turnedBack) {
       turnedBack = Math.max(0, turnedBack - dt);
+      // Walked to the nearest safe ground, re-aimed every frame.
+      const dx = safe.x - player.position.x, dz = safe.z - player.position.z, l = Math.hypot(dx, dz);
+      if (l > 0.2) player.auto = { x: dx / l, z: dz / l };
       // Never past the line, whatever happens.
-      const r0 = Math.hypot(player.position.x, player.position.z), max = WILD.border + WILD.limit + 0.5;
-      if (depth > 0 && r0 > max) { player.position.x *= max / r0; player.position.z *= max / r0; }
+      const over = depth - (WILD.limit + 0.5);
+      if (over > 0 && l > 0) { player.position.x += (dx / l) * over; player.position.z += (dz / l) * over; }
+      if (depth < -1) turnedBack = 0;
       if (!turnedBack) { player.auto = null; hud.setStop(false); say('Stay where the camp can see you.', '🧭'); }
     }
   }
   // Fog thickens among the big trees, and the sea is loud only near the shore.
   const wn = wildness(player.position.x, player.position.z);
   scene.fog.density = sky.fogDensity * (1 + wn * 1.6);
-  audio.setSea(Math.min(1, Math.max(0, (landR(player.position.x, player.position.z) - 34) / 22)));
+  audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
   torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.62, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
@@ -690,7 +718,7 @@ requestAnimationFrame(frame);
 
 // Handles for automated checks in the browser.
 window.__game = {
-  wilds, player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
+  wilds, areas, player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
 };
 if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio }); }, 300);

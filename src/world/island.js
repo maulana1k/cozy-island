@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { heightAt, zoneAt, landR, wildness } from '../logic/terrain.js';
+import { heightAt, landR, wildness, shoreR } from '../logic/terrain.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND, WILD } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
+import { paintNewGround } from './ground.js';
 
 const TERRAIN_SIZE = 170;
 const TERRAIN_SEGMENTS = 250;
@@ -50,6 +51,7 @@ function buildTerrain() {
       c.copy(sand).lerp(sandWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
       c.lerp(C(0xfff7dc), smooth((speck(x * 0.5, z * 0.5) - 0.6) / 0.3) * 0.3);
     }
+    paintNewGround(c, x, z, h); // the river banks, the locals' land and the rest of the new ground
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -88,12 +90,18 @@ const waterFragment = /* glsl */ `
   uniform float uShore;
   uniform vec3 uWild;
   uniform float uBlend;
+  uniform sampler2D uLand;
+  uniform vec4 uLandBox;
   varying vec3 vWorld;
   varying float vWave;
   void main() {
     float ra = length(vWorld.xz), rb = uShore + length(vWorld.xz - uWild.xy) - uWild.z;
     float mh = clamp(0.5 + 0.5 * (rb - ra) / uBlend, 0.0, 1.0);
     float r = mix(rb, ra, mh) - uBlend * mh * (1.0 - mh);
+    // Over the new land the coastline comes from a baked map of the same measure, which also
+    // counts the river and the lake as inland water (so they get no surf).
+    vec2 luv = (vWorld.xz - uLandBox.xy) * uLandBox.zw;
+    if (luv.x > 0.0 && luv.y > 0.0 && luv.x < 1.0 && luv.y < 1.0) r = texture2D(uLand, luv).r;
     float ang = atan(vWorld.z, vWorld.x);
     float depthT = smoothstep(uShore - 2.0, uShore + 22.0, r);
     vec3 col = mix(uShallow, uDeep, depthT);
@@ -128,6 +136,16 @@ const waterFragment = /* glsl */ `
   }
 `;
 
+// The coastline over the new land, baked once: `shoreR` sampled every metre (half floats).
+const LAND_BOX = { x0: 14, z0: -200, w: 200, h: 212 };
+function bakeLand() {
+  const { x0, z0, w, h } = LAND_BOX, data = new Uint16Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) data[j * w + i] = THREE.DataUtils.toHalfFloat(Math.min(120, shoreR(x0 + i + 0.5, z0 + j + 0.5)));
+  const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat, THREE.HalfFloatType);
+  tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping; tex.needsUpdate = true;
+  return tex;
+}
+
 function buildWater() {
   const geo = new THREE.PlaneGeometry(900, 900, 220, 220);
   geo.rotateX(-Math.PI / 2);
@@ -146,6 +164,8 @@ function buildWater() {
       uShore: { value: ISLAND_RADIUS },
       uWild: { value: new THREE.Vector3(WILD.x, WILD.z, WILD.radius) },
       uBlend: { value: WILD.blend },
+      uLand: { value: bakeLand() },
+      uLandBox: { value: new THREE.Vector4(LAND_BOX.x0, LAND_BOX.z0, 1 / LAND_BOX.w, 1 / LAND_BOX.h) },
     },
   });
   const mesh = new THREE.Mesh(geo, mat);

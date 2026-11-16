@@ -32,6 +32,7 @@ export function surfaceAt(x, z) {
     if (g.trail < 0.95) return 'dirt';
     if (g.rock > 0.5 && h > 2.5) return 'rock';
     if (Math.hypot(x - AREAS.village.x, z - AREAS.village.z) < AREAS.village.r * 0.45) return 'dirt';
+    if (g.river > 4 && g.river < 14 && g.mouth < 0.5 && g.locals < 0.01) return 'grass'; // the camp's old beach, now a river bank
   }
   if (landR(x, z) >= GRASS_RADIUS) return 'sand';
   if (distanceToPath(x, z) < 0.95 || Math.hypot(x - VILLAGE_CENTER.x, z - VILLAGE_CENTER.z) < 5) return 'dirt';

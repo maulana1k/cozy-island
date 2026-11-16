@@ -74,12 +74,12 @@ export const AREAS = (() => {
     lake: { x: 63, z: -113, r: 12.5, depth: 1.8 },
     // The massif: a ridge of rock along a spine from `a` to `b`, `r` wide, `height` tall, stepped into ledges.
     massif: { a: { x: 40, z: -146 }, b: { x: 120, z: -144 }, r: 21, height: 12, ledge: 4 },
-    cliffFace: [{ x: 50, z: -125 }, { x: 63, z: -124.5 }, { x: 78, z: -124.3 }], // the foot of the cliff over the lake
-    waterfall: { top: { x: 63, z: -128.4, y: 12 }, foot: { x: 63, z: -123.8, y: 0 } },
-    lookout: { x: 55, z: -130, r: 4 },            // a level ledge on the cliff top beside the fall
+    cliffFace: [{ x: 50, z: -125.5 }, { x: 63, z: -124.6 }, { x: 78, z: -124.2 }, { x: 118, z: -123 }], // the foot of the cliff, west to east
+    waterfall: { top: { x: 63, z: -131, y: 12.4 }, foot: { x: 63, z: -124.6, y: 0 } },
+    lookout: { x: 56, z: -133, r: 4 },            // a level ledge on the cliff top beside the fall
     // The cliff path: from the lake's west shore it zig-zags up the gentler west end of the massif
     // (about 14% all the way, a little gentler than the hill trail), then runs along the top to the lookout.
-    cliffPath: [{ x: 50, z: -119 }, { x: 30, z: -125 }, { x: 27, z: -133 }, { x: 44, z: -136 }, { x: 40, z: -145 }, { x: 52, z: -141 }, { x: 55, z: -131.5 }],
+    cliffPath: [{ x: 50, z: -119 }, { x: 30, z: -125 }, { x: 27, z: -133 }, { x: 44, z: -136 }, { x: 40, z: -145 }, { x: 52, z: -142 }, { x: 56, z: -135.5 }],
     bridge,
     stones,
     ford,

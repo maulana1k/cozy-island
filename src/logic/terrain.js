@@ -95,9 +95,9 @@ function massifAt(x, z) {
 function massifHeight(x, z) {
   const m = massifAt(x, z);
   if (m.d > MAS.r) return -Math.min(3, (m.d - MAS.r) * 0.6);
-  const face = 11 + (4 + 13 * smooth((52 - x) / 14) - 11) * m.south;
+  const face = 11 + (7 + 10 * smooth((50 - x) / 12) - 11) * m.south;
   const u = Math.min(1, (MAS.r - m.d) / face);
-  const hs = MAS.height * u * (1 + 0.06 * noise(x / 9 + 3, z / 9 + 1));
+  const hs = MAS.height * u * (1 + 0.06 * noise(x / 9 + 3, z / 9 + 1)) + u * u * 2.2 * noise(x / 21 + 8, z / 21 + 30);
   // Ledges: the rock climbs in steps, with a flat shelf every `ledge` metres of height.
   return hs - (MAS.ledge / (2 * Math.PI)) * Math.sin((2 * Math.PI * hs) / MAS.ledge) * 0.85 + 0.35 * u * noise(x / 3.1, z / 3.1 + 17);
 }
@@ -168,7 +168,7 @@ export function landR(x, z) {
   const old = oldLandR(x, z);
   if (!inNew(x, z)) return old;
   const m = massifAt(x, z);
-  return Math.min(old, localsR(x, z, riverAt(x, z)), ISLAND_RADIUS + m.d - MAS.r);
+  return Math.min(old, localsR(x, z, riverAt(x, z)), ISLAND_RADIUS + (m.d - MAS.r) * 2.5);
 }
 // The same, but with the river and the lake counted as inland water, not sea: the sea shader,
 // the map and the sound of the surf use this, so the river has no surf and no sea roar.

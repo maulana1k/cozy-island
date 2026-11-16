@@ -1,5 +1,5 @@
-// Measures the true cost of one frame (limiter off) and where the script time goes, at three spots.
-// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle]
+// Measures the true cost of one frame (limiter off) and where the script time goes, at each check spot.
+// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle|bridge|village|farm|clifftop|dock]
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,7 +21,13 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && waits.has(d.id
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; waits.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const evalJs = async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })).result?.value;
 
-const SPOTS = { camp: 'x=10&z=8&yaw=0.6', summit: 'x=-18&z=-22&yaw=2', jungle: 'x=-45&z=-50&yaw=3.9' };
+// The camp and the jungle, then the bigger island's spots (see AREAS in src/config.js): standing on
+// the bridge looking at the village, in the village square, on the farm, at the cliff-top lookout
+// looking down the river, and on the dock looking back at camp.
+const SPOTS = {
+  camp: 'x=10&z=8&yaw=0.6', summit: 'x=-18&z=-22&yaw=2', jungle: 'x=-45&z=-50&yaw=3.9',
+  bridge: 'x=61.5&z=-25.1&yaw=-1.06', village: 'x=92&z=-42&yaw=2.08', farm: 'x=138&z=-66&yaw=1.86', clifftop: 'x=56&z=-133&yaw=2.83', dock: 'x=60.1&z=19.5&yaw=1.26',
+};
 const only = process.argv[2];
 for (const [name, q] of Object.entries(SPOTS)) {
   if (only && only !== name) continue;

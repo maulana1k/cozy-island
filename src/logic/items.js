@@ -2,7 +2,7 @@
 // `cook` names what it turns into over a lit campfire; `use` names a special action.
 export const ITEMS = {
   // ---- Kit you start with
-  flask: { name: 'Water flask', icon: '🍶', kind: 'kit', stack: 1, use: 'flask', verb: 'Drink', desc: 'Four good sips. Fill it at a water barrel or the pond.' },
+  flask: { name: 'Water flask', icon: '🧴', kind: 'kit', stack: 1, use: 'flask', verb: 'Drink', desc: 'Four good sips. Fill it at a water barrel or the pond.' },
   torch: { name: 'Torch', icon: '🔦', kind: 'kit', stack: 1, use: 'torch', verb: 'Switch', desc: 'Lights your way after dark.' },
   bugle: { name: 'Bugle', icon: '📯', kind: 'kit', stack: 1, use: 'bugle', verb: 'Blow', desc: 'Everyone nearby turns to look.' },
   // ---- Food

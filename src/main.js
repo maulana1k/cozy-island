@@ -133,7 +133,7 @@ const pickups = createPickups(scene, {
   canDrinkAt: (where) => where === 'barrel' || sips < FLASK_SIPS,
   onWater() {
     player.gesture('drink', 1.2);
-    if (sips < FLASK_SIPS) { sips = FLASK_SIPS; vitals.add({ water: 18 }); audio.play('pour'); say('Flask filled to the top.', '🍶'); refreshBag(); }
+    if (sips < FLASK_SIPS) { sips = FLASK_SIPS; vitals.add({ water: 18 }); audio.play('pour'); say('Flask filled to the top.', '🧴'); refreshBag(); }
     else { vitals.add({ water: 45 }); audio.play('gulp'); say('Ahh. Cold water.', '💧'); }
     discover('drink');
   },
@@ -174,7 +174,7 @@ function useItem(id, plain = false) {
     discover('eat');
   } else if (item.cook) { say('It needs cooking. Take it to a lit campfire.', '🔥'); audio.play('nope'); return; }
   else if (item.use === 'flask') {
-    if (sips <= 0) { say('Your flask is empty. Fill it at a water barrel or the pond.', '🍶'); audio.play('nope'); return; }
+    if (sips <= 0) { say('Your flask is empty. Fill it at a water barrel or the pond.', '🧴'); audio.play('nope'); return; }
     sips--; vitals.add(SIP); player.gesture('drink', 1.3); audio.play('gulp'); busy(1.0); discover('drink');
   } else if (item.use === 'torch') { torchOn = !torchOn; player.setTorch(torchOn); audio.play('click'); say(torchOn ? 'Torch on.' : 'Torch off.', '🔦'); }
   else if (item.use === 'bugle') { player.gesture('blow', 1.3); audio.play('bugle'); villagers.hearBell({ x: p.x, z: p.z }); vitals.add({ cheer: 3 }); busy(1.2); }

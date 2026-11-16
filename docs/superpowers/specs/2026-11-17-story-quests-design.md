@@ -223,7 +223,7 @@ Exact layout, sizes and how far the island grows are **left to the builder** and
 3. **Saved fields:** flags, quests and stages, friendship, gear, badges, notes, field guide, bag, position, day count, time of day, weather. Conversations are not saved mid-node; reloading puts you back outside the conversation.
 4. **Time in conversations:** paused (see 5.2). Sleep and soft failure advance the day.
 5. **Phase 1 content bar:** camp and village cast only (camp leader, buddy scout, younger scout, village elder, old fisherman, shopkeeper, 2 village kids). Ranger, scientist and archaeologist arrive in phase 2. At least 3 sequence puzzles, 4 repeatable side-quest templates, and every chapter 1-2 step from section 7.
-6. **Testing:** the story engine is pure logic, runnable headless. The scripted run is a repeatable `tools/story-run.mjs` (like `ev.mjs`), not a new unit-test file, keeping the owner's "no new test files" rule.
+6. **Testing (owner, 2026-11-17):** keep automated checks light: existing vitest plus a page-load check for console errors. The owner tests the story by hand. No scripted playthrough.
 7. **Journal and journey guide:** the journey guide's steps become the Chapter 1 "New scout" quest inside a new quest log; the camp badge goal stays. Journal gains Quests, Notes, Field guide and People tabs.
 
 ## 11. How it will be checked

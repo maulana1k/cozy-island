@@ -441,7 +441,7 @@ export function create(scene, deps) {
     'It chatters softly, then pretends you are not there.',
   ];
   const monkeys = MONKEYS.map((def, i) => {
-    const kit = buildMonkey(); kit.group.rotation.order = 'YXZ'; scene.add(kit.group);
+    const kit = buildMonkey(); kit.group.name = 'cliffs-monkey'; kit.group.rotation.order = 'YXZ'; scene.add(kit.group);
     const pts = route(def.a, def.b, def.rock);
     const m = { kit, def, pts, len: pts[pts.length - 1].s, s: 0, dir: 0, calm: 0, watch: 0, idle: rng() * 6, mode: 'sit', heading: def.face, t0: rng() * 20, pos: { x: def.a.x, z: def.a.z }, y: def.a.y, moving: false, lastLine: -1 };
     return m;
@@ -480,7 +480,7 @@ export function create(scene, deps) {
 
   // ---- 6. Jumping fish in the lake, away from the stepping stones.
   const fish = [{ x: 61, z: -116.5, rot: 0.4, off: 0 }, { x: 66.5, z: -112, rot: 2.2, off: 1.9 }, { x: 59, z: -110.5, rot: -1.1, off: 3.3 }].map((f) => {
-    const k = buildJumpingFish(); k.group.position.set(f.x, 0, f.z); k.group.rotation.y = f.rot; scene.add(k.group); return { ...f, k };
+    const k = buildJumpingFish(); k.group.name = 'cliffs-fish'; k.group.position.set(f.x, 0, f.z); k.group.rotation.y = f.rot; scene.add(k.group); return { ...f, k };
   });
 
   // ---- Update

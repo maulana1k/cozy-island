@@ -372,13 +372,13 @@ export function buildFlowStreaks(points, width) {
       void main() {
         float u = vUv.x + 0.012 * sin(vUv.y * 0.35 + floor(vUv.x * 18.0) * 2.0);   // lanes wobble a little
         float lane = floor(u * 18.0), h = hash(lane * 3.7 + 1.3), lx = fract(u * 18.0);
-        float line = smoothstep(0.2, 0.08, abs(lx - 0.5)) * step(0.35, hash(lane * 7.1 + 4.0));   // a thin streak in some lanes
+        float line = smoothstep(0.28, 0.02, abs(lx - 0.5)) * step(0.6, hash(lane * 7.1 + 4.0));   // a thin streak in some lanes
         float period = 5.0 + h * 5.0, f = fract(vUv.y / period - uTime * (0.7 + h * 0.5) / period + h);  // slides downstream
-        float dash = smoothstep(0.0, 0.12, f) * smoothstep(0.5, 0.3, f);
+        float dash = smoothstep(0.0, 0.25, f) * smoothstep(0.55, 0.25, f); // soft at both ends, a gentle glint not a stroke
         float bank = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);   // fade near both banks
         float ends = smoothstep(0.0, 6.0, vUv.y) * (1.0 - smoothstep(uLen - 14.0, uLen - 1.0, vUv.y)); // in at the lake, out toward the sea
-        float a = line * dash * bank * ends * 0.45;
-        if (a < 0.02) discard;
+        float a = line * dash * bank * ends * 0.2;
+        if (a < 0.01) discard;
         gl_FragColor = vec4(0.95, 0.98, 1.0, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

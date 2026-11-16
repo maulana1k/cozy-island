@@ -234,3 +234,30 @@ Design: `docs/superpowers/specs/2026-11-16-bigger-island-design.md` (step 1). Th
 - **Changed behaviour**: the `wood` surface label reads "Planks" (shown on the dock and the bridge); the turn-back walks to the nearest safe ground instead of 3.2 s toward the origin; the camp's old north-east beach is painted as grass down to a narrow sandy river bank.
 
 Draw calls with `node tools/prof.mjs` (midday, limiter off): camp 596, summit 386, jungle 628, bridge 141, village 671, farm 669, cliff top 675, dock 984. The dock view (looking back at the whole camp) was already 983 before this step; it is over the 900 budget and needs the dock or camp to get cheaper.
+
+## Bigger island: areas and joining up (2026-11-16)
+
+Design: `docs/superpowers/specs/2026-11-16-bigger-island-design.md`. Built by parallel subagents (models in `src/kit/`, one area file each in `src/world/areas/`), checked and joined up by the main session.
+
+- `src/kit/*.js` are model builders; `kit.html?kit=<file>&fn=<builder>` shows one on a bare stage (`node tools/kitshot.mjs`).
+- Areas: `crossings.js` (bridge, stepping stones), `riverside.js` (flow streaks, bank dressing, 8 ducks), `cliffs.js` (rock dressing, waterfall in a notch, lookout, cliff-path steps and rope, 5 monkeys, 3 jumping fish), `hamlet.js` (8 stilt houses, hall, well, banyan, 3 stalls, paths, 10 locals with a daily round; `?nohamlet` leaves it out), `farm.js` (7 paddies, plots, pen with 3 goats, buffalo wallow, duck pond, orchard of 12 shakeable trees, fishing jetty, herons, butterflies), `harbour.js` (20 m pier, ferry with gangway, arrival).
+- Arrival: `begin('journey')` starts the scout at the top of the ferry gangway (`harbour.ARRIVAL`); the ferry sails at dusk on day 1, never while the scout is aboard. Explore mode and `?play` start in camp with no ship.
+- Joining up in `main.js`/`journal.js`: 12 new journal entries (7 places, 5 friends), rank "Trailblazer" at 27, place discoveries from `AREAS`, river and cliff-path tips, the two-shot `cliff` film at the lookout.
+- Browser helpers now live in `tools/` (`browser.mjs`, `ev.mjs`, `cam.mjs`, `kitshot.mjs`, `prof.mjs`): each always closes its Chrome and gives up after 4 minutes (`MAXMS`). Leftover headless Chromes were the cause of a hot laptop during this build. Screenshots go in `.shots/` (git-ignored).
+
+`node tools/prof.mjs`, quiet machine, limiter off, midday:
+
+| Spot | Draw calls | Triangles | Frame |
+|---|---|---|---|
+| Camp | 581 | 1.18 M | 4.3 ms |
+| Summit | 354 | 1.06 M | 4.4 ms |
+| Jungle | 586 | 1.56 M | 4.9 ms |
+| Bridge | 188 | 0.60 M | 3.7 ms |
+| Village | 645 | 1.58 M | 6.0 to 6.4 ms |
+| Farm | 646 | 1.64 M | 6.2 ms |
+| Cliff top | 559 | 1.53 M | 3.8 ms |
+| Dock (whole camp in view) | 855 | 1.37 M | 7.0 ms |
+
+All under the 900-call budget. The village, farm and dock views are the dearest; the profile is still draw-call bound (about a third of script time in per-object uniform uploads), so the next saving is fewer separate objects there, not WebAssembly.
+
+Known gaps: saying hello to locals and petting farm animals were not tried with a real key press; heron flight and butterflies were not watched in motion; frame rate on the owner's screen is unmeasured; orchard trees of every kind give apples; white water downstream of the stepping stones is strong.

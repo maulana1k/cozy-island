@@ -104,8 +104,8 @@ const vitals = createStats();
 let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 // The torch throws a cone of light ahead of you, not a glow all round.
 // A wide, soft-edged beam that spreads and fades the further it lands, and a faint glow round the scout.
-const torch = new THREE.SpotLight(0xfff0c8, 0, 42, 0.6, 1, 0.45); scene.add(torch, torch.target);
-const torchGlow = new THREE.PointLight(0xffe2b0, 0, 4.5, 1.6); scene.add(torchGlow);
+// A forward beam only: a cone from the hand, soft at its rim but lighting nothing beside or behind the scout.
+const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
@@ -645,15 +645,13 @@ function step() {
   audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
-  torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.62, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
+  torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.72, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);
   // The beam follows the hand a moment late and bobs a little with each step.
   const bob = Math.sin(elapsed * 9) * 0.25 * Math.min(1, player.speed / 2);
-  torchAim.set(player.position.x + player.facing.x * 11, player.position.y - 0.3 + bob, player.position.z + player.facing.z * 11);
+  torchAim.set(player.position.x + player.facing.x * 9, player.position.y - 0.6 + bob, player.position.z + player.facing.z * 11);
   torch.target.position.lerp(torchAim, 1 - Math.exp(-clampDt(raw) * 9));
   const torchLit = torchOn && !player.asleep ? 1 : 0;
   torch.intensity += (torchLit * (2.2 + night * 7.5) - torch.intensity) * 0.25;
-  torchGlow.position.set(player.position.x, player.position.y + 0.9, player.position.z);
-  torchGlow.intensity += (torchLit * night * 1.6 - torchGlow.intensity) * 0.25;
 
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;

@@ -88,7 +88,7 @@ export function oddsAt(hour, previous) {
 }
 
 // ---- Particle shaders -----------------------------------------------------------------------------
-const RAIN_N = 1900, SPLASH_N = 150, WIND_N = 170, WIND_SEGS = 12, MIST_N = 52;
+const RAIN_N = 1900, SPLASH_N = 150, WIND_N = 170, WIND_SEGS = 16, MIST_N = 52, LEAF_N = 220;
 
 function seeded(n, rng, width = 4) {
   const a = new Float32Array(n * width);
@@ -188,35 +188,54 @@ function buildSplashes() {
   return { mesh: m, uniforms };
 }
 
+// Wind streaks up at treetop height (about 4-7 m). The field moves by uOff, an offset the CPU adds up
+// each frame (wrapped to the box), so a turning wind never swings the whole field sideways. Each streak's
+// shape is the path its head took over the last second or two: most are long, gently wavy lines along
+// the wind; about a third now and then roll into a slow loop, like a curl of air.
+export const STREAK_BOX = [34, 3, 34];
+export const streakSpeed = (wind) => 2.0 + wind * 0.8; // m/s the streaks glide (the CPU offset uses the same)
 function buildWindStreaks(rng) {
   const verts = [], idx = [];
   for (let i = 0; i <= WIND_SEGS; i++) { const s = i / WIND_SEGS; verts.push(-0.5, s, 0, 0.5, s, 0); if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k, k - 1, k + 1); } }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
   geo.setIndex(idx);
-  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uWind: WIND, uAlpha: { value: 0.55 } };
+  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uOff: { value: new THREE.Vector3() }, uSpeed: { value: 2 }, uWind: WIND, uAlpha: { value: 0.55 } };
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide,
     vertexShader: /* glsl */`
-      attribute vec4 aSeed; attribute vec4 aSeed2; uniform float uTime, uAmt; uniform vec3 uCenter; uniform vec4 uWind; varying float vA;
-      const vec3 BOX = vec3(30.0, 7.0, 30.0);
+      attribute vec4 aSeed; attribute vec4 aSeed2; uniform float uTime, uAmt, uSpeed; uniform vec3 uCenter, uOff; uniform vec4 uWind; varying float vA;
+      const vec3 BOX = vec3(${STREAK_BOX.map((v) => v.toFixed(1)).join(', ')});
+      vec3 D, A, BASE; float CURLY, PH;
+      // Where the streak's head was \`back\` seconds ago (relative to the head now).
+      vec3 path(float back) {
+        float t = uTime - back;
+        vec3 p = BASE - D * uSpeed * back;
+        // every line sways a little across the wind and up and down, slowly
+        p += A * sin(t * 0.55 + PH) * 0.35 + vec3(0.0, 1.0, 0.0) * sin(t * 0.4 + PH * 1.7) * 0.18;
+        // the curly ones roll into a loop now and then: radius x rate > speed, so it really curls over
+        float env = CURLY * smoothstep(0.2, 0.85, sin(t * 0.3 + PH * 3.0));
+        float w = 2.6 + aSeed2.y * 0.6, r = 0.85 + aSeed2.z * 0.3, ang = t * w + PH;
+        p += env * r * (D * sin(ang) + vec3(0.0, 1.0, 0.0) * (1.0 - cos(ang)));
+        return p;
+      }
       void main() {
         if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
-        float speed = 4.5 + uWind.z * 2.0 + aSeed2.x * 1.5; // straight streaks gliding with the wind
-        vec3 drift = vec3(uWind.x, 0.0, uWind.y) * speed;
-        vec3 hb = aSeed.xyz * BOX + drift * uTime;
-        vec3 rel = mod(hb - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
-        vec3 shift = (uCenter + rel) - hb;
-        float s = position.y, tau = uTime - s * 0.6;
-        vec3 p = aSeed.xyz * BOX + drift * tau + shift; // straight and level: no curls, no bobbing
-        vec3 q = aSeed.xyz * BOX + drift * (tau - 0.03) + shift;
+        D = normalize(vec3(uWind.x, 0.0, uWind.y) + vec3(1e-5, 0.0, 0.0));
+        A = vec3(-D.z, 0.0, D.x);
+        CURLY = step(0.66, aSeed2.w); PH = aSeed2.w * 37.0 + aSeed.x * 11.0;
+        vec3 head = aSeed.xyz * BOX + uOff;
+        vec3 rel = mod(head - uCenter + BOX * 0.5, BOX) - BOX * 0.5;
+        BASE = uCenter + rel;
+        float s = position.y, tail = mix(1.3, 2.4, CURLY) * (0.8 + aSeed2.x * 0.4);
+        vec3 p = path(s * tail), q = path(s * tail + 0.04);
         vec4 a = viewMatrix * vec4(p, 1.0), b = viewMatrix * vec4(q, 1.0);
-        vec3 side = normalize(cross(b.xyz - a.xyz, a.xyz) + 1e-5);
+        vec3 side = normalize(cross(a.xyz - b.xyz, a.xyz) + 1e-5);
         float dist = length(a.xyz), taper = sin(3.14159 * s);
-        vec4 v = a; v.xyz += side * position.x * 0.05 * taper * (1.0 + dist * 0.03);
+        vec4 v = a; v.xyz += side * position.x * 0.045 * taper * (1.0 + dist * 0.03);
         gl_Position = projectionMatrix * v;
-        float edge = (1.0 - smoothstep(0.7, 1.0, abs(rel.y) / 3.5)) * (1.0 - smoothstep(0.65, 1.0, length(rel.xz) / 15.0));
-        vA = edge * smoothstep(3.0, 7.0, dist) * taper; // none right in front of the lens, where they read as big diagonals
+        float edge = (1.0 - smoothstep(0.6, 1.0, abs(rel.y) / (BOX.y * 0.5))) * (1.0 - smoothstep(0.6, 1.0, length(rel.xz) / (BOX.x * 0.5)));
+        vA = edge * smoothstep(3.0, 7.0, dist) * taper;
       }`,
     fragmentShader: /* glsl */`
       uniform float uAlpha; varying float vA;
@@ -226,6 +245,66 @@ function buildWindStreaks(rng) {
   });
   const m = instanced(geo, WIND_N, [['aSeed', seeded(WIND_N, rng), 4], ['aSeed2', seeded(WIND_N, rng), 4]]);
   m.material = mat; m.renderOrder = 6; m.name = 'windStreaks';
+  return { mesh: m, uniforms };
+}
+
+// Falling leaves: small two-sided leaves fluttering down from treetop height around the player, tumbling
+// and swaying, carried by the wind (uOff, added up on the CPU like the streaks). A few on a calm day,
+// many in a gale. Green and autumn tones; darkened at night.
+export const LEAF_BOX = [26, 7, 26];
+export const leafDrift = (wind) => 0.15 + wind * 2.0; // m/s sideways with the wind
+function buildLeaves(rng) {
+  const geo = new THREE.BufferGeometry();
+  // a leaf: a pointed diamond with a little fold, ~14 cm long
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, -0.07, 0.045, 0.008, 0, 0, 0, 0.07, -0.045, 0.008, 0]), 3));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  const uniforms = { uTime: { value: 0 }, uAmt: { value: 0 }, uCenter: { value: new THREE.Vector3() }, uOff: { value: new THREE.Vector3() }, uWind: WIND, uDark: { value: 1 } };
+  const mat = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
+    vertexShader: /* glsl */`
+      #include <common>
+      #include <fog_pars_vertex>
+      attribute vec4 aSeed; attribute vec4 aSeed2; uniform float uTime, uAmt; uniform vec3 uCenter, uOff; uniform vec4 uWind; varying float vA; varying vec3 vC;
+      const vec3 BOX = vec3(${LEAF_BOX.map((v) => v.toFixed(1)).join(', ')});
+      mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+      mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+      mat3 rotZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+      void main() {
+        if (aSeed.w > uAmt) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
+        float ph = aSeed2.w * 6.2832, gust = uWind.z;
+        float fall = 0.45 + aSeed2.x * 0.4;                       // m/s down: leaves drift, they don't drop
+        float y = BOX.y - mod(aSeed.y * BOX.y + fall * uTime, BOX.y); // height above the ground, top to bottom
+        vec3 head = vec3(aSeed.x * BOX.x, 0.0, aSeed.z * BOX.z) + uOff;
+        vec2 rel = mod(head.xz - uCenter.xz + BOX.xz * 0.5, BOX.xz) - BOX.xz * 0.5;
+        vec3 d = normalize(vec3(uWind.x, 0.0, uWind.y) + vec3(1e-5, 0.0, 0.0)), across = vec3(-d.z, 0.0, d.x);
+        // the falling-leaf pendulum: swings side to side as it sinks, more in the wind
+        float swing = sin(uTime * (1.4 + aSeed2.z * 0.8) + ph);
+        vec3 world = vec3(uCenter.x + rel.x, uCenter.y + y, uCenter.z + rel.y) + across * swing * (0.35 + gust * 0.4) + d * swing * swing * 0.15;
+        // tumble: rocks with the swing, spins faster in the wind
+        mat3 R = rotY(ph + uTime * (0.6 + gust * 1.5) * (aSeed2.z - 0.5) * 2.0) * rotZ(swing * 0.9) * rotX(uTime * (0.8 + gust * 2.5) * aSeed2.y);
+        vec4 mv = viewMatrix * vec4(world + R * (position * (0.8 + aSeed2.y * 0.6)), 1.0);
+        gl_Position = projectionMatrix * mv;
+        float edge = 1.0 - smoothstep(0.6, 1.0, length(rel) / (BOX.x * 0.5));
+        vA = edge * smoothstep(0.0, 0.5, y) * smoothstep(BOX.y, BOX.y - 0.8, y) * smoothstep(0.6, 2.0, -mv.z);
+        vec3 green = mix(vec3(0.33, 0.45, 0.16), vec3(0.47, 0.55, 0.2), aSeed.x);
+        vec3 autumn = mix(vec3(0.78, 0.55, 0.18), vec3(0.6, 0.32, 0.14), aSeed.z);
+        vC = mix(green, autumn, step(0.55, aSeed2.w)) * (0.85 + 0.3 * aSeed2.y);
+        vec4 mvPosition = mv;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: /* glsl */`
+      #include <common>
+      #include <fog_pars_fragment>
+      uniform float uDark; varying float vA; varying vec3 vC;
+      void main() { gl_FragColor = vec4(vC * uDark, vA);
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
+  mat.uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {}]);
+  Object.assign(mat.uniforms, uniforms);
+  const m = instanced(geo, LEAF_N, [['aSeed', seeded(LEAF_N, rng), 4], ['aSeed2', seeded(LEAF_N, rng), 4]]);
+  m.material = mat; m.renderOrder = 5; m.name = 'leaves';
   return { mesh: m, uniforms };
 }
 
@@ -264,8 +343,9 @@ function buildMist(rng) {
 // params: URLSearchParams, for ?weather=rain|wind|fog|sun (forced: it never changes).
 export function createWeather(scene, params, audio) {
   const rng = createRng(SEED + 97);
-  const rain = buildRain(), splash = buildSplashes(), streaks = buildWindStreaks(rng), mist = buildMist(rng);
-  scene.add(rain.mesh, splash.mesh, streaks.mesh, mist.mesh);
+  const rain = buildRain(), splash = buildSplashes(), streaks = buildWindStreaks(rng), mist = buildMist(rng), leaves = buildLeaves(rng);
+  scene.add(rain.mesh, splash.mesh, streaks.mesh, mist.mesh, leaves.mesh);
+  const streakOff = new THREE.Vector3(), leafOff = new THREE.Vector3();
 
   const cur = { wind: 0, rain: 0, fog: 0, cloud: 0, cold: 0 };
   const from = { ...cur }, to = { ...cur };
@@ -345,6 +425,9 @@ export function createWeather(scene, params, audio) {
     clock += dt; windClock += dt * (0.6 + 0.3 * w.wind);
     w.windX = Math.cos(windAngle); w.windZ = Math.sin(windAngle);
     WIND.value.set(w.windX, w.windZ, w.wind, windClock);
+    // The streak and leaf fields move by offsets added up here (wrapped to their boxes), never by direction x time.
+    { const v = streakSpeed(w.wind) * dt; streakOff.x = (streakOff.x + w.windX * v) % STREAK_BOX[0]; streakOff.z = (streakOff.z + w.windZ * v) % STREAK_BOX[2]; }
+    { const v = leafDrift(w.wind) * dt; leafOff.x = (leafOff.x + w.windX * v) % LEAF_BOX[0]; leafOff.z = (leafOff.z + w.windZ * v) % LEAF_BOX[2]; }
 
     // Particles: only uniforms change.
     const cx = camera.position.x, cz = camera.position.z;
@@ -387,9 +470,19 @@ export function createWeather(scene, params, audio) {
     streaks.mesh.visible = gale > 0.01;
     if (streaks.mesh.visible) {
       const u = streaks.uniforms;
-      u.uTime.value = clock % 3600; u.uAmt.value = gale * 0.55; // a few airy lines, not a swarm
-      u.uCenter.value.set(gx, baseY + 2.4, gz);
+      u.uTime.value = clock % 3600; u.uAmt.value = gale * 0.5; // a few airy lines, not a swarm
+      u.uCenter.value.set(gx, baseY + 5.5, gz); // up at treetop height
+      u.uOff.value.copy(streakOff); u.uSpeed.value = streakSpeed(w.wind);
       u.uAlpha.value = 0.5 * (0.45 + 0.55 * dark);
+    }
+    // Falling leaves: a few on a calm day, many in a gale; fewer in heavy rain.
+    const leafAmt = (0.06 + 0.94 * Math.max(0, (w.wind - 0.1) / 0.9)) * (1 - 0.6 * w.rain);
+    leaves.mesh.visible = leafAmt > 0.01;
+    if (leaves.mesh.visible) {
+      const u = leaves.uniforms;
+      u.uTime.value = clock % 3600; u.uAmt.value = Math.min(1, leafAmt);
+      u.uCenter.value.set(fx, baseY - 0.2, fz); u.uOff.value.copy(leafOff);
+      u.uDark.value = dark;
     }
     mist.mesh.visible = w.fog > 0.02;
     if (mist.mesh.visible) {

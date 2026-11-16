@@ -43,6 +43,56 @@ export const KNOLL = { x: 30, z: -22, r: 11, height: 1.4 };
 export const CAMP_FLAT = { x: 10, z: 8, inner: 20, outer: 34 };
 export const MIN_WADE_SPEED = 0.35;
 
+// ---- The bigger island ------------------------------------------------------------------
+// Across a river to the north-east lies the locals' land; a rock massif closes the river's
+// northern end, with a lake at its foot and a waterfall off the cliff. Every place an area
+// builder needs is named here, so the land and the things on it agree. The terrain is built
+// from these numbers (src/logic/terrain.js); change them and the ground follows.
+export const AREAS = (() => {
+  // The river, from the lake at its head down to the sea. `w` is its half width in metres.
+  // It runs along what used to be the camp's north-east coast, a stride off the old waterline.
+  const river = [
+    { x: 63, z: -113, w: 5 }, { x: 57.7, z: -101.5, w: 5 }, { x: 53.5, z: -93, w: 4.6 }, { x: 48.3, z: -84.8, w: 5.6 },
+    { x: 42.9, z: -76.8, w: 5.8 }, { x: 39, z: -69.7, w: 6 }, { x: 37.4, z: -63.7, w: 6 }, { x: 38.4, z: -58.2, w: 5.8 },
+    { x: 42.4, z: -51.6, w: 5.8 }, { x: 49, z: -43.8, w: 6 }, { x: 55.7, z: -35.1, w: 6.2 }, { x: 60.9, z: -26.6, w: 6.5 },
+    { x: 64.1, z: -17.7, w: 7 }, { x: 66.4, z: -8.5, w: 7 }, { x: 69, z: 2, w: 7 },
+  ];
+  // A plank bridge at the camp end, on the line from camp to the village: `a` on the camp bank.
+  const bridge = { a: { x: 53.4, z: -21.2 }, b: { x: 69.6, z: -29 }, width: 2.4, arch: 0.7 };
+  // Stepping stones across a shallow ford near the lake, a stride apart, camp side first.
+  const ford = { x: 55.6, z: -97.2 }, across = { x: 0.897, z: 0.443 };
+  const stones = Array.from({ length: 11 }, (_, i) => { const k = (i - 5) * 1.12; return { x: +(ford.x + across.x * k).toFixed(2), z: +(ford.z + across.z * k).toFixed(2), r: 0.55 }; });
+  return {
+    river,
+    riverMouth: { x: 64.1, z: -17.7 },          // where the river meets the sea; land on both sides ends here
+    locals: { x: 120, z: -70, r: 60 },          // the locals' land: a round of land across the river
+    village: { x: 92, z: -42, r: 18 },          // the village square and the ring of homes round it
+    farm: { x: 138, z: -66, r: 34 },            // the farm fills the outer ring: paddies east and south, orchard north
+    orchard: { x: 118, z: -106, r: 12 },
+    paddies: { x: 145, z: -48, r: 20 },
+    jetty: { x: 177, z: -62, rot: Math.PI / 2 }, // the fishing jetty on the far shore, pointing out to sea (east)
+    lake: { x: 63, z: -113, r: 12.5, depth: 1.8 },
+    // The massif: a ridge of rock along a spine from `a` to `b`, `r` wide, `height` tall, stepped into ledges.
+    massif: { a: { x: 40, z: -146 }, b: { x: 120, z: -144 }, r: 21, height: 12, ledge: 4 },
+    cliffFace: [{ x: 50, z: -125 }, { x: 63, z: -124.5 }, { x: 78, z: -124.3 }], // the foot of the cliff over the lake
+    waterfall: { top: { x: 63, z: -128.4, y: 12 }, foot: { x: 63, z: -123.8, y: 0 } },
+    lookout: { x: 55, z: -130, r: 4 },            // a level ledge on the cliff top beside the fall
+    // The cliff path: from the lake's west shore it zig-zags up the gentler west end of the massif
+    // (about 14% all the way, a little gentler than the hill trail), then runs along the top to the lookout.
+    cliffPath: [{ x: 50, z: -119 }, { x: 30, z: -125 }, { x: 27, z: -133 }, { x: 44, z: -136 }, { x: 40, z: -145 }, { x: 52, z: -141 }, { x: 55, z: -131.5 }],
+    bridge,
+    stones,
+    ford,
+    dock: { x: 53.45, z: 17.37, rot: 1.257 },     // today's dock: its shore end and heading (see DOCK in layout.js)
+    // Trails on the new land: from the windmill knoll along the camp-side bank to the lake, and to the bridge.
+    trails: [
+      [{ x: 42.5, z: -19 }, { x: 43, z: -25 }, { x: 39.5, z: -31 }, { x: 34, z: -40.5 }, { x: 29, z: -50 }, { x: 24.5, z: -62 }, { x: 25.5, z: -75 },
+        { x: 31, z: -84.6 }, { x: 36.5, z: -92.5 }, { x: 42, z: -100 }, { x: 46.5, z: -108 }, { x: 50, z: -119 }],
+      [{ x: 42.5, z: -19 }, { x: 47.5, z: -19.6 }, { x: 53.4, z: -21.2 }],
+    ],
+  };
+})();
+
 export const PALETTE = {
   grass: 0xe6c56f,
   grassDark: 0xd9b45c,

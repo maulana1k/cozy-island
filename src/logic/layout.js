@@ -1,7 +1,7 @@
 // Fixed positions of everything on the island. The same every run.
 import { createRng } from './rng.js';
-import { heightAt, zoneAt, nearestOnTrail, landR } from './terrain.js';
-import { SEED, PALETTE, HILL, PLAYER_START, POND, HILL_TRAIL } from '../config.js';
+import { heightAt, zoneAt, nearestOnTrail, landR, groundKind } from './terrain.js';
+import { SEED, PALETTE, HILL, PLAYER_START, POND, HILL_TRAIL, AREAS } from '../config.js';
 
 const DEG = Math.PI / 180;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -275,7 +275,51 @@ export function floorHeight(c) {
 }
 const FLOORS = COTTAGES.map((c) => ({ c, y: floorHeight(c) + 0.06, cos: Math.cos(c.rot), sin: Math.sin(c.rot) }));
 
-// Terrain height, plus the dock's deck and the level floors inside the camp structures.
+// Walkable platforms: anything raised you can walk on that is not hardcoded above (bridges,
+// stepping stones, a gangway, a jetty). Each is a shape, a top height and a surface name:
+//   { shape: 'strip', a: {x, z}, b: {x, z}, width, y0, y1, arch, surface }  a straight deck from a to b;
+//       its top runs from y0 at a to y1 at b (each defaults to the ground there) and bows up by `arch` mid-way
+//   { shape: 'circle', x, z, r, top, surface }                             a round top, e.g. a stepping stone
+//   { shape: 'box', x, z, rot, hw, hd, top, surface }                      a level rectangle turned by rot
+// `addPlatform` registers one and returns it (with its numbers filled in); `removePlatform` takes it away.
+export const PLATFORMS = [];
+export function addPlatform(p) {
+  const q = { surface: 'wood', ...p };
+  if (q.shape === 'strip') {
+    q.y0 ??= heightAt(q.a.x, q.a.z) + 0.04; q.y1 ??= heightAt(q.b.x, q.b.z) + 0.04; q.arch ??= 0;
+    q.len = Math.hypot(q.b.x - q.a.x, q.b.z - q.a.z); q.dx = (q.b.x - q.a.x) / q.len; q.dz = (q.b.z - q.a.z) / q.len;
+    q.reach = q.len / 2 + q.width; q.cx = (q.a.x + q.b.x) / 2; q.cz = (q.a.z + q.b.z) / 2;
+  } else if (q.shape === 'box') { q.cx = q.x; q.cz = q.z; q.reach = Math.hypot(q.hw, q.hd); q.cos = Math.cos(q.rot || 0); q.sin = Math.sin(q.rot || 0); }
+  else { q.cx = q.x; q.cz = q.z; q.reach = q.r; }
+  PLATFORMS.push(q);
+  return q;
+}
+export function removePlatform(q) { const i = PLATFORMS.indexOf(q); if (i >= 0) PLATFORMS.splice(i, 1); }
+// The platform under a point and its top there, or null.
+const under = { p: null, y: 0 };
+export function platformUnder(x, z) {
+  for (const q of PLATFORMS) {
+    if (Math.abs(x - q.cx) > q.reach || Math.abs(z - q.cz) > q.reach) continue;
+    if (q.shape === 'strip') {
+      const wx = x - q.a.x, wz = z - q.a.z, along = wx * q.dx + wz * q.dz;
+      if (along < 0 || along > q.len || Math.abs(wx * q.dz - wz * q.dx) > q.width / 2) continue;
+      const u = along / q.len;
+      under.p = q; under.y = q.y0 + (q.y1 - q.y0) * u + q.arch * Math.sin(Math.PI * u); return under;
+    }
+    if (q.shape === 'box') {
+      const wx = x - q.x, wz = z - q.z;
+      if (Math.abs(wx * q.cos - wz * q.sin) > q.hw || Math.abs(wx * q.sin + wz * q.cos) > q.hd) continue;
+    } else if (Math.hypot(x - q.x, z - q.z) > q.r) continue;
+    under.p = q; under.y = q.top; return under;
+  }
+  return null;
+}
+// The foundation's own crossings: the plank bridge at the camp end of the river and the
+// stepping stones over the ford near the lake. Their models are in src/world/areas/crossings.js.
+export const BRIDGE = addPlatform({ shape: 'strip', a: AREAS.bridge.a, b: AREAS.bridge.b, width: AREAS.bridge.width, arch: AREAS.bridge.arch, surface: 'wood', id: 'bridge' });
+export const STONES = AREAS.stones.map((s, i) => addPlatform({ shape: 'circle', x: s.x, z: s.z, r: s.r, top: 0.16 + 0.05 * Math.sin(i * 2.3), surface: 'rock', id: `stone-${i}` }));
+
+// Terrain height, plus the dock's deck, the level floors inside the camp structures and any platform.
 export function groundAt(x, z) {
   const h = heightAt(x, z);
   if (inDock(x, z)) return Math.max(h, DOCK.top);
@@ -285,24 +329,27 @@ export function groundAt(x, z) {
     const wx = x - f.c.x, wz = z - f.c.z;
     if (Math.abs(wx * f.cos - wz * f.sin) < f.c.width / 2 + 0.05 && Math.abs(wx * f.sin + wz * f.cos) < f.c.depth / 2 + 0.2) return Math.max(h, f.y);
   }
-  return h;
+  const p = platformUnder(x, z);
+  return p ? Math.max(h, p.y) : h;
 }
 
-// How deep in the jungle a spot is: 0 in and around the camp, 1 well outside it.
+// How deep in the jungle a spot is: 0 in and around the camp and on the locals' land, 1 well outside.
 export function jungleAt(x, z) {
   const d = Math.hypot(x - 10, z - 8), r = landR(x, z);
-  const t = Math.min(1, Math.max(0, (d - 23) / 6)) * Math.min(1, Math.max(0, (47 - r) / 4));
+  let t = Math.min(1, Math.max(0, (d - 23) / 6)) * Math.min(1, Math.max(0, (47 - r) / 4));
+  if (t > 0 && d > 40) { const g = groundKind(x, z); if (g) t *= 1 - g.locals; }
   return t * t * (3 - 2 * t);
 }
 
-// What you are standing on, when it is something built: the dock's planks or a tent's groundsheet.
+// What you are standing on, when it is something built: the dock's planks, a tent's groundsheet, a platform.
 export function platformAt(x, z) {
   if (inDock(x, z)) return 'wood';
   for (const f of FLOORS) {
     const wx = x - f.c.x, wz = z - f.c.z;
     if (Math.abs(wx * f.cos - wz * f.sin) < f.c.width / 2 + 0.05 && Math.abs(wx * f.sin + wz * f.cos) < f.c.depth / 2 + 0.2) return 'floor';
   }
-  return null;
+  const p = platformUnder(x, z);
+  return p ? p.p.surface : null;
 }
 
 // ---- Scatter ------------------------------------------------------------

@@ -17,7 +17,9 @@ export function createPlayer(scene, opts = {}) {
   const groundAt = opts.groundAt || heightAt;
   const surfaceAt = opts.surfaceAt || (() => 'grass');
   const surfaces = opts.surfaces || {};
-  const figure = createFigure({ self: true, hairStyle: 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'cap', accentColor: 0xf0d58c, neckerchief: 0xf2c94c, hairColor: 0x4a3328, skinColor: 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x77804a }); // a small olive day pack
+  // The look is chosen at New game (src/story/ui.js): skin, hair colour and style, cap colour.
+  const makeFigure = (L = {}) => createFigure({ self: true, hairStyle: L.style ?? 1, eyeColor: 0x5b3a24, bodyColor: PALETTE.player, accent: 'cap', accentColor: L.cap ?? 0xf0d58c, neckerchief: 0xf2c94c, hairColor: L.hair ?? 0x4a3328, skinColor: L.skin ?? 0xd9a273, shortsColor: 0x3f8f8a, backpackColor: 0x77804a }); // a small olive day pack
+  let figure = makeFigure();
   scene.add(figure.group);
 
   const position = new THREE.Vector3(PLAYER_START.x, groundAt(PLAYER_START.x, PLAYER_START.z), PLAYER_START.z);
@@ -41,6 +43,14 @@ export function createPlayer(scene, opts = {}) {
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
     torch: false, setTorch(on) { player.torch = on; figure.setTorch(on); },
+    // Rebuilds the body in a new look, in the same place and pose.
+    setLook(look) {
+      const old = figure;
+      figure = makeFigure(look);
+      figure.group.position.copy(old.group.position); figure.group.rotation.copy(old.group.rotation);
+      scene.add(figure.group); scene.remove(old.group); figure.setTorch(player.torch);
+      old.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); // materials are shared between people: keep them
+    },
     focus: null, // { x, z } of the thing in reach, set by the game
     auto: null, // { x, z }: walk this way whatever the keys say (being turned back)
     speedFactor: 1, canRun: true, // set from how the scout is feeling

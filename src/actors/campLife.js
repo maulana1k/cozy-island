@@ -97,6 +97,9 @@ export function createCampLife(scene, deps) {
     get enabled() { return !p.member.hidden; },
     prompt: () => `E — greet ${p.name}`,
     interact() { react(p, k === 0 ? 'salute' : 'wave', 1.2); emote(p, 'heart'); audio.play('squeak'); talkTo(p.member, player.position); },
+    // For the story's conversations: lying in bed, and staying turned to you while a talk is open.
+    get asleep() { return !!(p.member.spot && p.member.spot.lie && p.member.arrived); },
+    hold(on) { if (on) { react(p, 'wave', 1.2); talkTo(p.member, player.position, 1e9); } else if (p.member.talk) p.member.talk.dur = 0; },
   }));
   const solids = people.filter((p) => p.solid);
   const colliders = [];

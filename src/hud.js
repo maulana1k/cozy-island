@@ -336,7 +336,12 @@ export function createHUD(handlers) {
   bookHead.append(sumRank, sumText);
   const lists = el('div', 'lists');
   const foot = el('div', 'foot');
-  page.append(bookHead, lists, foot);
+  // Tabs: the camp badge goal (the original journal), then the story's pages (src/story/ui.js).
+  const TABS = [['camp', 'Camp'], ['quests', 'Quests'], ['notes', 'Notes'], ['guide', 'Field guide'], ['people', 'People']];
+  let tab = 'camp', lastProgress = null;
+  const tabRow = el('div', 'tabs');
+  const tabBtns = TABS.map(([id, label]) => { const b = el('button', id === tab ? 'on' : '', label); b.addEventListener('click', () => { tab = id; renderJournal(); }); tabRow.append(b); return b; });
+  page.append(tabRow, bookHead, lists, foot);
   book.append(rings, page);
 
   // ---- Map: a folded paper sheet
@@ -350,10 +355,13 @@ export function createHUD(handlers) {
   const mctx = mapCanvas.getContext('2d');
   paper.append(mapCanvas); sheet.append(paper);
 
-  // ---- Start screen: just the name of the place
+  // ---- Start screen: the name of the place, Continue (when there is a save), New game, or explore without the guide
   const start = el('div', 'overlay start');
-  const startJourney = el('button', 'word go', 'Start the journey'), startFree = el('button', 'word', 'Explore freely');
-  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), startJourney, el('p', 'what', 'A gentle guided first day at camp. Follow it or wander off, as you like.'), startFree, el('p', 'what', 'No guide. Just you and the island.'), el('p', 'press', 'Enter to start'));
+  const startCont = el('button', 'word cont', 'Continue'), startJourney = el('button', 'word go', 'New game'), startFree = el('button', 'word', 'Explore freely');
+  const contWhat = el('p', 'what', 'Carry on where you left off.');
+  startCont.style.display = contWhat.style.display = 'none';
+  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), startCont, contWhat, startJourney, el('p', 'what', 'Choose your name and look, then start your first day at camp.'), startFree, el('p', 'what', 'A new game with no guide on screen.'), el('p', 'press', 'Enter to start'));
+  startCont.addEventListener('click', () => handlers.onStart('continue'));
   startJourney.addEventListener('click', () => handlers.onStart('journey'));
   startFree.addEventListener('click', () => handlers.onStart('free'));
 
@@ -386,7 +394,7 @@ export function createHUD(handlers) {
     weatherRow.append(b);
   }
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Journey guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
   menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, timeRow, weatherRow, controls);
@@ -422,7 +430,7 @@ export function createHUD(handlers) {
     begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); },
     openMenu() { hud.menuOpen = true; menu.classList.remove('off'); },
     closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
-    toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
+    toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
     toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
     // The bars top-left and the numbers in the backpack.
     setStats(s) {
@@ -469,14 +477,18 @@ export function createHUD(handlers) {
     setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look' : 'Camera: hold and drag'; },
     // 0 = safe; toward 1 the edges of the picture turn red and the warning shows.
     setDanger(level) { danger.style.opacity = level; root.classList.toggle('danger-on', level > 0); },
-    // The journey card. step: { title, text } or null when the journey is finished.
-    setQuest(step, count, total, shown) {
-      quest.classList.toggle('off', !shown);
-      guideRow.textContent = shown ? 'Journey guide: on' : 'Journey guide: off';
-      questHead.textContent = step ? `Journey · ${count + 1} of ${total}` : 'Journey complete';
-      questTitle.textContent = step ? step.title : 'A true scout';
-      questText.textContent = step ? step.text : 'The island is yours. Explore as you please.';
+    // The quest card top-right. card: { head, title, text } or null when there is nothing to follow.
+    setQuest(card, shown) {
+      quest.classList.toggle('off', !shown || !card);
+      guideRow.textContent = shown ? 'Quest guide: on' : 'Quest guide: off';
+      if (!card) return;
+      questHead.textContent = card.head; questTitle.textContent = card.title; questText.textContent = card.text;
     },
+    hideStart(on) { start.classList.toggle('off', on); },
+    setContinue(on) { startCont.style.display = contWhat.style.display = on ? '' : 'none'; startJourney.classList.toggle('go', !on); },
+    // The story pages call this when something changed; it redraws the open page.
+    refreshJournal() { if (hud.journalOpen) renderJournal(); },
+    openTab(id) { tab = id; renderJournal(); },
     setFilms(on) { filmRow.textContent = on ? 'Cutscenes: on' : 'Cutscenes: off'; },
     setDaySpeed(k) { speedRow.textContent = `Day speed: ${k}×`; },
     setSaver(on) { saverRow.textContent = on ? 'Battery saver: on (30 a second)' : 'Battery saver: off (60 a second)'; },
@@ -517,6 +529,10 @@ export function createHUD(handlers) {
       num.textContent = count;
       const span = rank.next ? rank.next.at - rank.from : 1, pct = rank.next ? Math.round(((count - rank.from) / span) * 100) : 100;
       rankName.textContent = rank.name; barFill.style.width = `${pct}%`;
+      lastProgress = { list, rank, count, total };
+      if (tab === 'camp') renderJournal();
+    },
+    _campPage({ list, rank, count, total }) {
       sumRank.textContent = rank.name;
       sumText.textContent = `${count} of ${total} found. ${rank.next ? `${rank.next.at - count} more to become ${rank.next.name}.` : 'You have found everything!'}`;
       foot.textContent = `${steps.toLocaleString('en-US')} steps walked. Nothing here is required.`;
@@ -567,6 +583,15 @@ export function createHUD(handlers) {
       mctx.restore();
     },
   };
+  // The notebook: the camp page from the journal's numbers, the others from the story.
+  function renderJournal() {
+    tabBtns.forEach((b, i) => b.classList.toggle('on', TABS[i][0] === tab));
+    if (tab === 'camp') { if (lastProgress) hud._campPage(lastProgress); return; }
+    const pg = handlers.journalPage ? handlers.journalPage(tab) : null;
+    sumRank.textContent = pg ? pg.title : ''; sumText.textContent = pg ? pg.sub : '';
+    lists.replaceChildren(...(pg ? pg.nodes : []));
+    foot.textContent = tab === 'quests' ? 'Quests never lock you out: wrong answers can always be tried again.' : '';
+  }
   // The card under the pockets: what the chosen thing is and what you can do with it.
   function renderDetail() {
     const s = bagView.slots[selected];

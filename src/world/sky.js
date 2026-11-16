@@ -118,7 +118,7 @@ export function createSky(scene, renderer) {
     waterLight,
     fogColor,
     fogDensity: FOG_DENSITY,
-    update(t, elapsed, focus) {
+    update(t, elapsed, focus, wx) {
       const cloudDt = Math.min(0.1, Math.max(0, elapsed - lastElapsed)); lastElapsed = elapsed;
       const c = skyColors(t);
       const night = nightFactor(t);
@@ -175,6 +175,28 @@ export function createSky(scene, renderer) {
       // A single tint the water shader multiplies by, so the sea follows the time of day.
       waterLight.setHex(c.ambient).multiplyScalar(0.55 * c.ambientIntensity)
         .add(tmp.setHex(c.sun).multiplyScalar(0.19 * c.sunIntensity));
+
+      // ---- WEATHER (multipliers on top of everything above; wx = the weather module's 0..1 values) ----
+      if (wx) {
+        const gloom = Math.min(1, wx.cloud * 0.55 + wx.rain * 0.6 + wx.fog * 0.25); // 0 clear .. 1 dark overcast
+        const grey = Math.min(1, wx.cloud * 0.8 + wx.fog * 0.5), chill = Math.min(1, wx.cold * 0.7 + wx.rain * 0.3);
+        const tone = (col, g, k) => { const l = col.r * 0.2126 + col.g * 0.7152 + col.b * 0.0722; return col.lerp(tmp.setRGB(l * 0.92, l * 0.99, l * 1.12), g).multiplyScalar(k); };
+        tone(dome.material.uniforms.uTop.value, grey, 1 - 0.55 * wx.rain - 0.12 * wx.fog);
+        tone(dome.material.uniforms.uHorizon.value, grey, 1 - 0.35 * wx.rain);
+        tone(fogColor, Math.min(1, grey + wx.fog * 0.3), 1 - 0.3 * wx.rain - 0.04 * wx.fog);
+        dome.material.uniforms.uFog.value.copy(fogColor); scene.fog.color.copy(fogColor); if (scene.background) scene.background.copy(fogColor);
+        sunLight.intensity *= 1 - 0.78 * gloom; sunLight.shadow.intensity *= 1 - 0.8 * gloom;
+        tone(sunLight.color, chill * 0.6, 1); tone(ambient.color, chill * 0.55, 1);
+        ambient.intensity *= 1 - 0.2 * gloom + 0.12 * wx.rain; // the sky light stays up a little, so rain is dim, not black
+        sunDisc.material.opacity *= 1 - 0.95 * Math.min(1, wx.cloud * 1.2); moonDisc.material.opacity *= 1 - 0.8 * wx.cloud; stars.material.opacity *= 1 - wx.cloud;
+        const cm = clouds.children[0].children[0].material;
+        cm.color.setRGB(1, 1, 1).lerp(tmp.setRGB(0.36, 0.4, 0.46), wx.rain * 0.9 + wx.cloud * 0.1);
+        const cs = 1 + wx.cloud * 1.3; // clouds swell into an overcast
+        clouds.children.forEach((c) => { c.scale.set(cs, 1 + wx.cloud * 0.35, cs); });
+        waterLight.multiplyScalar(1 - 0.45 * gloom);
+        this.fogDensity = FOG_DENSITY * (1 + wx.fog * 7 + wx.rain * 0.9);
+        // (main.js reads fogDensity and thickens it among the big trees on top of this)
+      }
     },
   };
 }

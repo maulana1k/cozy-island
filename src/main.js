@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createIsland } from './world/island.js';
 import { createSky } from './world/sky.js';
+import { createWeather } from './world/weather.js';
 import { createVillage } from './world/village.js';
 import { createBuildings } from './world/buildings.js';
 import { createCampProps } from './world/campProps.js';
@@ -78,6 +79,7 @@ const ui = createUI(scene);
 const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
+const weather = createWeather(scene, params); // random weather; ?weather=rain|wind|fog|sun forces one
 const village = createVillage(scene);
 const buildings = createBuildings(scene, { audio, onSleep: (bed) => startSleep(bed) });
 const campProps = createCampProps(scene);
@@ -87,7 +89,7 @@ const wilds = createWilds(scene);
 const input = createInput(window, canvas);
 const player = createPlayer(scene, { groundAt, surfaceAt, surfaces: SURFACES });
 const rig = createFollowCamera(camera);
-const props = createProps(scene, { scatter, player, ui, audio, now: () => elapsed, dayTime: () => timeOfDay, onShake: (t) => shakeFruit(t) });
+const props = createProps(scene, { scatter, weather, player, ui, audio, now: () => elapsed, dayTime: () => timeOfDay, onShake: (t) => shakeFruit(t) });
 setGround(groundAt); // every figure plants its feet on this
 const crowd = createCrowd(); // the camp timetable everyone follows
 const villagers = createVillagers(scene, { ui, audio, player, crowd });
@@ -210,7 +212,7 @@ let inWild = false, growlAt = 0, turnedBack = 0;
 let wasWinded = false, nagFood = 0, nagWater = 0;
 function feel(dt) {
   const near = player.sitting && props.fireNear(player.position.x, player.position.z);
-  vitals.tick(dt, { running: player.speed > 3.1, moving: player.moving, sitting: player.sitting, cosy: !!near || !!player.act });
+  vitals.tick(dt, { cold: weather.cold, running: player.speed > 3.1, moving: player.moving, sitting: player.sitting, cosy: !!near || !!player.act });
   player.canRun = vitals.canRun; player.speedFactor = vitals.speedFactor;
   if (vitals.winded && !wasWinded) tip('winded', 'Running uses energy. Sit down with X to get your breath back faster.');
   if (vitals.hungry) tip('hungry', 'Food is low. Eat from your backpack (B), or take stew and bread from the serving table by the food tent.');
@@ -695,6 +697,7 @@ function step() {
   const ground = SURFACES[player.riding ? 'wood' : player.surface] || SURFACES.grass;
   hud.setGround(player.riding ? 'Flying fox' : ground.label, ground.color);
   hud.setClock(clockText(timeOfDay), phaseLabel(phaseAt(timeOfDay)), night > 0.5, dayNumber);
+  hud.setWeather(weather.kind, weather.kind === 'sun' && night > 0.5 ? 'Clear' : weather.label);
   hud.setSteps(stepCount);
   hud.drawMap(playerXZ, player.facing, villagers.villagers.map((v) => v.position));
   if (speech) {
@@ -714,7 +717,9 @@ function step() {
   } else hud.setWaypoint(null);
 
   if (!director.update(clampDt(raw))) rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? 8 : player.speed * 1.4 });
-  sky.update(timeOfDay, elapsed, player.position);
+  weather.update(dt, timeOfDay, camera, player.position, night);
+  sky.update(timeOfDay, elapsed, player.position, weather);
+  weather.setMistColor(sky.fogColor);
   island.update(elapsed);
   island.setLight(sky.waterLight, sky.fogColor, scene.fog.density);
   village.update(elapsed);
@@ -755,6 +760,6 @@ requestAnimationFrame(frame);
 // Handles for automated checks in the browser.
 window.__game = {
   wilds, areas, player, rig, input, stats, vitals, journey, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
-  get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; },
+  get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather,
 };
 if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio }); }, 300);

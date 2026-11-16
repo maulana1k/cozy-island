@@ -22,6 +22,10 @@ const ICONS = {
   water: '<svg viewBox="0 0 24 24"><path d="M12 3.200c3.300 4 5.800 7.300 5.800 10.600a5.800 5.800 0 0 1-11.600 0c0-3.300 2.500-6.600 5.800-10.600z"/></svg>',
   energy: '<svg viewBox="0 0 24 24"><path d="M13.500 2.800L5.500 13.500h5.500l-1 7.700 8.500-11.200h-5.800z"/></svg>',
   cheer: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.800"/><path d="M8.300 14c1 1.600 2.200 2.300 3.700 2.300s2.700-.7 3.700-2.300M9 9.800v.4M15 9.800v.4"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24"><path d="M7 18.5a4 4 0 0 1-.4-8A5.5 5.5 0 0 1 17 9.2a4.7 4.7 0 0 1 .5 9.300z"/></svg>',
+  rain: '<svg viewBox="0 0 24 24"><path d="M7 14.5a4 4 0 0 1-.4-8A5.5 5.5 0 0 1 17 5.200a4.700 4.700 0 0 1 .5 9.300z"/><path d="M8 17.500l-1 3M12.500 17.500l-1 3M17 17.500l-1 3"/></svg>',
+  wind: '<svg viewBox="0 0 24 24"><path d="M3 9h10.500a2.500 2.500 0 1 0-2.400-3.100M3 13.500h14.500a2.800 2.800 0 1 1-2.700 3.600M3 18h7"/></svg>',
+  fog: '<svg viewBox="0 0 24 24"><path d="M7 12.500a4 4 0 0 1-.4-8A5.5 5.5 0 0 1 17 3.200a4.700 4.700 0 0 1 .5 9.300z"/><path d="M3.500 16h17M6 19.500h12"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>',
 };
 
@@ -272,7 +276,8 @@ export function createHUD(handlers) {
   rankLine.append(icon('star', 'ico gold'), num, rankName);
   const bar = el('div', 'bar'); const barFill = el('i'); bar.append(barFill);
   const clockLine = el('div', 'line'); const clockIco = icon('sun'); const time = el('b', 'time'); const phase = el('span');
-  clockLine.append(clockIco, time, phase);
+  const wxEl = el('span', 'wx'); // the weather: a small icon and word next to the clock
+  clockLine.append(clockIco, time, phase, wxEl);
   const nowLine = el('div', 'line now');
   // How you are feeling: four thin white bars
   const statBox = el('div', 'stats'); const statRows = {};
@@ -395,7 +400,7 @@ export function createHUD(handlers) {
   // Buttons must not keep keyboard focus, or Space and Enter would press them again.
   root.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
 
-  let lastClock = '', lastGround = '', lastHints = '', bannerTimer = null, bubbleTimer = null, steps = 0, frame = 0;
+  let lastWeather = '', lastClock = '', lastGround = '', lastHints = '', bannerTimer = null, bubbleTimer = null, steps = 0, frame = 0;
 
   const hud = {
     menuOpen: false, started: false, journalOpen: false, mapOpen: false, bagOpen: false,
@@ -482,6 +487,7 @@ export function createHUD(handlers) {
       clockIco.innerHTML = ICONS[isNight ? 'moon' : 'sun'];
       time.textContent = text; phase.textContent = `${phaseText} · Day ${dayNumber}`;
     },
+    setWeather(kind, label) { if (kind === lastWeather) return; lastWeather = kind; wxEl.innerHTML = `${ICONS[{ sun: 'sun', wind: 'wind', rain: 'rain', fog: 'fog' }[kind]] || ''}${label}`; wxEl.dataset.kind = kind; },
     setSteps(n) { steps = n; },
     setGround(label, color) { if (label === lastGround) return; lastGround = label; groundText.textContent = label; groundDot.style.background = color; },
     // The list of keys, bottom-right: only what is useful at this moment.

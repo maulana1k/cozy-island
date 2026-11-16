@@ -4,6 +4,7 @@ import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE, SUMMIT } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 import { mergeStatic } from './build.js';
+import { WIND } from './weather.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -20,8 +21,11 @@ const FIRE_SHADOW_EVERY = 0, LAMP_SHADOW_EVERY = 0; // s between shadow redraws:
 
 export function createProps(scene, deps) {
   const shadowFires = [];
+  const dimness = () => Math.min(1, wx.rain * 0.9 + wx.fog * 0.5 + wx.cloud * 0.25); // how gloomy the weather has made the day
   let lampDark = 0; // 0 in daylight .. 1 at night: how much a lit lamp shows against the day
   const { scatter, player, ui, audio } = deps;
+  const wx = deps.weather || { rain: 0, fog: 0, cloud: 0, forced: false }; // src/world/weather.js: live 0..1 values
+  const STEAM = new THREE.Color(0x9aa3a8); // smoke from a rain-soaked fire: grey and steamy
   const group = new THREE.Group();
   scene.add(group);
   const wood = flat(PALETTE.wood), woodDark = flat(PALETTE.woodDark), stone = flat(PALETTE.stone);
@@ -36,6 +40,7 @@ export function createProps(scene, deps) {
   function spawn(geo, material, pos, vel, life, opts = {}) {
     const m = new THREE.Mesh(geo, material.clone());
     m.material.transparent = true;
+    if (opts.steam) m.material.color.lerp(STEAM, opts.steam);
     m.position.copy(pos);
     scene.add(m);
     particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1 });
@@ -71,7 +76,7 @@ export function createProps(scene, deps) {
     updaters.push((dt, elapsed) => {
       lantern.glow += ((lantern.on ? 1 : 0) - lantern.glow) * Math.min(1, dt * 8);
       const flicker = 1 + Math.sin(elapsed * 11 + l.x) * 0.04;
-      glassMat.emissiveIntensity = lantern.glow * (0.25 + 2.15 * lampDark) * flicker; // a lit lamp at noon is only a faint glow
+      glassMat.emissiveIntensity = lantern.glow * (0.25 + 2.15 * Math.max(lampDark, 0.6 * dimness())) * flicker; // in rain and fog a lamp shows against the gloom; // a lit lamp at noon is only a faint glow
       lantern.flicker = flicker;
     });
     return lantern;
@@ -142,7 +147,7 @@ export function createProps(scene, deps) {
     g.add(flag);
     g.position.set(FLAGPOLE.x, y, FLAGPOLE.z);
     group.add(g);
-    const state = { up: false, h: 1.3 };
+    const state = { up: false, h: 2.6 }; // lowered, the flag hangs limp off the ground; raised, it flies
     flagState = state;
     interactables.push({
       id: 'flag', kind: 'flag', position: { x: FLAGPOLE.x, z: FLAGPOLE.z }, markerY: y + 2.4,
@@ -150,17 +155,24 @@ export function createProps(scene, deps) {
       interact() { state.up = !state.up; audio.play('lantern'); },
     });
     updaters.push((dt, elapsed) => {
-      state.h += ((state.up ? 5.7 : 1.3) - state.h) * (1 - Math.exp(-dt * 1.5));
+      state.h += ((state.up ? 5.7 : 2.6) - state.h) * (1 - Math.exp(-dt * 1.5));
+      const fly = Math.min(1, Math.max(0, (state.h - 2.9) / 2.2)), hang = 1 - fly; // 0 hanging limp at the bottom .. 1 flying at the top
       flag.position.y = state.h;
       // The cloth ripples from the pole outward, more the further it is from the pole.
       const pos = clothGeo.attributes.position;
+      const ws = WIND.value.z, fl = 1 + ws * 1.9, fs = 1 + ws * 0.9; // the shared wind: harder, faster flutter
       for (let i = 0; i < pos.count; i++) {
         const x = rest[i * 3], yy = rest[i * 3 + 1], far = x / FW;
-        pos.setZ(i, Math.sin(x * 4.2 - elapsed * 5.5 + yy * 1.3) * 0.13 * far + Math.sin(x * 1.7 - elapsed * 2.1) * 0.1 * far);
-        pos.setY(i, yy - far * far * 0.1 + Math.sin(x * 3 - elapsed * 4) * 0.02 * far);
+        const zf = Math.sin(x * 4.2 - elapsed * 5.5 * fs + yy * 1.3) * 0.13 * far * fl + Math.sin(x * 1.7 - elapsed * 2.1 * fs) * 0.1 * far * fl;
+        const yf = yy - far * far * 0.1 * (1 - ws * 0.5) + Math.sin(x * 3 - elapsed * 4 * fs) * 0.02 * far * fl;
+        // Hanging limp: the cloth falls down the pole in loose folds and barely stirs.
+        const d = x - 0.08, xl = 0.08 + d * 0.16, yl = yy - d * 0.85, zl = Math.sin(d * 9) * 0.035 + Math.sin(elapsed * 0.9 + yy) * 0.01 * far;
+        pos.setX(i, x + (xl - x) * hang);
+        pos.setZ(i, zf * fly + zl * hang);
+        pos.setY(i, yf * fly + yl * hang);
       }
       pos.needsUpdate = true; clothGeo.computeVertexNormals();
-      flag.rotation.y = Math.sin(elapsed * 0.6) * 0.15;
+      flag.rotation.y = (Math.sin(elapsed * 0.6) * 0.15 * (1 - ws) + Math.atan2(-WIND.value.y, WIND.value.x) * ws) * fly; // streams out downwind once raised
     });
   }
 
@@ -284,7 +296,7 @@ export function createProps(scene, deps) {
     // light it or put it out in between. The small fires are the player's to light.
     const scheduled = big && !!deps.dayTime;
     const burning = () => { const h = (((deps.dayTime() % 1) + 1) % 1) * 24; return h >= 18 || h < 6; };
-    const fire = { lit: scheduled ? burning() : f.lit, level: 0, sparkTimer: 0, boost: 0, scheduled };
+    const fire = { lit: scheduled ? burning() : f.lit, level: 0, sparkTimer: 0, boost: 0, scheduled, damp: wx.forced ? wx.rain : 0 };
     fire.level = fire.lit ? 1 : 0;
     interactables.push({
       id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + (big ? 3.1 : 1.7),
@@ -307,17 +319,21 @@ export function createProps(scene, deps) {
       flames.visible = fire.level > 0.02;
       const flick = Math.sin(elapsed * 13 + f.x) * 0.08 + Math.sin(elapsed * 23) * 0.05;
       fire.boost = Math.max(0, fire.boost - dt / 9); // fresh wood makes it roar for a while
-      const fs = (big ? 1.25 : 1) * (1 + fire.boost * 0.45);
+      // Rain slowly drowns a fire (about 70 s to burn low) and it recovers in about 30 s once the rain stops.
+      const soak = wx.rain > 0.25 ? wx.rain : 0;
+      fire.damp += soak > fire.damp ? Math.min(soak - fire.damp, dt / 70) : -Math.min(fire.damp, dt / 30);
+      const dampK = 1 - 0.6 * fire.damp * (1 - Math.min(1, fire.boost)); // fresh wood fights the rain
+      const fs = (big ? 1.25 : 1) * (1 + fire.boost * 0.45) * dampK;
       flames.scale.set(fs * fire.level * (1 + flick * 0.5), fs * fire.level * (1 + flick), fs * fire.level * (1 - flick * 0.5));
       cones.forEach((c, i) => { c.rotation.y = elapsed * (1 + i * 0.4); c.position.y = [0.62, 0.5, 0.42, 0.4][i] + Math.sin(elapsed * (9 + i * 3) + i) * 0.04; });
-      light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1) * (1 + fire.boost * 0.5);
+      light.intensity = fire.level * (11 + flick * 12) * (big ? 3.2 : 1) * (1 + fire.boost * 0.5) * (1 - 0.55 * fire.damp * (1 - Math.min(1, fire.boost)));
       fire.sparkTimer -= dt;
       if (fire.lit && fire.sparkTimer <= 0) {
-        fire.sparkTimer = (0.12 + Math.random() * 0.3) * (big ? 0.45 : 1);
+        fire.sparkTimer = (0.12 + Math.random() * 0.3) * (big ? 0.45 : 1) * (1 + fire.damp * 1.5); // fewer sparks when damp
         if (big) {
           // Smoke billows up and drifts off on the breeze, thinning as it goes.
           spawn(smokeGeo, smokeMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, y + 2.3, f.z + (Math.random() - 0.5) * 0.6),
-            new THREE.Vector3(0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3), 4.5, { gravity: -0.12, spin: 0.6, grow: 3.2, alpha: 0.42 });
+            new THREE.Vector3(0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3), 4.5 + fire.damp * 1.5, { gravity: -0.12 + fire.damp * 0.05, spin: 0.6, grow: 3.2 + fire.damp * 2.4, alpha: 0.42 + fire.damp * 0.2, steam: fire.damp });
         }
         spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * (big ? 0.9 : 0.4), y + (big ? 1.6 : 0.8), f.z + (Math.random() - 0.5) * (big ? 0.9 : 0.4)),
           new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.2 + Math.random() * 0.9, (Math.random() - 0.5) * 0.5), 1.3, { gravity: -0.3, flutter: 0.7 });
@@ -367,10 +383,10 @@ export function createProps(scene, deps) {
       for (let i = 0; i < 14; i++) spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, f.y + (f.big ? 1.4 : 0.7), f.z + (Math.random() - 0.5) * 0.6), new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.6 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1.2, { gravity: 1.2, flutter: 0.8 });
     },
     // How loudly the nearest burning fire can be heard from here, 0 to 1.
-    fireLoudness(x, z) { let best = 0; for (const f of fires) best = Math.max(best, f.fire.level * f.loud * Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / f.reach)); return best; },
+    fireLoudness(x, z) { let best = 0; for (const f of fires) best = Math.max(best, f.fire.level * (1 - 0.45 * f.fire.damp) * f.loud * Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / f.reach)); return best; },
     update(dt, elapsed, nightF) {
       // Lanterns light themselves at dusk and go out at dawn; the player can still toggle them.
-      const isNight = nightF > 0.5;
+      const isNight = nightF > 0.5 || wx.rain > 0.6; // lanterns also light themselves in heavy rain
       if (wasNight !== null && isNight !== wasNight) lanterns.forEach((l) => l.set(isNight));
       if (wasNight === null && isNight) lanterns.forEach((l) => l.set(true));
       wasNight = isNight;
@@ -381,7 +397,8 @@ export function createProps(scene, deps) {
       byDistance.length = 0;
       for (const l of lanterns) if (l.glow > 0.03) byDistance.push(l);
       const dusk = Math.min(1, Math.max(0, (nightF - 0.3) / 0.4));
-      for (const l of outside) { l.glow = dusk; if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
+      const gloom = 0.7 * dimness(); // lamps glow in dark weather too
+      for (const l of outside) { l.glow = Math.max(dusk, gloom); if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
       const dark = lampDark = Math.min(1, Math.max(0, (nightF - 0.1) / 0.5)); // in daylight a lamp casts no light on its surroundings, whether or not it is switched on
       { // the first lamp light's shadow: rebuilt when it moves to another lamp, else about every 1.5 s
@@ -397,7 +414,7 @@ export function createProps(scene, deps) {
           if (casterCentres.length) markNearCasters(casterCentres);
         }
       }
-      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && dark > 0.01) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * dark; } else light.intensity = 0; });
+      lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && (dark > 0.01 || dimness() > 0.02)) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * Math.max(dark, 0.5 * dimness()); } else light.intensity = 0; });
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];

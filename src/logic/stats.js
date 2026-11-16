@@ -23,8 +23,11 @@ export function createStats() {
       s.food = clamp(s.food - (100 / 720) * effort * dt);
       s.water = clamp(s.water - (100 / 540) * effort * dt);
       const wellFed = s.food < LOW || s.water < LOW ? 0.4 : 1;
-      if (state.running) s.energy = clamp(s.energy - (100 / 70) * dt);
-      else s.energy = clamp(s.energy + (state.sitting ? 11 : state.moving ? 2.5 : 5.5) * wellFed * dt);
+      // Cold weather (fog, a little in rain; src/world/weather.js) wears you down: energy drains a bit faster and
+      // comes back more slowly, unless you are cosy by a fire.
+      const chill = state.cosy ? 0 : Math.max(0, Math.min(1, state.cold || 0));
+      if (state.running) s.energy = clamp(s.energy - (100 / 70) * (1 + 0.2 * chill) * dt);
+      else s.energy = clamp(s.energy + (state.sitting ? 11 : state.moving ? 2.5 : 5.5) * wellFed * (1 - 0.3 * chill) * dt - (state.moving ? 0.35 * chill * dt : 0));
       if (s.energy <= 0) s.winded = true;
       if (s.energy >= 30) s.winded = false;
       // Cheer settles back toward the middle, lower when hungry or thirsty, and rises when cosy.

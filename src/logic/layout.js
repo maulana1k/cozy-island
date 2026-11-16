@@ -164,8 +164,8 @@ export const PATHS = [
   [VILLAGE_CENTER, ...HILL_TRAIL],
   // The way back up from the flying fox landing.
   ZIPLINE.trail,
-  // The trail to the village: off the dock path, out across the meadow to the windmill knoll and the bridge.
-  [{ x: 24, z: 11 }, { x: 27.5, z: 6.5 }, { x: 31, z: 2 }, { x: 34.5, z: -3 }, { x: 37.5, z: -8 }, { x: 40.2, z: -13.5 }, { x: 42.5, z: -19 }, { x: 47.5, z: -19.6 }, { x: 53.4, z: -21.2 }],
+  // The trail to the village: off the dock path past the canoes, up the open beach side of the meadow to the bridge landing.
+  [{ x: 52, z: 17.1 }, { x: 54.6, z: 14.6 }, { x: 55.4, z: 9.5 }, { x: 55, z: 3.5 }, { x: 54.2, z: -3 }, { x: 52.8, z: -9.5 }, { x: 51.2, z: -15 }, { x: 51.8, z: -19 }, { x: 53.4, z: -21.2 }],
 ];
 const DOCK_PATH = PATHS[COTTAGES.length], FIRE_PATH = PATHS[COTTAGES.length + 1];
 export const HILL_PATH = PATHS[COTTAGES.length + 2];
@@ -218,6 +218,13 @@ function distanceToSegment(x, z, a, b) {
   return Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
 }
 
+// The camp-to-bridge trail (the last path): trees and bushes keep their crowns off it.
+export function distanceToTrail(x, z) {
+  const t = PATHS[PATHS.length - 1];
+  let best = Infinity;
+  for (let i = 0; i < t.length - 1; i++) best = Math.min(best, distanceToSegment(x, z, t[i], t[i + 1]));
+  return best;
+}
 export function distanceToPath(x, z) {
   let best = Infinity;
   for (const path of PATHS) for (let i = 0; i < path.length - 1; i++) best = Math.min(best, distanceToSegment(x, z, path[i], path[i + 1]));
@@ -391,7 +398,7 @@ export function getScatter() {
 
   // A few trees stand around the camp; beyond it the island is thick jungle of every size.
   const CAMP = { x: 10, z: 8 };
-  const treeOk = (gap) => (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 45.5 && distanceToPath(p.x, p.z) > 2.4
+  const treeOk = (gap) => (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 45.5 && distanceToPath(p.x, p.z) > 2.4 && distanceToTrail(p.x, p.z) > 4.2
     && clearOfCottages(p, 5.6) && dist(p, VILLAGE_CENTER) > 9 && clearOf(p, keepClear, 0.6) && out.every((o) => dist(p, o) > gap);
   const campTrees = place(34, 'tree', (p, out) => dist(p, CAMP) <= 28 && treeOk(3.2)(p, out),
     () => ({ scale: 0.85 + rng() * 0.5, rot: rng() * Math.PI * 2, kind: [0, 1, 2, 5, 5, 1][Math.floor(rng() * 6)] }));
@@ -401,13 +408,13 @@ export function getScatter() {
   const trees = [...campTrees, ...jungle];
 
   const bushes = place(30, 'bush',
-    (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 46.5 && distanceToPath(p.x, p.z) > 1.6
+    (p, out) => zoneAt(p.x, p.z) === 'grass' && Math.hypot(p.x, p.z) < 46.5 && distanceToPath(p.x, p.z) > 1.6 && distanceToTrail(p.x, p.z) > 2.4
       && clearOfCottages(p, 4.2) && dist(p, VILLAGE_CENTER) > 7.5 && clearOf(p, keepClear) && clearOf(p, trees.map((t) => ({ ...t, r: 1.6 })))
       && out.every((o) => dist(p, o) > 1.8),
     () => ({ scale: 0.7 + rng() * 0.6, rot: rng() * Math.PI * 2 }));
 
   const rocks = place(25, 'rock',
-    (p, out) => heightAt(p.x, p.z) > 0.25 && distanceToPath(p.x, p.z) > 1.6 && clearOfCottages(p, 4.4)
+    (p, out) => heightAt(p.x, p.z) > 0.25 && distanceToPath(p.x, p.z) > 1.6 && distanceToTrail(p.x, p.z) > 2.6 && clearOfCottages(p, 4.4)
       && dist(p, VILLAGE_CENTER) > 8 && clearOf(p, keepClear) && dist(p, DOCK) > 4 && clearOf(p, trees.map((t) => ({ ...t, r: 1.4 })))
       && out.every((o) => dist(p, o) > 2.5),
     () => ({ scale: 0.6 + rng() * 0.9, rot: rng() * Math.PI * 2 }));

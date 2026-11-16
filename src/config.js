@@ -211,8 +211,8 @@ export const AREAS = (() => {
       [{ x: 42.5, z: -19 }, { x: 43, z: -25 }, { x: 39.5, z: -31 }, { x: 34, z: -40.5 }, { x: 29, z: -50 }, { x: 24.5, z: -62 }, { x: 25.5, z: -75 },
         { x: 31, z: -84.6 }, { x: 36.5, z: -92.5 }, { x: 42, z: -100 }, { x: 46.5, z: -108 }, { x: 50, z: -119 }],
       [{ x: 42.5, z: -19 }, { x: 47.5, z: -19.6 }, { x: 53.4, z: -21.2 }],
-      // From the camp (off the dock path) out across the meadow to the windmill knoll: the way to the bridge.
-      [{ x: 24, z: 11 }, { x: 27.5, z: 6.5 }, { x: 31, z: 2 }, { x: 34.5, z: -3 }, { x: 37.5, z: -8 }, { x: 40.2, z: -13.5 }, { x: 42.5, z: -19 }],
+      // From the dock path (by the canoes) up the open beach side of the meadow to the bridge landing.
+      [{ x: 52, z: 17.1 }, { x: 54.6, z: 14.6 }, { x: 55.4, z: 9.5 }, { x: 55, z: 3.5 }, { x: 54.2, z: -3 }, { x: 52.8, z: -9.5 }, { x: 51.2, z: -15 }, { x: 51.8, z: -19 }, { x: 53.4, z: -21.2 }],
     ],
     // The village plan as code: a point of the plan (ue, v) in the world.
     villagePoint: vw,

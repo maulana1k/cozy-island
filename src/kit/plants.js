@@ -27,6 +27,28 @@ function paint(geo, hex, top = null) {
   if (!g.attributes.normal) g.computeVertexNormals();
   return g;
 }
+// Two-tone faceting for foliage lumps (the look of The Trail's bushes): every triangle of a non-indexed geometry
+// is multiplied (in its colour attribute, made white if missing) by a warm tone where it faces up and a cooler,
+// darker blue-green one where it faces down or out, plus a little darker toward the bottom and a small per-face
+// jitter. Baked once into the vertices: no per-frame cost, no extra draw calls. `seed` varies the jitter.
+const LIT = [1.1, 1.08, 0.88], SHADE = [0.5, 0.66, 0.8];
+export function facetShade(geo, seed = 1) {
+  const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position, n = p.count;
+  let col = g.attributes.color;
+  if (!col) { col = new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3); g.setAttribute('color', col); }
+  let y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) { y0 = Math.min(y0, p.getY(i)); y1 = Math.max(y1, p.getY(i)); }
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let f = 0; f < n; f += 3) {
+    a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
+    const ny = b.clone().sub(a).cross(c.clone().sub(a)).normalize().y;
+    const up = Math.min(1, Math.max(0, (ny + 0.15) / 0.85)), t = up * up * (3 - 2 * up);
+    const h = (((a.y + b.y + c.y) / 3 - y0) / Math.max(1e-6, y1 - y0)), jit = 1 + (Math.sin((a.x + b.z * 1.7 + c.y) * 91.7 + seed * 12.3) * 0.5) * 0.12;
+    const low = 0.84 + 0.16 * h;
+    for (let v = 0; v < 3; v++) for (let k = 0; k < 3; k++) col.setComponent(f + v, k, col.getComponent(f + v, k) * (SHADE[k] + (LIT[k] - SHADE[k]) * t) * low * jit);
+  }
+  return g;
+}
 // A tapered stick (open-ended, no caps) from one point to another.
 function stick(x0, y0, z0, x1, y1, z1, r0, r1, hex, seg = 5) {
   const a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1), len = a.distanceTo(b);
@@ -40,7 +62,7 @@ function stick(x0, y0, z0, x1, y1, z1, r0, r1, hex, seg = 5) {
 function pad(x, y, z, sx, sy, sz, hex, rot = 0) {
   const g = new THREE.IcosahedronGeometry(1, 0);
   g.rotateY(rot); g.scale(sx, sy, sz); g.translate(x, y, z);
-  return paint(g, hex);
+  return facetShade(paint(g, hex), x * 3 + z * 7 + y);
 }
 // A small diamond (8 triangles): fruit, coconuts, flower heads.
 function bead(x, y, z, r, hex, sy = 1) {
@@ -190,9 +212,11 @@ export function flowerPatch() {
   return merge(parts);
 }
 // A grass tuft: four soft blades (16 triangles). White, darker at the root: the instance colour sets the hue.
+// Multipliers on the instance colour (linear): a darker, cooler base into lighter, warmer yellow-green tips.
+const GRASS_BASE = new THREE.Color().setRGB(0.6, 0.68, 0.72, THREE.LinearSRGBColorSpace), GRASS_TIP = new THREE.Color().setRGB(1.25, 1.22, 0.88, THREE.LinearSRGBColorSpace);
 export function grassTuft() {
   const parts = [];
-  for (let i = 0; i < 4; i++) parts.push(ribbon({ a: (i / 4) * Math.PI * 2 + (i % 2) * 0.7, len: 0.5 + (i % 3) * 0.14, width: 0.055, droop: 0.7 + (i % 2) * 0.35, rows: 2, r0: 0.03 + (i % 3) * 0.06, base: 0xb4b4b4, tip: 0xffffff }));
+  for (let i = 0; i < 4; i++) parts.push(ribbon({ a: (i / 4) * Math.PI * 2 + (i % 2) * 0.7, len: 0.5 + (i % 3) * 0.14, width: 0.055, droop: 0.7 + (i % 2) * 0.35, rows: 2, r0: 0.03 + (i % 3) * 0.06, base: GRASS_BASE, tip: GRASS_TIP }));
   return merge(parts);
 }
 // A far-off stand-in for a tree or a bush: one squashed lump (20 triangles).

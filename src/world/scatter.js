@@ -4,6 +4,7 @@ import { heightAt, zoneAt } from '../logic/terrain.js';
 import { getScatter, distanceToPath, jungleAt, PLAY_CLEAR, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
 import { POND, HILL } from '../config.js';
 import { createRng } from '../logic/rng.js';
+import { facetShade } from '../kit/plants.js';
 import { PALETTE, SEED } from '../config.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
@@ -43,13 +44,19 @@ function ribbonClump({ blades, height, width, spread, droop, rows = 4, shape = '
     for (let i = 0; i <= rows; i++) {
       const t = i / rows, out = r0 + bend * hb * t * t, y = hb * (t - 0.22 * bend * t * t);
       // A blade keeps its width most of the way up and ends blunt and rounded, not in a spike.
-      const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : Math.max(0.3, Math.pow(1 - Math.pow(t, 2.6), 0.6)));
-      pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, 0.8 + 0.2 * t]);
+      // Grass blades are angular shards: full width low down, tapering to a sharp point.
+      const w = width * (shape === 'frond' ? Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7) : Math.max(0.06, 1 - 0.94 * Math.pow(t, 1.35)));
+      pts.push([dx * out - px * w, y, dz * out - pz * w, dx * out + px * w, y, dz * out + pz * w, t, b]);
     }
     for (let i = 0; i < rows; i++) {
       const p = pts[i], q = pts[i + 1];
       const quad = [[p[0], p[1], p[2], p[6]], [p[3], p[4], p[5], p[6]], [q[0], q[1], q[2], q[6]], [p[3], p[4], p[5], p[6]], [q[3], q[4], q[5], q[6]], [q[0], q[1], q[2], q[6]]];
-      for (const [x, y, z, shade] of quad) { pos.push(x, y, z); nor.push(dx * 0.25, 1, dz * 0.25); col.push(shade, shade, shade); }
+      for (const [x, y, z, t] of quad) {
+        pos.push(x, y, z); nor.push(dx * 0.25, 1, dz * 0.25);
+        // Multipliers on the instance colour (linear): a dark, cool base into light, warm yellow-green tips; each blade a touch different.
+        const k = 0.92 + 0.16 * frac(b * 0.61 + 0.3), e = t * t * (shape === 'frond' ? 0.7 : 1);
+        col.push((0.6 + 0.65 * e) * k, (0.68 + 0.54 * e) * k, (0.72 + 0.16 * e) * k);
+      }
     }
   }
   const g = new THREE.BufferGeometry();
@@ -124,6 +131,9 @@ export const TREE_KINDS = [
   },
 ];
 
+// Foliage gets The Trail's two-tone facets: warm lit tops, cool dark undersides (vertex colours; the material needs vertexColors).
+TREE_KINDS.forEach((k, i) => { const make = k.canopy; k.canopy = () => facetShade(make(), i + 1); });
+
 export const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
 // Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
@@ -140,7 +150,7 @@ export function rockGeometry() {
 
 // A rounded leafy bush made of a few lumps.
 export function bushGeometry() {
-  return mergeGeometries([leafy(0, 0.42, 0, 0.62, 0.48, 0.58), leafy(0.42, 0.32, 0.12, 0.42, 0.36, 0.4, 1), leafy(-0.4, 0.3, -0.1, 0.44, 0.34, 0.42, 2), leafy(0.05, 0.3, -0.42, 0.38, 0.32, 0.36, 3), leafy(-0.05, 0.62, 0.2, 0.36, 0.3, 0.34, 4)]);
+  return facetShade(mergeGeometries([leafy(0, 0.42, 0, 0.62, 0.48, 0.58), leafy(0.42, 0.32, 0.12, 0.42, 0.36, 0.4, 1), leafy(-0.4, 0.3, -0.1, 0.44, 0.34, 0.42, 2), leafy(0.05, 0.3, -0.42, 0.38, 0.32, 0.36, 3), leafy(-0.05, 0.62, 0.2, 0.36, 0.3, 0.34, 4)]), 9);
 }
 
 // The swaying grass material (also used by src/world/flora.js): `time` and `walker` are { value } uniforms.
@@ -176,7 +186,7 @@ export function createScatter(scene) {
   const kinds = TREE_KINDS.map((def, k) => {
     const list = byKind[k], n = Math.max(1, list.length);
     const trunk = new THREE.InstancedMesh(def.trunk(), flat(PALETTE.treeTrunk), n);
-    const canopy = new THREE.InstancedMesh(def.canopy(), flat(0xffffff), n);
+    const canopy = new THREE.InstancedMesh(def.canopy(), flat(0xffffff, { vertexColors: true }), n);
     for (const m of [trunk, canopy]) { m.count = list.length; m.castShadow = true; m.receiveShadow = true; }
     list.forEach((t, i) => {
       // Slightly different tint per tree so the woods do not look stamped out.
@@ -203,7 +213,7 @@ export function createScatter(scene) {
   dummy.rotation.order = 'XYZ';
 
   // ---- Spiky bushes
-  const bushes = new THREE.InstancedMesh(bushGeometry(), flat(0xffffff), data.bushes.length);
+  const bushes = new THREE.InstancedMesh(bushGeometry(), flat(0xffffff, { vertexColors: true }), data.bushes.length);
   bushes.castShadow = true; bushes.receiveShadow = true;
   data.bushes.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - 0.05, b.z); dummy.rotation.set(0, b.rot, 0); dummy.scale.setScalar(b.scale * 1.15); dummy.updateMatrix();
@@ -245,6 +255,7 @@ export function createScatter(scene) {
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
   const grassColors = [0x8fa457, 0x84994e, 0x9bad62, 0x7b9049, 0xa3a965]; // the camp ground's greens, a touch lighter so the tufts still read
+  const accentLavender = [0xa790c4, 0xb59ad0, 0x9a86bc], accentGold = [0xcdb35c, 0xd8c070, 0xbfa24f];
   const lushColors = [0x7d9a4c, 0x718e45, 0x89a556, 0x67853f, 0x93a95c];
   while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 40) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -266,7 +277,11 @@ export function createScatter(scene) {
     dummy.position.set(x, heightAt(x, z) - 0.03, z); dummy.rotation.set(0, rng() * 6.28, 0);
     const s = 0.75 + rng() * 0.6; dummy.scale.set(s, s * (inCamp ? 0.45 + rng() * 0.3 : 0.7 + rng() * 0.8), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
-    grass.setColorAt(placed, color.setHex((lush > 0.5 ? lushColors : grassColors)[Math.floor(rng() * 5)]));
+    // About 8% of the clumps are an accent (soft lavender, golden dry); the rest vary a little in tone.
+    const pick = rng();
+    color.setHex(pick < 0.045 ? accentLavender[Math.floor(rng() * 3)] : pick < 0.08 ? accentGold[Math.floor(rng() * 3)] : (lush > 0.5 ? lushColors : grassColors)[Math.floor(rng() * 5)]);
+    if (pick >= 0.08) color.offsetHSL((rng() - 0.5) * 0.03, 0, (rng() - 0.5) * 0.06);
+    grass.setColorAt(placed, color);
     placed++;
   }
   grass.count = placed;

@@ -9,6 +9,7 @@ import { heightAt, landR, wildDepth, wildness, groundKind, ridgeForest, coastFea
 import { paintCoastRock } from './island.js';
 import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
+import { facetShade } from '../kit/plants.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -32,6 +33,7 @@ const giant = {
   canopy: () => mergeGeometries([[2.6, 0, 8.2, 0], [2.0, 1.7, 7.2, 0.6], [1.9, -1.5, 7.0, -0.9], [1.5, 0.2, 9.6, -0.3]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.72, 1); g.translate(x, y, z); return g; })
     .concat([[1.9, 5.3, 0.7, 3.2], [-1.6, 5.5, -1.0, 2.4]].map(([x, y, z, len]) => { const g = new THREE.CylinderGeometry(0.03, 0.03, len, 4).toNonIndexed(); g.translate(x, y, z); return g; }))),
 };
+giant.canopy = ((make) => () => facetShade(make(), 8))(giant.canopy);
 const KINDS = [...TREE_KINDS, giant];
 const MAX_ROCK = AREAS.massif.height;
 // Too steep for a tree to stand: the cliff faces.
@@ -59,13 +61,13 @@ export function createWilds(scene) {
   // ---- Shared pools: one instanced mesh per kind of thing, refilled when the nearby tiles change.
   const pool = (geo, material, cap) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.castShadow = false; // no shadows out here: that alone halves the cost
     m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m; };
-  const trunkMat = flat(PALETTE.treeTrunk), white = flat(0xffffff);
-  const trees = KINDS.map((def) => ({ trunk: pool(def.trunk(), trunkMat, 2600, true), canopy: pool(def.canopy(), white, 2600, true) }));
+  const trunkMat = flat(PALETTE.treeTrunk), white = flat(0xffffff), faceted = flat(0xffffff, { vertexColors: true });
+  const trees = KINDS.map((def) => ({ trunk: pool(def.trunk(), trunkMat, 2600, true), canopy: pool(def.canopy(), faceted, 2600, true) }));
   const lumpGeo = new THREE.IcosahedronGeometry(1, 0); lumpGeo.scale(1, 0.62, 1);
   const lumps = pool(lumpGeo, white, 26000, false);
   const leaves = flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide });
   const lightBush = mergeGeometries([[0.62, 0, 0.42, 0], [0.42, 0.42, 0.32, 0.12], [0.44, -0.4, 0.3, -0.1]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.78, 1); g.translate(x, y, z); return g; }));
-  const bushes = pool(lightBush, white, 2400), rocks = pool(rockGeometry(), white, 700);
+  const bushes = pool(facetShade(lightBush, 5), faceted, 2400), rocks = pool(rockGeometry(), white, 700);
   const ferns = pool(fernGeometry(), leaves, 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
 
   // ---- One tile: its ground and a list of what grows on it. Made once, then kept while it is near.
@@ -213,7 +215,7 @@ export function createWilds(scene) {
         for (const b of tile.bushes) if (nBush < 2400 && Math.hypot(b.x - px, b.z - pz) < NEAR) { put(bushes, nBush, b.x, b.y, b.z, b.s, b.rot); bushes.setColorAt(nBush++, color.setHex(TREE_TINTS[Math.floor(b.tint * 4) % 4])); }
         for (const b of tile.rocks) if (nRock < 700 && Math.hypot(b.x - px, b.z - pz) < NEAR) { colliders.push({ x: b.x, z: b.z, r: 0.75 * b.s * 1.2 }); put(rocks, nRock, b.x, b.y, b.z, b.s * 1.2, b.rot); rocks.setColorAt(nRock++, color.setHex(b.tint > 0.5 ? 0xb9a58a : 0xa89a8c)); }
         for (const b of tile.ferns) if (nFern < 3600 && closeBy(b)) { put(ferns, nFern, b.x, b.y, b.z, b.s * 1.15, b.rot); ferns.setColorAt(nFern++, color.setHex(b.tint > 0.5 ? 0x4f9a4a : 0x6aa650)); }
-        for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.6 ? 0xd9c46a : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
+        for (const b of tile.tufts) if (nTuft < 5200 && closeBy(b)) { put(tufts, nTuft, b.x, b.y, b.z, b.s * 1.1, b.rot); tufts.setColorAt(nTuft++, color.setHex(b.tint > 0.96 ? 0xa790c4 : b.tint > 0.6 ? 0xcdb35c : b.tint > 0.3 ? 0xa9b85c : 0x7fa650)); }
       }
     }
     KINDS.forEach((_, k) => { for (const m of [trees[k].trunk, trees[k].canopy]) { m.count = counts[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; } });

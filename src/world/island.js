@@ -30,6 +30,14 @@ function buildTerrain() {
   const c = new THREE.Color();
   const blotch = (x, z) => 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2.1) * Math.cos(z * 0.19);
   const speck = (x, z) => 0.5 + 0.5 * Math.sin(x * 1.7 + z * 0.9) * Math.sin(z * 1.3 - x * 0.6);
+  // Flat angular patches (The Trail's ground): a skewed triangle lattice, each triangle one tone -
+  // a touch darker and cooler, or lighter and warmer - on only about 45% of the triangles. Returns -1..1.
+  const tri = (ix, iz, k) => { let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(k + 1, 1274126177); h = Math.imul(h ^ (h >>> 13), 1103515245); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function shard(x, z) {
+    const u = (x * 0.8 + z * 0.6) / 5.5, v = (-x * 0.6 + z * 0.8) / 4.2 + u * 0.35, ix = Math.floor(u), iz = Math.floor(v), up = u - ix + (v - iz) > 1 ? 1 : 0;
+    const h = tri(ix, iz, up), a = tri(iz, ix, up + 2);
+    return h < 0.24 ? -(0.4 + 0.6 * a) : h > 0.78 ? (0.4 + 0.6 * a) : 0;
+  }
   function paint(i) {
     const x = pos.getX(i), z = pos.getZ(i), h = heights[i];
     const r = landR(x, z), pd = Math.hypot(x - POND.x, z - POND.z), wd = wildness(x, z);
@@ -65,6 +73,12 @@ function buildTerrain() {
     }
     paintNewGround(c, x, z, h, slopes[i]); // the river banks, the locals' land and the rest of the new ground
     paintCoastRock(c, x, z, r);
+    // Break up the big flat greens: only where the ground is grass (not sand, dirt, rock or water).
+    const green = smooth((c.g / Math.max(1e-4, c.r) - 1.2) / 0.2);
+    if (green > 0 && h > 0.05) {
+      const s = shard(x, z) * green;
+      if (s < 0) { c.r *= 1 + s * 0.13; c.g *= 1 + s * 0.11; c.b *= 1 + s * 0.04; } else if (s > 0) { c.r *= 1 + s * 0.09; c.g *= 1 + s * 0.08; c.b *= 1 - s * 0.06; }
+    }
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   for (let i = 0; i < pos.count; i++) paint(i);

@@ -30,6 +30,7 @@ const wave = (x, z, s, o) => Math.sin(x / s + o) * Math.cos(z / (s * 0.83) - o *
 // ---- The kinds of plant. `col`: collider radius per unit of scale (0: none); `clear`: metres kept from a
 // path's edge; `space`: metres kept from other solid plants (times scale); `lump`: the far stand-in (crown
 // centre height, radius, squash, colour), or null for none. `tree`: counts as a tree for spacing.
+const ACCENT_LAVENDER = [0xa790c4, 0xb59ad0, 0x9a86bc], ACCENT_GOLD = [0xcdb35c, 0xd8c070, 0xbfa24f];
 export const KINDS = {
   broad: { make: M.broadleafTree, cap: 1400, near: NEAR_TREE, col: 0.32, clear: 2.2, space: 2.8, tree: true, lump: { y: 4.6, r: 2.8, sy: 1.15, c: 0x557f45 } },
   tall: { make: M.tallTree, cap: 500, near: NEAR_TREE, col: 0.28, clear: 2.2, space: 2.4, tree: true, lump: { y: 8.4, r: 1.6, sy: 1.5, c: 0x527d43 } },
@@ -263,7 +264,10 @@ function grassCell(ix, iz) {
     const short = edge < 0.9 ? 0.4 + edge * 0.35 : 1;
     // The tuft takes the ground's own colour, a little lighter: golden on dry ground, green on wet.
     const lift = 1.12 + r3 * 0.22;
-    out.push({ x, y: y - 0.03, z, s: 0.7 + r3 * 0.45, sy: short * (0.65 + r2 * 0.75), rot: r1 * 6.283, r: Math.min(1, r * lift), g: Math.min(1, gg * lift), b: Math.min(1, b * lift * 0.95) });
+    const acc = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1; // ~8% of the clumps are an accent: lavender or golden
+    const o = { x, y: y - 0.03, z, s: 0.7 + r3 * 0.45, sy: short * (0.65 + r2 * 0.75), rot: r1 * 6.283, r: Math.min(1, r * lift), g: Math.min(1, gg * lift), b: Math.min(1, b * lift * 0.95) };
+    if (acc < 0.08) { paintC.setHex(acc < 0.045 ? ACCENT_LAVENDER[(r1 * 3) | 0] : ACCENT_GOLD[(r1 * 3) | 0]); o.r = paintC.r; o.g = paintC.g; o.b = paintC.b; }
+    out.push(o);
   }
   return out;
 }

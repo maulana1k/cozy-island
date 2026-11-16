@@ -1035,7 +1035,7 @@ export function createFigure({
           // Running, the legs and the bounce already put the foot on the ground: this only ever lifts a sole out of it.
           if (pen > -Infinity && legsIK) liftT = lerp(liftT, Math.max(0, liftT), fly);
         }
-        if (dt > 0) { const db = Math.min(dt, 0.05); liftV += (LIFT_W * LIFT_W * (liftT - footLift) - 2 * LIFT_W * liftV) * db; footLift += liftV * db; }
+        if (dt > 0) { const db = Math.min(dt, 0.04); liftV += (LIFT_W * LIFT_W * (liftT - footLift) - 2 * LIFT_W * liftV) * db; footLift += liftV * db; }
         inner.position.set(0, base + footLift / scale, 0);
       }
     },

@@ -27,7 +27,7 @@ const PATROL_TENT_COLORS = [TENT_COLORS.forest, TENT_COLORS.orange, TENT_COLORS.
 const TENT_PLAN = {
   hall: { make: groupShelter, o: { color: TENT_COLORS.brick, backWall: true }, s: [2, 1.2, 1.5], legs: [3.64, 2.73], back: -2.73 },
   patrol: { make: familyTunnelTent, o: {}, s: [1, 1, 1], door: { w: 2.0, h: 1.75, z: 2.45 } },
-  staff: { make: geodesicTent, o: { open: true, color: 0x7a5a86 }, s: [1.5, 1.4, 1.5], door: { w: 0.95, h: 0.85, z: 2.46 } },
+  staff: { make: geodesicTent, o: { open: true, color: 0xa488b0 }, s: [1.5, 1.4, 1.5], door: { w: 0.95, h: 0.85, z: 2.46 } },
   mess: { make: groupShelter, o: { color: TENT_COLORS.orange, backWall: true }, s: [1.5, 1.15, 1.25], legs: [2.73, 2.28], back: -2.28 },
   aid: { make: utilityTent, o: { open: true, cross: true, color: 0xd8dccf, accent: 0xb53a32 }, s: [1.5, 1.1, 1.667], door: { w: 1.45, h: 1.55, z: 2.0 } },
 };

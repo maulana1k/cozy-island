@@ -4,7 +4,7 @@ import { platformAt, distanceToPath, jungleAt, VILLAGE_CENTER } from './layout.j
 import { POND, GRASS_RADIUS, HILL, AREAS } from '../config.js';
 
 export const SURFACES = {
-  grass: { label: 'Dry grass', color: '#e3b85a', speed: 1 },
+  grass: { label: 'Grass', color: '#e3b85a', speed: 1 },
   meadow: { label: 'Meadow', color: '#8fbf5f', speed: 0.96 },
   forest: { label: 'Jungle floor', color: '#6f9a55', speed: 0.97 },
   mud: { label: 'Mud', color: '#8a6a4a', speed: 0.78 },

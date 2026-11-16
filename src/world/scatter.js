@@ -244,8 +244,8 @@ export function createScatter(scene) {
   const grass = new THREE.InstancedMesh(tuftGeometry(), grassMat, GRASS_TUFTS);
   grass.receiveShadow = true;
   let placed = 0, guard = 0;
-  const grassColors = [0xdcd29c, 0xcfc58a, 0xe6deb0, 0xc3bd80, 0xd3c489];
-  const lushColors = [0xa3ad68, 0x93a05c, 0xb3bb76, 0x869555, 0xbcc07f];
+  const grassColors = [0x8fa457, 0x84994e, 0x9bad62, 0x7b9049, 0xa3a965]; // the camp ground's greens, a touch lighter so the tufts still read
+  const lushColors = [0x7d9a4c, 0x718e45, 0x89a556, 0x67853f, 0x93a95c];
   while (placed < GRASS_TUFTS && guard++ < GRASS_TUFTS * 40) {
     const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * 47.5, x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (zoneAt(x, z) !== 'grass' || distanceToPath(x, z) < 1.25) continue;

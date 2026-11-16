@@ -385,10 +385,12 @@ function toYard(c, px, pz, ry) {
   const co = Math.cos(ry), si = Math.sin(ry), x = px + c.x * co + c.z * si, z = pz - c.x * si + c.z * co;
   return c.r !== undefined ? { x, z, r: c.r } : { x, z, hw: c.hw, hd: c.hd, rot: c.rot + ry };
 }
-export function buildYard(variant = 0, seed = 1) {
+// `maxZ` leaves out props standing further than that in front of the door (for a shallow yard).
+export function buildYard(variant = 0, seed = 1, maxZ = Infinity) {
   const root = new THREE.Group(), rnd = rngOf(seed * 31 + variant * 7 + 3), colliders = [];
   const mirror = rnd() < 0.5, layout = YARDS[((variant % YARDS.length) + YARDS.length) % YARDS.length];
   for (const [key, x, z, turn, arg] of layout) {
+    if (z > maxZ) { rnd(); rnd(); rnd(); continue; }
     let px = x + (rnd() - 0.5) * 0.16, pz = z + (rnd() - 0.5) * 0.16, ry = turn + (rnd() - 0.5) * 0.12;
     if (mirror) { px = -px; ry = -ry; } // flipped left to right: the props are moved and turned, not mirrored
     const sub = new THREE.Group();

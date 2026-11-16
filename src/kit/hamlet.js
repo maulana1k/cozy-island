@@ -614,6 +614,16 @@ export function buildRowBoat(color = 0x4f7fc9) {
 }
 export const buildRowBoatRed = () => buildRowBoat(0xe8503a);
 
+// ---- Earth fill behind a retaining wall ---------------------------------------------------------------------------------
+// A plain block of packed earth running along x from 0 to len, from z = 0 back to z = -depth, with its top at y = h:
+// it fills the slope the ground mesh smears behind a terrace wall, so the wall top meets level ground.
+export function buildEarthFill(len = 4, depth = 2, h = 1.3, color = 0xcaa36e) {
+  const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
+  g.add(rb(len, h, depth, color, len / 2, h / 2, -depth / 2));
+  mergeStatic(root);
+  return result(root);
+}
+
 // ---- Footings ------------------------------------------------------------------------------------------------------------
 // What a building standing on a slope needs underneath: longer stilts and a stone footing under the steps.
 // posts: [{x, z, y0, y1}] round posts from y0 up to y1; pads: [{x, z, y0, y1, w, d, ry}] flat stone blocks. World or

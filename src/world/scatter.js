@@ -122,7 +122,7 @@ export const TREE_KINDS = [
 export const fernGeometry = () => ribbonClump({ blades: 9, height: 0.95, width: 0.13, spread: 0.06, droop: 1.5, rows: 5, shape: 'frond' });
 // Soft grass: many thin curved blades, most of them short.
 // Tall dry grass: clumps of broad, flat blades standing nearly straight, bending a little at the tip.
-export const tuftGeometry = () => ribbonClump({ blades: 7, height: 0.72, width: 0.06, spread: 0.2, droop: 0.85, rows: 4 });
+export const tuftGeometry = () => ribbonClump({ blades: 5, height: 0.72, width: 0.07, spread: 0.2, droop: 0.85, rows: 4 });
 
 // A chunky angular block of stone with a flat top.
 export function rockGeometry() {

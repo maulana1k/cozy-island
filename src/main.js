@@ -723,7 +723,7 @@ function step() {
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);
   island.update(elapsed);
-  island.setLight(sky.waterLight, sky.fogColor, scene.fog.density);
+  island.setLight(sky.waterLight, sky.fogColor, scene.fog.density, sky.sunLight, weather.rain);
   village.update(elapsed);
   village.setNight(night);
   buildings.setNight(night, timeOfDay);

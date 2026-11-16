@@ -1,4 +1,4 @@
-// The river from the lake to the sea: flowing streaks, bank dressing (reeds, rocks half in the water,
+// The river from the lake to the sea (its flowing surface is the water shader in world/water.js): bank dressing (reeds, rocks half in the water,
 // lily patches, driftwood, a dugout and a raft) in a few InstancedMesh pools per stretch of river, and
 // ducks. Nothing is placed in the bridge approach, on the stepping stones' line or on the riverside trail.
 //
@@ -10,9 +10,10 @@ import * as THREE from 'three';
 import { AREAS } from '../../config.js';
 import { heightAt, riverAt } from '../../logic/terrain.js';
 import { BRIDGE, STONES } from '../../logic/layout.js';
-import { buildFlowStreaks, buildReedClump, buildRiverRock, buildLilyPatch, waterWave, rngFrom, mat, lump } from '../../kit/river.js';
+import { buildReedClump, buildRiverRock, buildLilyPatch, waterWave, rngFrom, mat, lump } from '../../kit/river.js';
 import { buildDuck } from '../../kit/critters.js';
 import { cyl, box, stick, mergeStatic } from '../build.js';
+import { waterObstacles } from '../water.js';
 
 // ---- the river as a polyline with half widths -------------------------------------------------
 const R = AREAS.river, SEG = [];
@@ -62,9 +63,6 @@ export function create(scene, deps) {
   for (const [x, z] of [[a.x - B.dx * 1.8, a.z - B.dz * 1.8], [a.x + B.dx * 1.2, a.z + B.dz * 1.2], [b.x + B.dx * 1.8, b.z + B.dz * 1.8], [b.x - B.dx * 1.2, b.z - B.dz * 1.2]]) deps.keepClear(x, z, 3.4);
   deps.keepClear(ACROSS[0].x - 2.2, ACROSS[0].z - 1.1, 3.4); deps.keepClear(ACROSS[10].x + 2.2, ACROSS[10].z + 1.1, 3.4);
 
-  // ---- flowing streaks, lake to sea
-  const flow = buildFlowStreaks(R, 0); group.add(flow.group);
-
   // ---- bank dressing, placed once
   const ZONES = 3, zoneOf = (s) => (s < 45 ? 0 : s < 90 ? 1 : 2);
   const mk = () => Array.from({ length: ZONES }, () => []);
@@ -110,6 +108,11 @@ export function create(scene, deps) {
     if (c) logs[zoneOf(s)].push({ x: c.x, y: c.h + 0.1, z: c.z, ry: Math.atan2(c.tx, c.tz) + Math.PI / 2 + (rnd() - 0.5) * 0.5, s: 0.8 + rnd() * 0.5 });
   }
 
+  // The water flows round what stands in it: rocks get a collar and a wake, reeds and lily patches a lapping ring.
+  for (const z of rocks) for (const it of z) if (it.y < 0.1) waterObstacles.add(it.x, it.z, 0.42 * it.s, 1);
+  for (const z of reeds) for (const it of z) if (it.y < -0.08) waterObstacles.add(it.x, it.z, 0.2 * it.s, 2);
+  for (const z of lilies) for (const it of z) waterObstacles.add(it.x, it.z, 1.0 * it.s, 2);
+
   // Pools: one InstancedMesh for each material of a kit piece, per stretch of river.
   const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
   const place = (im, i, it, y = it.y) => im.setMatrixAt(i, M.compose(V.set(it.x, y, it.z), Q.setFromAxisAngle(Y, it.ry), S.set(it.s, it.sy || it.s, it.s)));
@@ -147,7 +150,7 @@ export function create(scene, deps) {
       const p = at(s, side * at(s).w * k);
       if (heightAt(p.x, p.z) < -0.28 && !blocked(p.x, p.z, 1)) {
         const g = build(); g.position.set(p.x, 0, p.z); g.rotation.y = Math.atan2(p.tx, p.tz) + (side < 0 ? 0.12 : -0.12);
-        group.add(g); floaters.push({ g, x: p.x, z: p.z, ry: g.rotation.y, bob: floaters.length * 2 });
+        group.add(g); floaters.push({ g, x: p.x, z: p.z, ry: g.rotation.y, bob: floaters.length * 2 }); waterObstacles.add(p.x, p.z, 0.45, 2);
         for (const o of hit) colliders.push({ x: p.x + Math.sin(g.rotation.y) * o, z: p.z + Math.cos(g.rotation.y) * o, r: 0.5 });
         deps.keepClear(p.x, p.z, 2.4);
         return;
@@ -184,6 +187,7 @@ export function create(scene, deps) {
       ducks.push(d); duckGroups[gi].push(d); syncPos(d, 0);
     }
   });
+  waterObstacles.mover((out) => { for (const d of ducks) if (!d.land && d.model.group.visible) out.push({ x: d.x, z: d.z, r: 0.2, kind: 3 }); });
   function syncPos(d, elapsed) {
     const p = at(d.s, d.e); d.x = p.x; d.z = p.z;
     const h = heightAt(d.x, d.z);
@@ -291,7 +295,6 @@ export function create(scene, deps) {
     interactables,
     ducks, // (read by checks)
     update(dt, elapsed, player, night = 0) {
-      flow.update(dt, elapsed);
       const px = player.position.x, pz = player.position.z;
       for (const z of zones) {
         z.g.visible = Math.hypot(px - z.cx, pz - z.cz) - z.rad < 110;

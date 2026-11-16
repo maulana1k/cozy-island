@@ -142,7 +142,14 @@ export const TOWER = { x: 46.5, z: 8.2 };
 export const PICNIC_TABLES = [{ x: 17.8, z: 23.4, rot: 0.3 }, { x: 18.2, z: 27.2, rot: -0.25 }];
 export const PIONEER_SITE = { x: -5.3, z: 21 };
 // Open ground for games: tag, a tug-of-war and a game of catch.
-export const PLAY = { tag: { x: 9, z: -17.5, r: 6 }, tug: { x: -29.6, z: 31.8, rot: 0.6 }, catch: [{ x: -14, z: 25 }, { x: -10, z: 21.5 }] };
+// The tug-of-war lies along +x on the flat plateau west of the tents, the beach squad drills east of the camp fire
+// (`beach` is the middle of the three; the trainer stands off to its side), and tag is on the level east of the clinic.
+export const PLAY = { tag: { x: 13, z: -17, r: 5.4 }, tug: { x: -36, z: 31, rot: 1.6 }, catch: [{ x: -14, z: 25 }, { x: -10, z: 21.5 }], beach: { x: -24.5, z: 42.5 } };
+// Ground the games keep clear of bushes, trees, grass tufts and flowers (circles, 1.5 m wider than the players reach).
+export const PLAY_CLEAR = [
+  { ...PLAY.tag, r: PLAY.tag.r + 1 }, { x: -12, z: 23.2, r: 4.5 }, { ...PLAY.beach, r: 5 },
+  ...[-3.6, -1.8, 0, 1.8, 3.6].map((d) => ({ x: PLAY.tug.x + Math.sin(PLAY.tug.rot) * d, z: PLAY.tug.z + Math.cos(PLAY.tug.rot) * d, r: 3.2 })),
+];
 export const SALUTE_LINE = [{ x: 15.2, z: 12.6 }, { x: 16.6, z: 12.9 }, { x: 18, z: 13.2 }];
 const gatePosts = [-1, 1].map((s) => ({ x: GATE.x + Math.cos(GATE.rot) * GATE.half * s, z: GATE.z - Math.sin(GATE.rot) * GATE.half * s }));
 export const GATE_POSTS = gatePosts;
@@ -377,7 +384,7 @@ export function getScatter() {
     // Nothing may grow under the flying fox cable.
     ...Array.from({ length: 21 }, (_, k) => ({ x: ZIPLINE.top.x + (ZIPLINE.bottom.x - ZIPLINE.top.x) * (k / 20), z: ZIPLINE.top.z + (ZIPLINE.bottom.z - ZIPLINE.top.z) * (k / 20), r: 4.6 })), { ...TOWER, r: 3 }, ...PICNIC_TABLES.map((t) => ({ ...t, r: 2.6 })), { ...PIONEER_SITE, r: 3.6 },
     ...SALUTE_LINE.map((p) => ({ ...p, r: 1.6 })),
-    { ...PLAY.tag, r: PLAY.tag.r + 1 }, { ...PLAY.tug, r: 5 }, { x: -12, z: 23.2, r: 4.5 }, { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
+    ...PLAY_CLEAR, { ...CHICKEN_YARD, r: 5 }, { ...CAT_SPOT, r: 2 },
     { ...LOOKOUT, r: 8.6 }, { ...WINDMILL, r: 6 }, { ...SHEEP_MEADOW, r: 5.5 },
   ];
   const clearOf = (p, list, extra = 0) => list.every((o) => dist(p, o) > (o.r || 0) + extra);

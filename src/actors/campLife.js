@@ -44,8 +44,9 @@ export function createCampLife(scene, deps) {
   const ORDERS = ['attention', 'salute', 'jacks', 'march', 'attention', 'clap'];
   const drill = { order: 0, timer: 3 };
   // ---- A trainer leads exercises on the beach ---------------------------------
-  const beach = [0, 1, 2].map((k) => ({ x: CAMPFIRE.x + 6.5 + k * 1.5, z: CAMPFIRE.z - 5.5 - k * 0.9 }));
-  const trainerSpot = { x: CAMPFIRE.x + 6.2, z: CAMPFIRE.z - 9.4 };
+  const B = PLAY.beach;
+  const beach = [0, 1, 2].map((k) => ({ x: B.x + (k - 1) * 1.5, z: B.z - (k - 1) * 0.9 }));
+  const trainerSpot = { x: B.x - 1.5, z: B.z - 2.6 };
   const trainer = person(trainerSpot.x, trainerSpot.z, face(trainerSpot, beach[1]), { adult: true, accent: 'cap', accentColor: 0xe8503a, shirt: 0xf2f2ee, shorts: 0x3f4f6a, name: 'the trainer' });
   const beachSquad = beach.map((p) => person(p.x, p.z, face(p, trainerSpot)));
 
@@ -66,7 +67,7 @@ export function createCampLife(scene, deps) {
 
   // ---- Tag: one scout is "it" and everyone else runs for it -------------------
   const T = PLAY.tag;
-  const runners = [0, 1, 2, 3, 4].map((k) => { const a = (k / 5) * Math.PI * 2; const p = person(T.x + Math.cos(a) * 3.5, T.z + Math.sin(a) * 3.5, a, { solid: false }); p.vx = 0; p.vz = 0; p.wob = k * 1.7; return p; });
+  const runners = [0, 1, 2, 3, 4].map((k) => { const a = (k / 5) * Math.PI * 2; const p = person(T.x + Math.cos(a) * 3.2, T.z + Math.sin(a) * 3.2, a, { solid: false }); p.vx = 0; p.vz = 0; p.wob = k * 1.7; return p; });
   const tag = { it: 0, freeze: 0, last: -1, grace: 0 };
 
   // ---- Catch: two scouts throwing a ball, sometimes badly ---------------------

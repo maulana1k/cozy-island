@@ -1,11 +1,11 @@
 // Measures the true cost of one frame (limiter off) and where the script time goes, at each check spot.
-// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle|bridge|village|farm|clifftop|dock]
+// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle|bridge|village|farm|clifftop|dock|topterrace|clearing]
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const PORT = 9333;
+const PORT = Number(process.env.PORT || 9333);
 const dir = mkdtempSync(join(tmpdir(), 'prof-'));
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
   '--headless=new', '--use-angle=metal', '--enable-gpu', `--remote-debugging-port=${PORT}`, `--user-data-dir=${dir}`,
@@ -28,10 +28,12 @@ const evalJs = async (expression) => (await send('Runtime.evaluate', { expressio
 
 // The camp and the jungle, then the bigger island's spots (see AREAS in src/config.js): standing on
 // the bridge looking at the village, in the village square, on the farm, at the cliff-top lookout
-// looking down the river, and on the dock looking back at camp.
+// looking down the river, and on the dock looking back at camp. `village` is the square, `farm` the valley.
 const SPOTS = {
   camp: 'x=10&z=8&yaw=0.6', summit: 'x=-18&z=-22&yaw=2', jungle: 'x=-45&z=-50&yaw=3.9',
-  bridge: 'x=61.5&z=-25.1&yaw=-1.06', village: 'x=92&z=-42&yaw=2.08', farm: 'x=138&z=-66&yaw=1.86', clifftop: 'x=56&z=-133&yaw=2.83', dock: 'x=60.1&z=19.5&yaw=1.26',
+  bridge: 'x=61.5&z=-25.1&yaw=-1.06', village: 'x=101&z=-55.5&yaw=2.08', farm: 'x=100&z=-98&yaw=1.86', clifftop: 'x=56&z=-133&yaw=2.83', dock: 'x=60.1&z=19.5&yaw=1.26',
+  // The hillside (2026-11-16): the top terrace looking down over the village to the bridge, and the ridge clearing looking west.
+  topterrace: 'x=118.5&z=-57&yaw=2.2', clearing: 'x=147&z=-79&yaw=1.99',
 };
 const only = process.argv[2];
 for (const [name, q] of Object.entries(SPOTS)) {

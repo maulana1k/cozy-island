@@ -40,7 +40,8 @@ const LABELS = [
   ['Windmill', WINDMILL, 30, -46], ['Headquarters', { x: 11.6, z: -7.3 }, -34, -58], ['Flagpole', FLAGPOLE, 40, 64],
   ['Bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 64, 30],
   ['River', AREAS.river[6], -70, 4], ['Lake', AREAS.lake, -64, 30], ['Waterfall', AREAS.waterfall.foot, 60, 22], ['Lookout', AREAS.lookout, -64, -26],
-  ['Stepping stones', AREAS.ford, -92, -6], ['Village', AREAS.village, 0, 48], ['Fields', AREAS.paddies, 18, 50], ['Orchard', AREAS.orchard, 60, -18], ['Jetty', AREAS.jetty, -6, 40],
+  ['Stepping stones', AREAS.ford, -92, -6], ['Village', AREAS.village, -30, 58], ['Fields', AREAS.paddies, 34, 30], ['Jetty', AREAS.jetty, -6, 40],
+  ['Clearing', AREAS.clearing, 50, 26], ['Spring', AREAS.spring, 46, -30],
 ];
 
 function drawPaperMap(c) {
@@ -59,9 +60,16 @@ function drawPaperMap(c) {
       const g = groundKind(x, z), w = wildness(x, z), lr = landR(x, z);
       col = lr > GRASS_RADIUS ? SAND : w > 0.55 ? ((i * 7 + j * 13) % 11 < 3 ? DEEP : JUNGLE) : GRASS;
       if (g) {
-        if (g.locals > 0.5 && lr < GRASS_RADIUS) col = Math.hypot(x - AREAS.village.x, z - AREAS.village.z) < AREAS.village.r * 0.55 ? EARTH : Math.hypot(x - AREAS.farm.x, z - AREAS.farm.z) < AREAS.farm.r ? FARM : LOCAL;
+        if (g.locals > 0.5 && lr < GRASS_RADIUS) {
+          // The hillside: terraces paler the higher they stand, fields green, the ridge's wood dark.
+          col = LOCAL;
+          if (g.terrace > 0.5) { const k = Math.min(1, h / 6); col = [EARTH[0] + (255 - EARTH[0]) * k * 0.45, EARTH[1] + (245 - EARTH[1]) * k * 0.45, EARTH[2] + (215 - EARTH[2]) * k * 0.45]; }
+          if (g.paddy > 0.5) col = FARM;
+          if (g.forest > 0) col = (i * 7 + j * 13) % 11 < 3 ? DEEP : JUNGLE;
+          if (g.clearing < 0) col = GRASS;
+        }
         if (g.rock > 0.5 && h > 2) col = h > AREAS.massif.height - 1.5 && w > 0.4 ? JUNGLE : (i + j) % 4 ? ROCK : ROCKD;
-        if (g.trail < 1.4) col = TRAIL;
+        if (g.oldTrail < 1.4) col = TRAIL;
       }
     }
     const k = (j * n + i) * 4; px[k] = col[0]; px[k + 1] = col[1]; px[k + 2] = col[2]; px[k + 3] = 255;
@@ -81,6 +89,14 @@ function drawPaperMap(c) {
   // trails
   c.strokeStyle = '#b98a55'; c.lineWidth = 2.2; c.lineCap = 'round'; c.lineJoin = 'round';
   for (const path of PATHS) { c.beginPath(); path.forEach((p, i) => (i ? c.lineTo(mx(p.x), mz(p.z)) : c.moveTo(mx(p.x), mz(p.z)))); c.stroke(); }
+  // The locals' hillside: the stream from its spring, the terrace walls, the paths, the clearing.
+  const line = (pts) => { c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(mx(p.x), mz(p.z)) : c.moveTo(mx(p.x), mz(p.z)))); c.stroke(); };
+  c.strokeStyle = '#ffffff'; c.lineWidth = 5; line(AREAS.stream); c.strokeStyle = '#6fbfe0'; c.lineWidth = 3; line(AREAS.stream);
+  c.fillStyle = '#6fbfe0'; c.beginPath(); c.arc(mx(AREAS.spring.x), mz(AREAS.spring.z), AREAS.spring.r * MK, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#9a7650'; c.lineWidth = 2.4; for (const t of AREAS.terraces) if (t.wallFoot) line(t.wallFoot);
+  c.strokeStyle = '#b98a55'; c.lineWidth = 1.6; c.setLineDash([4, 3]); for (const p of Object.values(AREAS.paths)) line(p); c.setLineDash([]);
+  c.fillStyle = '#d9b46a'; for (const s of AREAS.steps) { c.beginPath(); c.arc(mx(s.x), mz(s.z), 2, 0, Math.PI * 2); c.fill(); }
+  c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.fillStyle = '#b9d98a'; c.beginPath(); c.arc(mx(AREAS.clearing.x), mz(AREAS.clearing.z), AREAS.clearing.r * MK, 0, Math.PI * 2); c.fill(); c.stroke();
   c.fillStyle = '#f7e9c0'; c.beginPath(); c.arc(mx(10), mz(8), 5.2 * MK, 0, Math.PI * 2); c.fill();
   // dock, bridge, stepping stones and the flying fox cable
   c.strokeStyle = '#8c6444'; c.lineWidth = 4; c.beginPath(); c.moveTo(mx(DOCK.x), mz(DOCK.z)); c.lineTo(mx(DOCK.x + Math.sin(DOCK.rot) * DOCK.length), mz(DOCK.z + Math.cos(DOCK.rot) * DOCK.length)); c.stroke();
@@ -108,8 +124,9 @@ function drawPaperMap(c) {
   // the jungle, and a warning
   {
     c.save(); c.translate(150, 240); c.rotate(-0.05); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 22px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText('WILD JUNGLE', 0, 0); c.fillStyle = '#c62f24'; c.font = '800 14px ui-rounded, system-ui, sans-serif'; c.fillText('DANGER · KEEP OUT', 0, 22); c.restore();
-    c.save(); c.translate(mx(AREAS.locals.x + 18), mz(AREAS.locals.z - 4)); c.rotate(0.04); c.textAlign = 'center'; c.fillStyle = '#6b5a2e'; c.font = '800 17px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText("THE LOCALS' LAND", 0, 0); c.restore();
+    c.save(); c.translate(mx(AREAS.locals.x + 4), mz(AREAS.locals.z + 44)); c.rotate(0.04); c.textAlign = 'center'; c.fillStyle = '#6b5a2e'; c.font = '800 17px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.fillText("THE LOCALS' LAND", 0, 0); c.restore();
     c.save(); c.translate(mx(AREAS.massif.b.x - 6), mz(AREAS.massif.b.z + 1)); c.textAlign = 'center'; c.fillStyle = '#5e5348'; c.font = '800 13px ui-rounded, system-ui, sans-serif'; c.fillText('ROCK CLIFFS', 0, 0); c.restore();
+    c.save(); c.translate(mx(AREAS.ridge[5].x + 2), mz(AREAS.ridge[5].z + 4)); c.rotate(-1.3); c.textAlign = 'center'; c.fillStyle = '#2f5a35'; c.font = '800 12px ui-rounded, system-ui, sans-serif'; c.fillText('RIDGE WOOD', 0, 0); c.restore();
   }
   // labels on paper tags, each with a line to its place
   c.font = '700 13px ui-rounded, "SF Pro Rounded", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';

@@ -6,13 +6,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, landR, wildDepth, wildness, groundKind } from '../logic/terrain.js';
-import { paintNewGround } from './ground.js';
+import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './ground.js';
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
 const TILE = 48, VIEW = 230, NEAR = 58, UNDER = 36; // tile size; how far tiles exist; how far real trees and undergrowth go
 const MAIN_HALF = 85;                                  // the camp's own ground mesh covers this far from the middle
+const FINE_WITHIN = 40;                                // a tile shows its fine ground when you are this close to its edge
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 
 // Repeatable random numbers for one tile.
@@ -46,6 +47,7 @@ const cleared = (x, z) => KEEP_CLEAR.some((k) => Math.hypot(x - k.x, z - k.z) < 
 
 export function createWilds(scene) {
   const group = new THREE.Group(); scene.add(group);
+  const streamWater = buildStreamWater(); group.add(streamWater); // the farm valley's stream
   const groundMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
   const dummy = new THREE.Object3D(), color = new THREE.Color();
   const colliders = [];
@@ -76,34 +78,57 @@ export function createWilds(scene) {
     // Ground, unless the camp's own mesh already covers the whole tile.
     const inside = (x, z) => Math.max(Math.abs(x), Math.abs(z)) < MAIN_HALF - 3;
     if (!(inside(x0, z0) && inside(x0 + TILE, z0 + TILE))) {
-      // A vertex every 4 m is plenty for rolling ground; river banks, the lake shore, cliffs and
-      // the cliff path get one every metre, the rest of the new land one every 2 m.
+      // A vertex every 4 m is plenty for rolling ground; river banks, the lake shore, cliffs, the
+      // cliff path and the locals' land get one every metre (2 m on the high rock), and the village's
+      // terraces one every two thirds of a metre, like the camp's own mesh (clean faces and stamps).
+      // Tiles finer than 2 m also get a 2 m version, shown when you are more than FINE_WITHIN away.
       let seg = 12;
-      for (let u = 0; u <= 6 && seg < 48; u++) for (let v = 0; v <= 6; v++) {
-        const g = groundKind(x0 + u * TILE / 6, z0 + v * TILE / 6);
+      for (let u = 0; u <= 8 && seg < 72; u++) for (let v = 0; v <= 8; v++) {
+        const g = groundKind(x0 + u * TILE / 8, z0 + v * TILE / 8);
         if (!g) continue;
-        if (g.river < 12 || g.lake < 14 || g.trail < 6 || (g.rock > 0.02 && g.rockHeight < MAX_ROCK - 0.5)) { seg = 48; break; }
-        if (g.locals > 0.2 || g.rock > 0.02) seg = 24;
+        if (g.terrace > 0.02) { seg = 72; break; }
+        if (g.river < 12 || g.lake < 14 || g.oldTrail < 6 || (g.rock > 0.02 && g.rockHeight < MAX_ROCK - 0.5) || g.locals > 0.2 || g.stream < 8 || g.path < 4) seg = 48;
+        else if (g.rock > 0.02) seg = Math.max(seg, 24);
       }
-      const geo = new THREE.PlaneGeometry(TILE, TILE, seg, seg);
-      geo.rotateX(-Math.PI / 2); geo.translate(tile.cx, 0, tile.cz);
-      const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3);
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x, z), r = landR(x, z);
-        // Tuck under the camp's mesh where the two overlap, so they never flicker against each other.
-        pos.setY(i, h - 0.35 * smooth((MAIN_HALF - 0.5 - Math.max(Math.abs(x), Math.abs(z))) / 3));
-        if (r < GRASS_RADIUS + 1) {
-          // The same dry jungle floor as round the camp, greener in the damp hollows, paler on the heights.
-          const damp = smooth(wave(x, z, 46, 1.3) * 0.5 + 0.5), deep = smooth(wave(x, z, 23, 4.1) * 0.6 + 0.3);
-          color.copy(cJungle).lerp(cSoil, smooth(wave(x, z, 9, 0.7) * 0.5 + 0.2) * 0.5).lerp(cGreen, damp * 0.75).lerp(cDeep, deep * damp * 0.6).lerp(cHigh, smooth((h - 9) / 12) * 0.7);
-          color.lerp(cSand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
-        } else color.copy(cSand).lerp(cWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
-        paintNewGround(color, x, z, h);
-        colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
-      }
-      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      geo.computeVertexNormals();
-      tile.mesh = new THREE.Mesh(geo, groundMat); tile.mesh.receiveShadow = true;
+      const makeGround = (seg) => {
+        const geo = new THREE.PlaneGeometry(TILE, TILE, seg, seg);
+        geo.rotateX(-Math.PI / 2); geo.translate(tile.cx, 0, tile.cz);
+        const pos = geo.attributes.position, colors = new Float32Array(pos.count * 3), N = seg + 1;
+        const heights = new Float32Array(pos.count);
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), z = pos.getZ(i);
+          heights[i] = heightAt(x, z);
+          // Tuck under the camp's mesh where the two overlap, so they never flicker against each other.
+          pos.setY(i, heights[i] - 0.35 * smooth((MAIN_HALF - 0.5 - Math.max(Math.abs(x), Math.abs(z))) / 3));
+        }
+        const slopes = gridSlopes(heights, N, TILE / seg);
+        const paint = (i) => {
+          const x = pos.getX(i), z = pos.getZ(i), h = heights[i], r = landR(x, z);
+          if (r < GRASS_RADIUS + 1) {
+            // The same dry jungle floor as round the camp, greener in the damp hollows, paler on the heights.
+            const damp = smooth(wave(x, z, 46, 1.3) * 0.5 + 0.5), deep = smooth(wave(x, z, 23, 4.1) * 0.6 + 0.3);
+            color.copy(cJungle).lerp(cSoil, smooth(wave(x, z, 9, 0.7) * 0.5 + 0.2) * 0.5).lerp(cGreen, damp * 0.75).lerp(cDeep, deep * damp * 0.6).lerp(cHigh, smooth((h - 9) / 12) * 0.7);
+            color.lerp(cSand, Math.min(1, Math.max(0, (r - (GRASS_RADIUS - 2.5)) / 2.5)));
+          } else color.copy(cSand).lerp(cWet, Math.min(1, Math.max(0, (r - (ISLAND_RADIUS - 4)) / 4)));
+          paintNewGround(color, x, z, h, slopes[i]);
+          colors[i * 3] = color.r; colors[i * 3 + 1] = color.g; colors[i * 3 + 2] = color.b;
+        };
+        for (let i = 0; i < pos.count; i++) paint(i);
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geo.computeVertexNormals();
+        // Repaints the part inside a box [x0, x1, z0, z1] (when an area stamps the ground).
+        geo.userData.repaint = ([bx0, bx1, bz0, bz1]) => {
+          const st = TILE / seg, idx = (v, o) => Math.round((v - o) / st);
+          if (bx1 < x0 || bx0 > x0 + TILE || bz1 < z0 || bz0 > z0 + TILE) return;
+          for (let iz = Math.max(0, idx(bz0, z0)); iz <= Math.min(N - 1, idx(bz1, z0)); iz++) for (let ix = Math.max(0, idx(bx0, x0)); ix <= Math.min(N - 1, idx(bx1, x0)); ix++) paint(iz * N + ix);
+          geo.attributes.color.needsUpdate = true;
+        };
+        return geo;
+      };
+      tile.fine = makeGround(seg);
+      tile.coarse = seg > 24 ? makeGround(24) : null;
+      tile.repaint = (box) => { tile.fine.userData.repaint(box); if (tile.coarse) tile.coarse.userData.repaint(box); };
+      tile.mesh = new THREE.Mesh(tile.coarse || tile.fine, groundMat); tile.mesh.receiveShadow = true;
       group.add(tile.mesh);
     }
 
@@ -144,11 +169,11 @@ export function createWilds(scene) {
       else tile.tufts.push(item);
     }
     // The locals' land: a few palms, fruit trees and bushes, far sparser than the jungle,
-    // never on the trails, the beaches, the village square or the fields.
+    // never on the paths, the beaches, the terraces, the paddies, the stream or in the ridge's wood.
     for (let n = 0; n < 26; n++) {
       const x = x0 + rng() * TILE, z = z0 + rng() * TILE, what = rng(), size = rng(), turn = rng();
       const g = groundKind(x, z);
-      if (!g || g.locals < 0.8 || g.trail < 3 || g.river < 4 || cleared(x, z)) continue;
+      if (!g || g.locals < 0.8 || g.trail < 3 || g.river < 4 || g.terrace > 0.05 || g.paddy > 0 || g.stream < 3 || g.forest > -1 || cleared(x, z)) continue;
       const y = heightAt(x, z), r = landR(x, z);
       if (y < 0.7 || steep(x, z, y)) continue;
       if (what < 0.32) tile.trees.push({ x, y: y - 0.1, z, kind: r > 40 || what < 0.12 ? 3 : 1, scale: 0.85 + size * 0.45, rot: turn * 6.283, tint: size - 0.5 });
@@ -198,8 +223,11 @@ export function createWilds(scene) {
   }
 
   // Makes the tiles that have come into range (a few at a time) and drops the ones left behind.
-  let lastFill = { x: 1e9, z: 1e9 }, dirty = true;
+  let lastFill = { x: 1e9, z: 1e9 }, dirty = true, stampSeen = 0;
   function stream(px, pz, budget) {
+    // Ground stamped since the tiles were made: repaint the touched parts (tiles made now include it all).
+    const ch = groundChanges(stampSeen);
+    if (ch.version !== stampSeen) { stampSeen = ch.version; for (const tile of tiles.values()) if (tile.repaint) for (const b of ch.boxes) tile.repaint(b); }
     const ci = Math.floor(px / TILE), cj = Math.floor(pz / TILE), reach = Math.ceil(VIEW / TILE);
     for (let dj = -reach; dj <= reach && budget > 0; dj++) for (let di = -reach; di <= reach && budget > 0; di++) {
       const ix = ci + di, iz = cj + dj, key = `${ix},${iz}`;
@@ -210,10 +238,15 @@ export function createWilds(scene) {
     }
     for (const [key, tile] of tiles) {
       if (tile.empty || Math.hypot(tile.cx - px, tile.cz - pz) < VIEW + 70) continue;
-      if (tile.mesh) { group.remove(tile.mesh); tile.mesh.geometry.dispose(); }
+      if (tile.mesh) { group.remove(tile.mesh); tile.fine.dispose(); if (tile.coarse) tile.coarse.dispose(); }
       tiles.delete(key); dirty = true;
     }
     if (dirty || Math.hypot(px - lastFill.x, pz - lastFill.z) > 7) { refill(px, pz); lastFill = { x: px, z: pz }; dirty = false; }
+    // Near tiles show their fine ground, far ones the 2 m version.
+    for (const tile of tiles.values()) if (tile.coarse) {
+      const dx = Math.max(0, Math.abs(px - tile.cx) - TILE / 2), dz = Math.max(0, Math.abs(pz - tile.cz) - TILE / 2);
+      tile.mesh.geometry = Math.hypot(dx, dz) < FINE_WITHIN ? tile.fine : tile.coarse;
+    }
   }
 
   // ---- Eyes in the dark: something is watching from between the trees.

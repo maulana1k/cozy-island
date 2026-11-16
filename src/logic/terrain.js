@@ -76,8 +76,17 @@ const trailLines = () => (AREAS.trails.length ? (trailLines.v ||= AREAS.trails.m
 const cliffLine = AREAS.cliffPath.length > 1 ? line(AREAS.cliffPath) : null;
 // The locals' side: their round, melted into a band of land along the river's far bank that
 // stops where the river reaches the sea. On the island's scale: under 60 is land.
+// Two strips melted into the round so the hillside has room: the valley's north side, right up to the
+// foot of the cliffs, and the village's south foot (filling a notch in the coast). Each is a capsule a..b;
+// on the island's scale it reads k0 + k1 * (metres from the capsule's line).
+const FILL = [{ a: { x: 80, z: -116 }, b: { x: 136, z: -116 }, k0: 36, k1: 1.5 }, { a: { x: 80, z: -30 }, b: { x: 118, z: -28 }, k0: 36, k1: 2 }];
+function capsuleD(x, z, a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz)));
+  return Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
+}
 function localsR(x, z, rv) {
-  const round = ISLAND_RADIUS + Math.hypot(x - LOC.x, z - LOC.z) - LOC.r;
+  let round = ISLAND_RADIUS + Math.hypot(x - LOC.x, z - LOC.z) - LOC.r;
+  for (const f of FILL) round = meltK(round, f.k0 + f.k1 * capsuleD(x, z, f.a, f.b), 10);
   if (rv.d === Infinity || rv.side < 0) return round;
   const e = rv.d - rv.w; // metres past the far bank
   const band = ISLAND_RADIUS - 2 * Math.min(e, BAND - e) + 3 * Math.max(0, rv.s - MOUTH_AT);
@@ -111,16 +120,171 @@ const inNew = (x, z) => x > 14 && x < 215 && z < 12 && z > -200;
 const riverBed = (d, w) => (d < w ? -RIVER_DEPTH * (1 - (d / w) ** 2) ** 0.8 : (d - w) * 0.32);
 const lakeBed = (d) => (d < LAKE.r ? -LAKE.depth * (1 - (d / LAKE.r) ** 2) ** 0.6 : (d - LAKE.r) * 0.3);
 
+
+// ---- The locals' hillside ------------------------------------------------------------------
+// The locals' land is shaped from the plan in AREAS: a spur rising from the bridge with the
+// village's terraces cut into it, a broad farm valley north of it with a stream running west to
+// the river, and a wooded ridge curving from the top of the village round to the cliffs.
+const VF = AREAS.villageFrame, TER = AREAS.terraces, STEPS = AREAS.steps, OLD_VILLAGE = { x: 92, z: -42, r: 18 };
+// A spot in the village frame: u uphill from the bridge, v across, ue along the bowed terrace lines.
+export function villageUV(x, z) {
+  const dx = x - VF.o.x, dz = z - VF.o.z, u = dx * VF.ux + dz * VF.uz, v = dx * VF.vx + dz * VF.vz;
+  return { u, v, ue: u - VF.bow * (v - VF.vc) ** 2 };
+}
+// Piecewise-linear lookup in a table of [t, value] rows.
+function lerpTable(tab, t) {
+  if (t <= tab[0][0]) return tab[0][1];
+  for (let i = 1; i < tab.length; i++) if (t <= tab[i][0]) { const [a, va] = tab[i - 1], [b, vb] = tab[i]; return va + (vb - va) * (t - a) / (b - a); }
+  return tab[tab.length - 1][1];
+}
+// The spur's natural height along its crest: it passes each terrace's level half-way along it.
+const SPUR = [[-6, 0.9], [0, 1.0], ...TER.map((t) => [(t.u0 + t.u1) / 2, t.y]), [66, 5.9], [80, 7]];
+const SPUR_V0 = -23, SPUR_V1 = 22; // the spur's broad top, across (the terraces and the ramp lane); beyond it the flanks fall away
+const streamLine = line(AREAS.stream), ridgeLine = line(AREAS.ridge), ridgeTrailLine = line(AREAS.ridgeTrail);
+const STREAM_TOP = 2.35, STREAM_END = -0.15, STREAM_DEPTH = 0.36; // the bed at the spring and at the river; how far it is sunk
+const streamBed = (s) => STREAM_TOP + (STREAM_END - STREAM_TOP) * Math.min(1, s / streamLine.total);
+const ridgeRun = () => ({ h0: TER[TER.length - 1].y, h1: AREAS.clearing.y });
+const pathLines = Object.entries(AREAS.paths).map(([name, pts]) => ({ name, ...line(pts) }));
+
+// The land before the village's terraces: low rolling country, rising gently east toward the ridge
+// and north toward the cliffs, with a shallow trough down the middle of the valley for the stream.
+function localsBase(x, z, lr) {
+  const inland = smooth((GRASS_RADIUS + 4 - lr) / 16);
+  const n = nearestOn(streamLine, x, z, 26), calm = 0.35 + 0.65 * smooth((n.d - 18) / 14); // the valley rolls less, so fields fit
+  let b = 1.2 + 1.5 * smooth((x - 70) / 70) + calm * (0.42 * noise(x / 26 + 51, z / 26 + 7) + 0.16 * noise(x / 9 + 9, z / 9 + 61));
+  b += 2.2 * smooth((-z - 100) / 22) * smooth((x - 74) / 12); // foothills under the cliffs
+  if (n.d < 26) b += (streamBed(n.s) + STREAM_DEPTH + 0.05 * noise(x / 4, z / 4) - b) * (1 - smooth((n.d - 2.5) / 20));
+  return shore(lr) + inland * (b - GRASS_HEIGHT);
+}
+// The ridge's rise above the land: rounded on top, its flanks reaching `hw` either side of the crest.
+function ridgeRise(x, z, lr) {
+  const n = nearestOn(ridgeLine, x, z, 26);
+  if (n.d === Infinity) return 0;
+  const { a, b } = ridgeLine.segs[n.i], hw = a.hw + (b.hw - a.hw) * n.t, rise = a.rise + (b.rise - a.rise) * n.t;
+  const t = (n.d + 2.2 * noise(x / 11 + 3, z / 11 + 71)) / hw;
+  return t >= 1 ? 0 : rise * (1 + 0.1 * noise(x / 17, z / 17 + 5)) * (1 - smooth(t)) * smooth((57 - lr) / 9);
+}
+// The face up from terrace k to k+1 at ue: 0 below, 1 above. At steps it is an even slope `run` long.
+// Past the south ends of the walls (in the ramp lane) it is a ramp RAMP_HALF * 2 long instead.
+function faceShape(k, v) {
+  const lo = TER[k], hi = TER[k + 1];
+  let corr = 0;
+  for (const s of STEPS) if (s.from === lo.id) corr = Math.max(corr, smooth((s.width / 2 + 0.35 - Math.abs(v - s.v)) / 0.35));
+  const lane = smooth((v - Math.min(lo.v1, hi.v1) - 0.2) / 1.0);
+  let half = FACE_HALF + (STEPS[0].run / 2 - FACE_HALF) * corr;
+  half += (RAMP_HALF - half) * lane;
+  return { c: (lo.u1 + hi.u0) / 2, half, even: Math.max(corr, lane), corr, lane };
+}
+function facePart(k, ue, v) {
+  const f = faceShape(k, v), t = Math.min(1, Math.max(0, (ue - (f.c - f.half)) / (2 * f.half)));
+  return smooth(t) + (t - smooth(t)) * f.even;
+}
+const FACE_HALF = 0.4; // a face climbs its 1.3 m over 0.8 m of ue, centred between the terraces
+const LANE = AREAS.ramp.zone, RAMP_HALF = AREAS.ramp.run / 2; // the ramp lane beyond the terraces' south ends
+// For painting: 1 on a terrace face (a band 2.6 m wide round it, so the colour does not alias on the
+// ground mesh), 0 elsewhere; and 1 on the slope of a flight of steps.
+export function terraceFaceAt(ue, v) {
+  let face = 0, step = 0;
+  for (let k = 0; k < TER.length - 1; k++) {
+    const lo = TER[k], hi = TER[k + 1], c = (lo.u1 + hi.u0) / 2, d = Math.abs(ue - c);
+    if (d > 1.8) continue;
+    const { corr, lane } = faceShape(k, v), both = Math.min(terraceSide(lo, v), terraceSide(hi, v)), band = smooth((1.6 - d) / 1.1);
+    face = Math.max(face, band * both * (1 - corr) * (1 - lane));
+    step = Math.max(step, smooth((STEPS[0].run / 2 + 0.2 - d) / 0.4) * corr * both);
+  }
+  return { face, step };
+}
+// How much each terrace holds the ground at a spot (they never overlap), and the spur's own share.
+// Level from v0 to v1 and on through the ramp lane beyond v1; soft rims 3.5 m wide on the north, 1.5 m past the lane.
+const terraceSide = (t, v) => smooth((v - t.v0 + 3.5) / 3.5) * smooth((t.v1 + LANE + 1.5 - v) / 1.5);
+function terraceWeights(ue, v, out) {
+  for (let k = 0; k < TER.length; k++) {
+    const t = TER[k];
+    const below = k === 0 ? smooth((ue - t.u0 + 4) / 4) : facePart(k - 1, ue, v);
+    const above = k === TER.length - 1 ? 1 - smooth((ue - t.u1) / 5) : 1 - facePart(k, ue, v);
+    out[k] = Math.min(below, above) * terraceSide(t, v);
+  }
+  return out;
+}
+const TW = new Array(TER.length).fill(0);
+function spurShare(ue, v) {
+  // The flanks fall at a nearly even rate (half linear, half eased), so no stretch of them is steep.
+  const fall = (t) => { const c = Math.min(1, Math.max(0, t)); return 0.5 * (c + smooth(c)); };
+  const side = v < SPUR_V0 ? 1 - fall((SPUR_V0 - v) / 22) : v > SPUR_V1 ? 1 - fall((v - SPUR_V1) / 24) : 1;
+  return side * smooth((ue + 10) / 8) * (1 - smooth((ue - 64) / 14));
+}
+// The paddies' levels: the ground at each field's middle before it is levelled, worked out once.
+let paddyLevels = null;
+function paddyFieldsReady() {
+  if (paddyLevels) return paddyLevels;
+  paddyLevels = [];
+  const fields = AREAS.paddyFields;
+  for (const f of fields) {
+    const lr = localsR(f.x, f.z, riverAt(f.x, f.z));
+    f.y = +localsHeight(f.x, f.z, lr, riverAt(f.x, f.z), true).toFixed(2);
+    paddyLevels.push({ ...f, c: Math.cos(f.rot), s: Math.sin(f.rot) });
+  }
+  return paddyLevels;
+}
+// 1 inside a paddy field (with a soft 0.7 m rim), and which one.
+function paddyAt(x, z) {
+  let best = 0, which = null;
+  for (const f of paddyFieldsReady()) {
+    const dx = x - f.x, dz = z - f.z;
+    if (Math.abs(dx) > 9 || Math.abs(dz) > 9) continue;
+    // rot is a heading: the field's long side (hw) runs across it, its short side (hd) along it.
+    const across = dx * f.c - dz * f.s, along = dx * f.s + dz * f.c;
+    const w = smooth((f.hw + 0.7 - Math.abs(across)) / 0.7) * smooth((f.hd + 0.7 - Math.abs(along)) / 0.7);
+    if (w > best) { best = w; which = f; }
+  }
+  return { w: best, f: which };
+}
+
+// The locals' land at (x, z). `beforePaddies` leaves out the paddy levelling (used to set their levels).
+function localsHeight(x, z, lr, rv, beforePaddies = false) {
+  // The land as it was before the hillside, kept exactly along the river so its banks do not move.
+  let old = shore(lr);
+  if (lr < GRASS_RADIUS + 4) {
+    const inland = smooth((GRASS_RADIUS + 4 - lr) / 16), dv = Math.hypot(x - OLD_VILLAGE.x, z - OLD_VILLAGE.z);
+    old += inland * (0.55 + 0.55 * noise(x / 24 + 51, z / 24 + 7) + 0.2 * noise(x / 8 + 9, z / 8 + 61));
+    old += 0.9 * inland * smooth(1 - (dv - OLD_VILLAGE.r * 0.5) / OLD_VILLAGE.r);
+  }
+  const keep = rv.d === Infinity || rv.side < 0 ? 0 : 1 - smooth((rv.d - rv.w - 3) / 5);
+  if (keep >= 1) return old;
+  const base = localsBase(x, z, lr);
+  const sd = nearestOn(streamLine, x, z, 20).d; // the stream's valley head cuts back into the ridge's foot
+  let h = base + ridgeRise(x, z, lr) * smooth((sd - 2) / 12);
+  // The spur the village stands on, and the terraces cut into it.
+  const { v, ue } = villageUV(x, z);
+  if (ue > -12 && ue < 80 && v > -50 && v < 40) {
+    const share = spurShare(ue, v) * smooth((54 - lr) / 8) * smooth((sd - 5) / 15);
+    const natural = Math.max(h, base + (lerpTable(SPUR, ue) - base) * share);
+    h = natural;
+    if (ue > 0 && ue < 66 && v > SPUR_V0 - 5 && v < SPUR_V1 + 2) {
+      terraceWeights(ue, v, TW);
+      for (let k = 0; k < TER.length; k++) h += TW[k] * (TER[k].y - natural);
+    }
+  }
+  if (!beforePaddies) {
+    const p = paddyAt(x, z);
+    if (p.w > 0) h += (p.f.y - h) * p.w;
+    // The clearing on the ridge: a level lawn with a view.
+    const C = AREAS.clearing, dc = Math.hypot(x - C.x, z - C.z);
+    if (dc < C.r + 3.5) h += (C.y - h) * smooth((C.r + 3.5 - dc) / 3.5);
+  }
+  // The stream: a channel 2.8 m across, sunk into the valley floor, from the spring down to the river.
+  const n = nearestOn(streamLine, x, z, 6);
+  if (n.d < 6) {
+    const bed = streamBed(n.s) + 0.03 * noise(x * 1.3, z * 1.3), sp = Math.hypot(x - AREAS.spring.x, z - AREAS.spring.z);
+    h = Math.min(h, bed + Math.max(0, n.d - 0.8) * 0.6);
+    if (sp < AREAS.spring.r + 2) h = Math.min(h, bed - 0.05 + Math.max(0, sp - AREAS.spring.r) * 0.5); // the spring pool
+  }
+  return old + (h - old) * (1 - keep);
+}
+
 function newLand(x, z, hOld) {
   const rv = riverAt(x, z), lr = localsR(x, z, rv);
-  let h = shore(lr);
-  if (lr < GRASS_RADIUS + 4) {
-    // Low rolling country, 1 to 3 m, with one broad rise for the village.
-    const inland = smooth((GRASS_RADIUS + 4 - lr) / 16);
-    h += inland * (0.55 + 0.55 * noise(x / 24 + 51, z / 24 + 7) + 0.2 * noise(x / 8 + 9, z / 8 + 61));
-    const v = AREAS.village, dv = Math.hypot(x - v.x, z - v.z);
-    h += 0.9 * inland * smooth(1 - (dv - v.r * 0.5) / v.r);
-  }
+  let h = lr < ISLAND_RADIUS + 2 ? localsHeight(x, z, lr, rv) : shore(lr);
   const hm = massifHeight(x, z);
   h = Math.max(hOld, h, hm);
   // Dig the river and the lake: inside them the bed is set; beside them the banks are trimmed
@@ -140,6 +304,7 @@ function newLand(x, z, hOld) {
   const dk = Math.hypot(x - LOOK.x, z - LOOK.z);
   if (dk < LOOK.r + 2.5) h += (LOOK_TOP - h) * smooth((LOOK.r + 2.5 - dk) / 2.5);
   if (cliffLine) h = cutPath(cliffLine, cliffRun, x, z, h);
+  h = cutPath(ridgeTrailLine, ridgeRun, x, z, h);
   return h;
 }
 // The cliff path runs from its foot (whatever the ground is there) to the lookout's level top.
@@ -197,6 +362,7 @@ const safeLines = () => (safeLines.v ||= [
 // How far outside safe ground a spot is (negative inside), and the nearest safe spot to walk to.
 export function nearestSafe(x, z) {
   const r0 = Math.hypot(x, z) || 1e-6;
+  if (inNew(x, z)) { const f = ridgeForest(x, z); if (f.depth > 0) return f; } // the wood on the ridge is wild ground
   const camp = wildEq(x, z) < r0 ? r0 - WILD.border : -999;
   let best = { depth: camp, x: (x / r0) * (WILD.border - 1.5), z: (z / r0) * (WILD.border - 1.5) };
   if (camp <= 0 || !inNew(x, z)) return best;
@@ -214,7 +380,12 @@ export const wildDepth = (x, z) => nearestSafe(x, z).depth;
 // It falls away across the river banks, the riverside path, the lake shore and the cliff path.
 export function wildness(x, z) {
   const w = oldWildness(x, z);
-  if (w <= 0 || !inNew(x, z)) return w;
+  if (!inNew(x, z)) return w;
+  const f = smooth((ridgeForest(x, z).depth + 1) / 5); // the ridge's wood
+  if (w <= 0) return f;
+  return Math.max(f, wildnessNew(x, z, w));
+}
+function wildnessNew(x, z, w) {
   const rv = riverAt(x, z);
   let k = smooth((localsR(x, z, rv) - 52) / 10) * smooth((Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r - 6) / 10);
   if (rv.d !== Infinity) k *= smooth((rv.d - rv.w - 4) / 10);
@@ -230,11 +401,55 @@ export function groundKind(x, z) {
   let trail = Infinity;
   for (const L of trailLines()) trail = Math.min(trail, nearestOn(L, x, z, 3).d);
   if (cliffLine) trail = Math.min(trail, nearestOn(cliffLine, x, z, 3).d * 0.75);
+  // The hillside: the paths (metres to the nearest), the stream (metres from its middle), the paddies,
+  // the ridge's wood (metres inside it), and how much a terrace holds the ground here.
+  let path = Infinity;
+  for (const L of pathLines) path = Math.min(path, nearestOn(L, x, z, 4).d);
+  const st = nearestOn(streamLine, x, z, 8), { v, ue } = villageUV(x, z);
+  let terrace = 0, face = 0, step = 0;
+  if (ue > 0 && ue < 66 && v > -28 && v < 24) { terraceWeights(ue, v, TW); for (const w of TW) terrace += w; ({ face, step } = terraceFaceAt(ue, v)); }
   return {
     locals: 1 - smooth((localsR(x, z, rv) - 50) / 8), rock: smooth((m - 1.5) / 2), rockHeight: m,
     river: rv.d === Infinity ? Infinity : rv.d - rv.w, mouth: rv.d === Infinity ? 0 : smooth((rv.s - MOUTH_AT) / 10),
-    lake: Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r, trail,
+    lake: Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r,
+    trail: Math.min(trail, path), oldTrail: trail, path,
+    stream: st.d, streamS: st.s, spring: Math.hypot(x - AREAS.spring.x, z - AREAS.spring.z) - AREAS.spring.r,
+    paddy: paddyAt(x, z).w, forest: ridgeForest(x, z).depth, terrace, face, step,
+    clearing: Math.hypot(x - AREAS.clearing.x, z - AREAS.clearing.z) - AREAS.clearing.r,
   };
+}
+
+// ---- The ridge's wood: wild ground (the ordinary warning) except on the trail, the clearing, the
+// spring and the paths. `depth` is metres inside it (negative outside); x, z the nearest safe spot.
+const FOREST_EDGE = 0.62; // the wood covers the ridge out to this share of its half width
+export function ridgeForest(x, z) {
+  const n = nearestOn(ridgeLine, x, z, 20);
+  if (n.d === Infinity) return { depth: -99, x, z };
+  const { a, b } = ridgeLine.segs[n.i], hw = (a.hw + (b.hw - a.hw) * n.t) * FOREST_EDGE;
+  if (n.d > hw) return { depth: hw - n.d, x, z };
+  const k = (hw + 1.5) / (n.d || 1e-6);
+  let best = { depth: hw - n.d, x: n.x + (x - n.x) * k, z: n.z + (z - n.z) * k };
+  const consider = (depth, tx, tz) => { if (depth < best.depth) best = { depth, x: tx, z: tz }; };
+  const { ue } = villageUV(x, z);
+  if (ue < 70) consider(ue - 66, x - VF.ux * (ue - 64), z - VF.uz * (ue - 64)); // the village
+  const t = nearestOn(ridgeTrailLine, x, z, 30); consider(t.d - 3.5, t.x, t.z);
+  for (const c of [{ ...AREAS.clearing, r: AREAS.clearing.r + 2.5 }, { ...AREAS.spring, r: AREAS.spring.r + 3.5 }]) consider(Math.hypot(x - c.x, z - c.z) - c.r, c.x, c.z);
+  for (const L of pathLines) { const p = nearestOn(L, x, z, 10); consider(p.d - 3, p.x, p.z); }
+  return best;
+}
+
+// ---- Terrace faces cannot be walked up (or down): a move inside the village onto ground steeper
+// than 1 in 1 that is steeper than where you stand is refused. Steps are an even slope of about 1 in 2.
+const FACE_SLOPE = 1;
+function slopeAt(x, z, groundAt) {
+  const e = 0.2;
+  return Math.hypot(groundAt(x + e, z) - groundAt(x - e, z), groundAt(x, z + e) - groundAt(x, z - e)) / (2 * e);
+}
+export function onTerraceFace(prev, next, groundAt = heightAt) {
+  const { ue, v } = villageUV(next.x, next.z);
+  if (ue < 2 || ue > 68 || v < -29 || v > 25) return false;
+  const s1 = slopeAt(next.x, next.z, groundAt);
+  return s1 > FACE_SLOPE && s1 > slopeAt(prev.x, prev.z, groundAt) + 1e-3;
 }
 
 const NOISE_AMPLITUDE = 0.3;
@@ -329,7 +544,7 @@ export function wadeSpeedFactor(h) {
 // Stops a move that would go past knee depth, sliding along the shore where possible.
 // `groundAt` defaults to the bare terrain; the world passes one that also knows about the dock.
 export function constrainToShore(prev, next, groundAt = heightAt) {
-  const shallowEnough = (x, z) => groundAt(x, z) >= -MAX_WADE_DEPTH;
+  const shallowEnough = (x, z) => groundAt(x, z) >= -MAX_WADE_DEPTH && !onTerraceFace(prev, { x, z }, groundAt);
   if (shallowEnough(next.x, next.z)) return next;
   if (shallowEnough(next.x, prev.z)) return { x: next.x, z: prev.z };
   if (shallowEnough(prev.x, next.z)) return { x: prev.x, z: next.z };

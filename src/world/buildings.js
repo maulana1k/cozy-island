@@ -74,7 +74,8 @@ export function createBuildings(scene, deps) {
 
     // ---- Door flap: hinged at one side, swings outward
     const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, front + 0.06);
-    hinge.add(use(box(DOOR_W - 0.04, DOOR_H - 0.04, 0.045, 0, DOOR_W / 2, DOOR_H / 2, 0), sliced(new THREE.Color(st.canvas).multiplyScalar(0.9), { map: texture('fabric', 1, 1) })));
+    const doorMat = sliced(new THREE.Color(st.canvas).multiplyScalar(0.9), { map: texture('fabric', 1, 1), emissive: 0xffe9a8, emissiveIntensity: 0 }); // its own material: only this flap shimmers
+    hinge.add(use(box(DOOR_W - 0.04, DOOR_H - 0.04, 0.045, 0, DOOR_W / 2, DOOR_H / 2, 0), doorMat));
     hinge.add(use(box(DOOR_W - 0.04, 0.12, 0.06, 0, DOOR_W / 2, DOOR_H * 0.55, 0), trim));
     g.add(hinge);
     const door = { open: false, angle: 0, speed: 0 };
@@ -173,7 +174,7 @@ export function createBuildings(scene, deps) {
     // Everything but the door flap stands still, so weld it: one mesh per material.
     g.remove(hinge); mergeStatic(g); g.add(hinge);
     scene.add(g);
-    return { state, c, g, plane, hinge, door, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
+    return { state, c, g, plane, hinge, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
   });
 
   const out = [];
@@ -206,6 +207,11 @@ export function createBuildings(scene, deps) {
         const goal = b.door.open ? -1.9 : 0;
         b.door.speed += ((goal - b.door.angle) * 70 - b.door.speed * 11) * dt;
         b.door.angle += b.door.speed * dt;
+        // A gentle once-a-second glow on the flap when you are near and it is shut, so you learn it opens.
+        const dx = player.position.x - b.doorSpot.x, dz = player.position.z - b.doorSpot.z;
+        const want = !b.door.open && !b.inside && dx * dx + dz * dz < 16 ? 1 : 0;
+        b.shimmer += (want - b.shimmer) * (1 - Math.exp(-dt * 6));
+        b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28));
         b.hinge.rotation.y = b.door.angle + (b.door.open ? Math.sin(elapsed * 1.3 + b.c.x) * 0.03 : 0);
         if (b.smoke) for (const p of b.smoke) {
           const u = p.userData, t = (elapsed * 0.2 + u.offset) % 1;

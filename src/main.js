@@ -663,7 +663,7 @@ function step() {
   if (target && target.kind === 'pickup') tip('pickup', 'Press E to pick things up. They go in your backpack: press B to look inside.');
   if (target) {
     ui.setPrompt(target.prompt());
-    ui.setMarker(target.position.x, target.markerY, target.position.z);
+    ui.setMarker(target.position.x, target.markerY, target.position.z, target.kind);
     if (pressed) {
       if (target.kind === 'flag' && !filmsSeen.has('flag') && target.prompt().includes('raise')) later(0.3, () => film('flag'));
       const g = target.kind === 'villager' ? GREETINGS[greetings++ % GREETINGS.length] : GESTURES[target.kind];

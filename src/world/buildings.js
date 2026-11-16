@@ -4,19 +4,32 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, toWorld, floorHeight, BED_PLAN } from '../logic/layout.js';
 import { box, cyl, ball, stick, roofGeometry, shared, texture, mergeStatic } from './build.js';
+import { tunnelTent, geodesicTent, groupShelter, utilityTent, TENT_COLORS } from '../kit/tents.js';
 
 const CUT = 1.15;            // height the walls are sliced at while you are inside
 const DOOR_W = 1.1, DOOR_H = 1.85;
+const tentAccent = (c) => new THREE.Color(c).lerp(new THREE.Color(0x14171b), 0.2);
 const BAMBOO = 0xd8bb72, ROPE = 0xe9dcc0;
 
 const STYLES = {
-  hall: { wallH: 2.3, roofH: 1.9, canvas: 0xf5ecd6, roof: 0xf0e2c2, trim: 0xd9634a, floor: 0xc9b48c },
+  hall: { wallH: 2.4, roofH: 0.6, canvas: 0xf5ecd6, roof: 0xf0e2c2, trim: 0xd9634a, floor: 0xc9b48c },
   patrol: { wallH: 2.0, roofH: 1.3, canvas: 0xb9c79a, roof: 0xa9b98a, trim: 0xf2b63b, floor: 0xb7a07a },
-  mess: { wallH: 2.2, roofH: 1.4, canvas: 0xf8ecc6, roof: 0xe58a5c, trim: 0xe07a4f, floor: 0xc4ab82 },
+  mess: { wallH: 1.8, roofH: 0.5, canvas: 0xf8ecc6, roof: 0xe58a5c, trim: 0xe07a4f, floor: 0xc4ab82 },
   aid: { wallH: 2.0, roofH: 1.1, canvas: 0xfbf8f0, roof: 0xf3efe4, trim: 0xd9453a, floor: 0xd9d2c0 },
   farm: { wallH: 2.1, roofH: 1.2, canvas: 0xd3bb86, roof: 0x7f9a66, trim: 0x7f9a66, floor: 0xb99a6a },
   guard: { wallH: 2.1, roofH: 0.9, canvas: 0xc2cba3, roof: 0x8fa678, trim: 0xf2b63b, floor: 0xb7a07a },
   staff: { wallH: 2.2, roofH: 1.3, canvas: 0xefe6d2, roof: 0xb9a27c, trim: 0x6a3f9c, floor: 0xc4ab82 },
+};
+// The modern hiking tents (src/kit/tents.js) that stand in for the old canvas halls. `s` stretches a kit tent to the
+// building's footprint; `door` is the doorway { w, h, z } (z: where the flap hangs, local) or null for an open shelter.
+// farm and guard are wooden sheds and keep their old build.
+const PATROL_TENT_COLORS = [TENT_COLORS.forest, TENT_COLORS.orange, TENT_COLORS.slate, TENT_COLORS.mustard];
+const TENT_PLAN = {
+  hall: { make: groupShelter, o: { color: TENT_COLORS.brick, backWall: true }, s: [2, 1.2, 1.5], legs: [3.64, 2.73], back: -2.73 },
+  patrol: { make: tunnelTent, o: { open: true }, s: [1.85, 1.26, 1.333], door: { w: 1.8, h: 0.95, z: 3.0 } },
+  staff: { make: geodesicTent, o: { open: true, color: 0x7a5a86 }, s: [1.5, 1.4, 1.5], door: { w: 0.95, h: 0.85, z: 2.46 } },
+  mess: { make: groupShelter, o: { color: TENT_COLORS.orange, backWall: true }, s: [1.5, 1.15, 1.25], legs: [2.73, 2.28], back: -2.28 },
+  aid: { make: utilityTent, o: { open: true, cross: true, color: 0xd8dccf, accent: 0xb53a32 }, s: [1.5, 1.1, 1.667], door: { w: 1.45, h: 1.55, z: 2.0 } },
 };
 const PATROL_COLORS = [[0xb9c79a, 0xa3b584, 0xe8503a], [0xe3d3a6, 0xd2bf8c, 0x4f7fc9], [0xa9c2cf, 0x92afbf, 0xf2b63b], [0xd9b9a0, 0xc9a288, 0x3f8f6a], [0xc7cfa0, 0xb3bd86, 0x7a5cc9], [0xe6dcc0, 0xd6c8a2, 0xe07a94]];
 
@@ -27,6 +40,8 @@ export function createBuildings(scene, deps) {
 
   const buildings = COTTAGES.map((c, index) => {
     const st = { ...STYLES[c.type] };
+    const T = TENT_PLAN[c.type], door3 = T ? T.door : { w: DOOR_W, h: DOOR_H, z: c.depth / 2 };
+    const tentColor = c.type === 'patrol' ? PATROL_TENT_COLORS[patrolIndex % PATROL_TENT_COLORS.length] : null;
     if (c.type === 'patrol') { const [canvas, roof, trim] = PATROL_COLORS[patrolIndex++ % PATROL_COLORS.length]; Object.assign(st, { canvas, roof, trim }); }
     const state = { inside: false };
     const W = c.width, D = c.depth, H = st.wallH, front = D / 2;
@@ -51,12 +66,20 @@ export function createBuildings(scene, deps) {
     // Furniture you cannot walk through.
     const solid = (mesh, hw, hd) => { g.add(mesh); wall(mesh.position.x, mesh.position.z, hw, hd); return mesh; };
 
-    // ---- Shell: groundsheet, canvas walls with a doorway, and a pitched roof
+    // ---- Shell: groundsheet, then either a modern tent (one vertex-coloured mesh) or canvas walls with a pitched roof
     const sheet = box(W - 0.02, SKIRT, D - 0.02, new THREE.MeshStandardMaterial({ color: st.floor, roughness: 1, map: texture('fabric', Math.round(W / 1.2), Math.round(D / 1.2)) }), 0, 0.06 - SKIRT / 2, 0); sheet.castShadow = false; g.add(sheet);
     const hh = H + SKIRT, hy = (H - SKIRT) / 2;
+    const dw = door3 ? door3.w : 0, dh = door3 ? door3.h : 0, doorZ = door3 ? door3.z : front;
+    const sideW = (W - dw) / 2;
+    let tentGroup = null;
+    if (T) {
+      tentGroup = T.make({ ...T.o, ...(tentColor ? { color: tentColor } : {}) });
+      tentGroup.scale.set(...T.s);
+      const mesh = tentGroup.children[0];
+      mesh.material = sliced(0xffffff, { vertexColors: true, roughness: 0.85, emissive: 0xffb86b, emissiveIntensity: 0 }); // the kit's own look, now sliceable
+    } else {
     g.add(use(box(0.07, hh, D, 0, -W / 2, hy, 0), canvas), use(box(0.07, hh, D, 0, W / 2, hy, 0), canvas));
     g.add(use(box(W, hh, 0.07, 0, 0, hy, -front), canvas));
-    const sideW = (W - DOOR_W) / 2;
     for (const s of [-1, 1]) g.add(use(box(sideW, hh, 0.07, 0, s * (DOOR_W / 2 + sideW / 2), hy, front), canvas));
     g.add(box(DOOR_W + 0.5, SKIRT, 0.7, st.floor, 0, 0.04 - SKIRT / 2, front + 0.3)); // doorstep
     g.add(use(box(DOOR_W, H - DOOR_H, 0.07, 0, 0, DOOR_H + (H - DOOR_H) / 2, front), canvas));
@@ -71,27 +94,40 @@ export function createBuildings(scene, deps) {
       g.add(cyl(0.03, 0.02, 0.5, 0x8c6444, sx * (W / 2 + 1.25), -0.08, sz * (front * 0.9 + 0.25), 5));
     }
     g.add(use(stick([0, H + st.roofH * (W + over) / W - 0.06, -front - over / 2 - 0.1], [0, H + st.roofH * (W + over) / W - 0.06, front + over / 2 + 0.1], 0.045, 0), pole));
+    }
 
     // ---- Door flap: hinged at one side, swings outward
-    const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, front + 0.06);
-    const doorMat = sliced(new THREE.Color(st.canvas).multiplyScalar(0.9), { map: texture('fabric', 1, 1), emissive: 0xffe9a8, emissiveIntensity: 0 }); // its own material: only this flap shimmers
-    hinge.add(use(box(DOOR_W - 0.04, DOOR_H - 0.04, 0.045, 0, DOOR_W / 2, DOOR_H / 2, 0), doorMat));
-    hinge.add(use(box(DOOR_W - 0.04, 0.12, 0.06, 0, DOOR_W / 2, DOOR_H * 0.55, 0), trim));
-    g.add(hinge);
+    // (an open shelter has no door: its hinge stays unhung and nothing can be opened)
+    const hinge = new THREE.Group(); hinge.position.set(-dw / 2, 0, doorZ + 0.06);
+    const doorColor = new THREE.Color(st.canvas).multiplyScalar(0.9);
+    const doorMat = sliced(T ? (T.o.accent ?? tentAccent(tentColor ?? T.o.color ?? 0x4a6a8a)) : doorColor, { map: T ? null : texture('fabric', 1, 1), emissive: 0xffe9a8, emissiveIntensity: 0 }); // its own material: only this flap shimmers
     const door = { open: false, angle: 0, speed: 0 };
-    const doorSpot = toWorld(c, 0, front + 0.35);
-    interactables.push({
-      id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + 2.25,
-      prompt: () => (door.open ? 'E — close flap' : 'E — open flap'),
-      interact() { door.open = !door.open; audio.play('door'); },
-    });
+    let doorSpot = null;
+    if (dw) {
+      hinge.add(use(box(dw - 0.04, dh - 0.04, 0.045, 0, dw / 2, dh / 2, 0), doorMat));
+      hinge.add(use(box(dw - 0.04, 0.12, 0.06, 0, dw / 2, dh * 0.55, 0), trim));
+      g.add(hinge);
+      doorSpot = toWorld(c, 0, front + 0.35);
+      interactables.push({
+        id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + (T ? Math.max(1.6, dh + 0.5) : 2.25),
+        prompt: () => (door.open ? 'E — close flap' : 'E — open flap'),
+        interact() { door.open = !door.open; audio.play('door'); },
+      });
+    }
 
     // ---- Walls you cannot walk through (the doorway is blocked only while the flap is shut)
-    wall(-(W / 2 + 0.12), 0, 0.2, front + 0.3); wall(W / 2 + 0.12, 0, 0.2, front + 0.3);
-    wall(0, -(front + 0.12), W / 2 + 0.3, 0.2);
-    for (const s of [-1, 1]) wall(s * (DOOR_W / 2 + sideW / 2), front + 0.12, sideW / 2, 0.2);
-    const dp = toWorld(c, 0, front + 0.12);
-    const doorBlock = { x: dp.x, z: dp.z, hw: DOOR_W / 2, hd: 0.2, rot: c.rot };
+    let doorBlock = null;
+    if (T && !dw) {
+      // An open shelter: only its four legs and the back wall are solid.
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) wall(sx * T.legs[0], sz * T.legs[1], 0.16, 0.16);
+      wall(0, T.back, T.legs[0], 0.1);
+    } else {
+      wall(-(W / 2 + 0.12), 0, 0.2, front + 0.3); wall(W / 2 + 0.12, 0, 0.2, front + 0.3);
+      wall(0, -(front + 0.12), W / 2 + 0.3, 0.2);
+      for (const s of [-1, 1]) wall(s * (dw / 2 + sideW / 2), front + 0.12, sideW / 2, 0.2);
+      const dp = toWorld(c, 0, front + 0.12);
+      doorBlock = { x: dp.x, z: dp.z, hw: dw / 2, hd: 0.2, rot: c.rot };
+    }
 
     // ---- Outside trimmings and what is inside, by purpose
     let smoke = null;
@@ -104,7 +140,7 @@ export function createBuildings(scene, deps) {
       for (const lz of [-1.2, 0.4]) g.add(box(3.4, 0.08, 0.32, 0xb98a5e, 0, 0.42, lz), box(0.1, 0.4, 0.3, 0x9a7350, -1.4, 0.22, lz), box(0.1, 0.4, 0.3, 0x9a7350, 1.4, 0.22, lz));
       g.add(box(0.9, 0.02, 0.6, 0xf5ecd6, -0.5, 0.8, -0.4, 0.2), cyl(0.07, 0.07, 0.12, 0x5fa8a0, 0.6, 0.85, -0.3), cyl(0.07, 0.07, 0.12, 0xe8503a, 1.0, 0.85, -0.55));
       // A map board at the back, and the camp's banner on a stand.
-      g.add(box(2.4, 1.3, 0.06, 0xb98a5e, 0, 1.25, -front + 0.14), box(2.1, 1.05, 0.02, 0xf3ead2, 0, 1.25, -front + 0.18), box(0.7, 0.4, 0.02, 0x9fc98a, -0.4, 1.35, -front + 0.2), box(0.5, 0.3, 0.02, 0x8fd0e0, 0.5, 1.1, -front + 0.2));
+      g.add(box(2.4, 1.3, 0.06, 0xb98a5e, 0, 1.25, -front + 0.4), box(2.1, 1.05, 0.02, 0xf3ead2, 0, 1.25, -front + 0.44), box(0.7, 0.4, 0.02, 0x9fc98a, -0.4, 1.35, -front + 0.46), box(0.5, 0.3, 0.02, 0x8fd0e0, 0.5, 1.1, -front + 0.46));
       g.add(cyl(0.03, 0.03, 2.0, BAMBOO, 3.3, 1.0, -2.3), box(0.6, 0.4, 0.02, 0x6a3f9c, 3.0, 1.75, -2.3), cyl(0.2, 0.25, 0.12, 0x9a7350, 3.3, 0.1, -2.3));
       solid(crate(-3.3, -2.3, 0.6), 0.35, 0.35); g.add(crate(-3.3, -2.3, 0.45, 0.6, 0.4), crate(-3.2, -1.6, 0.45));
     } else if (c.type === 'patrol' || c.type === 'staff') {
@@ -131,9 +167,6 @@ export function createBuildings(scene, deps) {
       g.add(cyl(0.035, 0.04, 2.9, BAMBOO, W / 2 + 0.55, 1.45, front + 0.5));
       const pen = new THREE.Mesh(roofGeometry(0.5, 0.8, 0.02), shared(st.trim)); pen.rotation.z = -Math.PI / 2; pen.position.set(W / 2 + 0.6, 2.6, front + 0.5); pen.castShadow = true; g.add(pen);
     } else if (c.type === 'mess') {
-      // Striped awning over the entrance.
-      for (let k = 0; k < 6; k++) { const s = use(box(0.5, 0.05, 1.5, 0, -1.25 + k * 0.5, H - 0.25, front + 0.8), sliced(k % 2 ? 0xfaf3e2 : st.trim)); s.rotation.x = 0.22; g.add(s); }
-      for (const sx of [-1.4, 1.4]) g.add(use(cyl(0.04, 0.04, H - 0.4, 0, sx, (H - 0.4) / 2, front + 1.45), pole));
       // Serving counter, stove with a big pot and a pipe through the roof, shelves and sacks.
       solid(box(4.2, 0.85, 0.7, 0xc79a62, 0.4, 0.48, -1.95), 2.1, 0.4);
       g.add(box(4.3, 0.06, 0.8, 0xe3c79a, 0.4, 0.93, -1.95));
@@ -150,8 +183,7 @@ export function createBuildings(scene, deps) {
         p.userData = { offset: k / 3, x: top.x, y: groundY + H + st.roofH + 0.5, z: top.z }; scene.add(p); return p;
       });
     } else if (c.type === 'aid') {
-      // A red cross beside the door; two camp beds, a cabinet and a stool.
-      g.add(use(box(0.62, 0.2, 0.03, 0, 1.15, 1.45, front + 0.06), trim), use(box(0.2, 0.62, 0.03, 0, 1.15, 1.45, front + 0.06), trim));
+      // (the tent carries its own red crosses) two camp beds, a cabinet and a stool.
       for (const x of [-1.05, 1.05]) {
         solid(box(0.85, 0.36, 1.8, 0xd8d2c4, x, 0.26, -0.6), 0.42, 0.9);
         g.add(box(0.8, 0.07, 1.1, 0xd9453a, x, 0.48, -0.3), box(0.55, 0.1, 0.34, 0xffffff, x, 0.5, -1.25));
@@ -172,9 +204,10 @@ export function createBuildings(scene, deps) {
     }
 
     // Everything but the door flap stands still, so weld it: one mesh per material.
-    g.remove(hinge); mergeStatic(g); g.add(hinge);
+    g.remove(hinge); mergeStatic(g); if (dw) g.add(hinge);
+    if (tentGroup) g.add(tentGroup); // after the weld: it keeps its vertex colours and its own sliceable material
     scene.add(g);
-    return { state, c, g, plane, hinge, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, canvas, roofMat, groundY, openTop, W, D, inside: false };
+    return { state, c, g, plane, hinge, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, tentFabric: !!T, canvas: T ? tentGroup.children[0].material : canvas, roofMat: T ? { emissiveIntensity: 0 } : roofMat, groundY, openTop, W, D, inside: false };
   });
 
   const out = [];
@@ -184,11 +217,11 @@ export function createBuildings(scene, deps) {
     // Walls, furniture and shut doors, for the player.
     colliders() {
       out.length = 0;
-      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.door.angle > -0.9) out.push(b.doorBlock); }
+      for (const b of buildings) { for (const w of b.colliders) out.push(w); if (b.doorBlock && b.door.angle > -0.9) out.push(b.doorBlock); }
       return out;
     },
     // Canvas lit from inside: only a faint warm glow in the evening (before lights out at 21:36), dark after.
-    setNight(f, t = 0.8) { const awake = t >= 0.7 && t < 0.9 ? Math.min(1, (0.9 - t) / 0.02) : 0, k = f * awake; for (const b of buildings) { b.canvas.emissiveIntensity = k * 0.07; b.roofMat.emissiveIntensity = k * 0.04; } },
+    setNight(f, t = 0.8) { const awake = t >= 0.7 && t < 0.9 ? Math.min(1, (0.9 - t) / 0.02) : 0, k = f * awake; for (const b of buildings) { b.canvas.emissiveIntensity = k * (b.tentFabric ? 0.05 : 0.07); b.roofMat.emissiveIntensity = k * 0.04; } },
     update(dt, elapsed, player) {
       this.inside = null;
       for (const b of buildings) {
@@ -209,7 +242,7 @@ export function createBuildings(scene, deps) {
         b.door.speed += ((goal - b.door.angle) * 70 - b.door.speed * 11) * dt;
         b.door.angle += b.door.speed * dt;
         // A gentle once-a-second glow on the flap when you are near and it is shut, so you learn it opens.
-        const dx = player.position.x - b.doorSpot.x, dz = player.position.z - b.doorSpot.z;
+        const dx = b.doorSpot ? player.position.x - b.doorSpot.x : 99, dz = b.doorSpot ? player.position.z - b.doorSpot.z : 99;
         const want = !b.door.open && !b.inside && dx * dx + dz * dz < 16 ? 1 : 0;
         b.shimmer += (want - b.shimmer) * (1 - Math.exp(-dt * 6));
         b.doorMat.emissiveIntensity = b.shimmer * (0.3 + 0.25 * Math.sin(elapsed * 6.28));

@@ -5,6 +5,8 @@ import {
 } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 import { texture, mergeStatic, stick, shared } from './build.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { backpackTent, domeTent, TENT_COLORS } from '../kit/tents.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -48,27 +50,25 @@ function buildField(mats) {
   return g;
 }
 
-// A canvas ridge tent with an open front.
-const tentCanvas = new Map(), tentMat = flat(0xd88f6a);
-function buildTent(t, i, mats) {
-  const g = new THREE.Group();
-  // Tents of one colour share a material (and the mats all share one), so each colour is one draw.
-  const tint = PALETTE.tents[i % PALETTE.tents.length];
-  const canvas = tentCanvas.get(tint) || tentCanvas.set(tint, flat(tint, { side: THREE.DoubleSide, map: texture('fabric', 0.8, 0.8) })).get(tint);
-  const body = new THREE.Mesh(roofGeometry(2.5, 1.75, 2.7), canvas);
-  body.castShadow = true; body.receiveShadow = true;
-  const opening = new THREE.Mesh(roofGeometry(1.5, 1.25, 0.04), mats.tentInside);
-  opening.position.set(0, 0.0, 1.345);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.2, 6), mats.woodDark);
-  pole.rotation.x = Math.PI / 2; pole.position.y = 1.74;
-  const front = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.8, 6), mats.woodDark);
-  front.position.set(0, 0.88, 1.38);
-  const mat = box(1.5, 0.05, 0.9, tentMat, 0, 0.03, 1.9); // a little mat at the entrance
-  mat.castShadow = false;
-  g.add(body, opening, pole, front, mat);
-  g.position.set(t.x, heightAt(t.x, t.z) - 0.03, t.z);
-  g.rotation.y = t.rot;
-  return g;
+// The small camp tents: modern hiking domes and backpacking tents in mixed colours, some with the door rolled up.
+// All of them are welded into ONE mesh (the kit's vertex-coloured material is shared).
+const TENT_MIX = [
+  [domeTent, TENT_COLORS.mustard, 1.0, false], [backpackTent, TENT_COLORS.forest, 1.45, true], [domeTent, TENT_COLORS.slate, 1.05, true],
+  [backpackTent, TENT_COLORS.orange, 1.5, false], [domeTent, TENT_COLORS.brick, 1.0, false], [backpackTent, TENT_COLORS.slate, 1.45, true], [domeTent, TENT_COLORS.forest, 1.1, true],
+];
+function buildTents() {
+  const geos = []; let material = null;
+  TENTS.forEach((t, i) => {
+    const [make, color, scale, open] = TENT_MIX[i % TENT_MIX.length];
+    const g = make({ color, scale, open });
+    g.position.set(t.x, heightAt(t.x, t.z) - 0.03, t.z); g.rotation.y = t.rot;
+    g.updateMatrixWorld(true);
+    const mesh = g.children[0]; material = mesh.material;
+    const geo = mesh.geometry.clone(); geo.applyMatrix4(mesh.matrixWorld); geos.push(geo);
+  });
+  const merged = new THREE.Mesh(mergeGeometries(geos), material);
+  merged.castShadow = true; merged.name = 'campTents';
+  return merged;
 }
 
 // A ribbon that hugs the ground along a polyline.
@@ -230,9 +230,9 @@ export function createVillage(scene) {
   group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
   group.add(buildHillTrail());
-  TENTS.forEach((t, i) => group.add(buildTent(t, i, mats)));
   // None of the scenery so far moves: weld it into a handful of meshes.
   mergeStatic(group);
+  group.add(buildTents()); // after the weld: it keeps its vertex colours
   const windmill = buildWindmill(mats);
   windmill.g.remove(windmill.hub); mergeStatic(windmill.g); windmill.g.add(windmill.hub);
   mergeStatic(windmill.hub);

@@ -265,6 +265,7 @@ const areaDeps = {
   now: () => elapsed, dayTime: () => timeOfDay,
 };
 const areas = AREA_LIST.map((m) => m.create(scene, areaDeps) || {});
+for (const a of areas) if (a.lamps) props.addLamps(a.lamps); // village and pier lamps light the ground round them at night
 const areaColliders = () => areas.flatMap((a) => (typeof a.colliders === 'function' ? a.colliders() : a.colliders || []));
 
 // Buildings are hollow for the player (walls with a doorway); everyone else treats them as solid.

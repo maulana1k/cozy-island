@@ -423,22 +423,21 @@ function discover(id) {
   if (rank.index > before) { hud.rankUp(rank.name); audio.play('rank'); } else audio.play('discover');
 }
 function toggleSound() { hud.setSound(!audio.toggleMute()); }
-let tabMenu = false; // the menu was opened with Tab while the mouse was captured: keep the capture, drive it from the keyboard
 function toggleMenu() {
   if (!hud.started) return;
   if (hud.menuOpen && hud.menuBack()) return; // Esc leaves the key list first
-  tabMenu = false;
   if (hud.menuOpen) hud.closeMenu(); else hud.openMenu();
   syncLook();
 }
-// Tab: open or close the menu without letting go of free look. Any other screen that is open just closes.
+// Tab: open or close the menu (it frees the mouse like the journal and bag). Any other screen that is open just closes.
+// Closing runs inside the keydown, a user gesture, so syncLook can take the mouse back at once.
 function tabKey() {
   if (hud.menuOpen && hud.menuBack()) return;
-  if (hud.menuOpen) { tabMenu = false; hud.closeMenu(); audio.play('ui'); syncLook(); return; }
+  if (hud.menuOpen) { hud.closeMenu(); audio.play('ui'); syncLook(); return; }
   if (hud.bagOpen) return toggleBag();
   if (hud.journalOpen) return toggleJournal();
   if (hud.mapOpen) return toggleMap();
-  tabMenu = mouseHeld(); hud.openMenu(); audio.play('ui'); syncLook();
+  hud.openMenu(); audio.play('ui'); syncLook();
 }
 function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('ui'); syncLook(); } }
 function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syncLook(); } }
@@ -448,7 +447,7 @@ function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syn
 // is open (you need the cursor there) and taken again when you go back to playing.
 let freeLook = false;
 const mouseHeld = () => document.pointerLockElement === canvas;
-const lookWanted = () => freeLook && hud.started && (!hud.menuOpen || tabMenu) && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
+const lookWanted = () => freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
 let lockRefused = false; // the browser said no to the last request: it wants a click first
 function updateLookHint() { hud.setLookHint(lookWanted() && !mouseHeld() && lockRefused); }
 function syncLook() {
@@ -466,7 +465,6 @@ let escActedAt = -1e9; // when an Esc keydown last closed a screen or the menu
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
   if (mouseHeld()) { lockRefused = false; updateLookHint(); return; }
-  tabMenu = false; // the mouse is free again, so this is an ordinary menu
   updateLookHint();
   if (!hud.started) return;
   // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
@@ -491,7 +489,7 @@ const relockPress = (e) => {
 window.addEventListener('pointerdown', relockPress, true);
 window.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.preventDefault(); e.stopImmediatePropagation(); return; } syncLook(); }, true);
 const hud = createHUD({
-  onResume: () => { tabMenu = false; hud.closeMenu(); syncLook(); },
+  onResume: () => { hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
   getTime: () => timeOfDay,
   onToggleMenu: toggleMenu,

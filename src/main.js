@@ -452,8 +452,9 @@ const FILMS = {
   intro: () => { const back = Math.atan2(-player.position.z, -player.position.x), flag = on(FLAGPOLE); return [
     // A slow aerial drift over the whole island, the lens easing in.
     { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 106, h: 74, h1: 56, a0: 0.5, a1: 1.15, lookH: 0, fov: 52, fov1: 47, dur: 6.5, drift: 0.6, aperture: 0.35, place: 'center', title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
-    // A low dolly across the parade ground, the flagpole sliding past.
-    { move: 'dolly', p0: ring(flag, 2.35, 18, 3.2), p1: ring(flag, 1.6, 13.5, 2.4), look: up(flag, 1.6), look1: up(flag, 2.4), dur: 5.5, aperture: 1.1, place: 'upper-left', title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
+    // A low dolly across the parade ground, the flagpole sliding past. It comes from the north-west of the pole: the food
+    // tent stands south of it (MESS in src/logic/layout.js) and the old bearings ran the camera into its awning.
+    { move: 'dolly', p0: ring(flag, 3.9, 16, 3.0), p1: ring(flag, 3.35, 12.5, 2.4), look: up(flag, 1.6), look1: up(flag, 2.4), dur: 5.5, aperture: 1.1, place: 'upper-left', title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
     // From beside the ferry, over the water off its pier side (a = -DOCK.rot points across the hull, away from the pier's
     // length): outside the hull, at deck height and below the cabin roof, a slow push in on you at the top of the gangway.
     // It circles `player.position`, which rides the ferry's deck, so the framing follows the ferry.

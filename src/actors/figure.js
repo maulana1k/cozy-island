@@ -692,7 +692,7 @@ export function createFigure({
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
   const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0, trunk: 0, fL: 0, fR: 0 };
 
-  FIGURES.push({ group, feet: [legL.foot, legR.foot], pelvis, scale });
+  FIGURES.push({ group, feet: [legL.foot, legR.foot], pelvis, scale, get steps() { return steps; } }); // steps: for dust from feet (src/world/particles.js)
   return {
     group,
     // How far to lower the figure so it sits on the ground, or on a seat of a given height.

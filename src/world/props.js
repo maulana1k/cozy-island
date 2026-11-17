@@ -6,6 +6,7 @@ import { PALETTE } from '../config.js';
 import { mergeStatic } from './build.js';
 import { WIND } from './weather.js';
 import { createFlames } from './flames.js';
+import { emitSparks } from './particles.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -35,20 +36,19 @@ export function createProps(scene, deps) {
   const bellListeners = [];
   let flagState = null;
 
-  // ---- Small particles: falling leaves, fruit, sparks ----------------------
+  // ---- Small particles: falling leaves, fruit, smoke (sparks fly in the shared pool, src/world/particles.js)
   const particles = [];
-  const leafGeo = new THREE.PlaneGeometry(0.16, 0.1), fruitGeo = new THREE.IcosahedronGeometry(0.11, 1), sparkGeo = new THREE.OctahedronGeometry(0.022, 0);
+  const leafGeo = new THREE.PlaneGeometry(0.16, 0.1), fruitGeo = new THREE.IcosahedronGeometry(0.11, 1);
   function spawn(geo, material, pos, vel, life, opts = {}) {
     const m = new THREE.Mesh(geo, material.clone());
     m.material.transparent = true;
     if (opts.steam) m.material.color.lerp(STEAM, opts.steam);
     m.position.copy(pos);
     scene.add(m);
-    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1, flick: material === sparkMat ? 1 : 0 });
+    particles.push({ m, vel, life, age: 0, gravity: opts.gravity ?? 3, spin: opts.spin ?? 4, flutter: opts.flutter ?? 0, floor: opts.floor ?? -Infinity, grow: opts.grow ?? 0, alpha: opts.alpha ?? 1 });
   }
   const leafMat = new THREE.MeshStandardMaterial({ color: PALETTE.leafB, side: THREE.DoubleSide, roughness: 1 });
   const fruitMat = flat(0xff8a5c);
-  const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffb040, fog: false, blending: THREE.AdditiveBlending, depthWrite: false }); // small, bright, additive embers
   const smokeGeo = new THREE.IcosahedronGeometry(0.32, 1);
   const smokeMat = new THREE.MeshLambertMaterial({ color: 0xd9d6d0, depthWrite: false });
   const fires = [];
@@ -338,8 +338,8 @@ export function createProps(scene, deps) {
           spawn(smokeGeo, smokeMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, y + 2.3, f.z + (Math.random() - 0.5) * 0.6),
             new THREE.Vector3(0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3), 4.5 + fire.damp * 1.5, { gravity: -0.12 + fire.damp * 0.05, spin: 0.6, grow: 3.2 + fire.damp * 2.4, alpha: 0.42 + fire.damp * 0.2, steam: fire.damp });
         }
-        spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * (big ? 0.9 : 0.4), y + (big ? 1.6 : 0.8), f.z + (Math.random() - 0.5) * (big ? 0.9 : 0.4)),
-          new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.2 + Math.random() * 0.9, (Math.random() - 0.5) * 0.5), 1.3, { gravity: -0.3, flutter: 0.7 });
+        // Sparks: a pair or so from the bonfire, one from a small fire; fresh wood throws many more for a while.
+        if (near) emitSparks(f.x, y + (big ? 1.5 : 0.7), f.z, (big ? 2 : 1) + Math.round(fire.boost * 3 * (1 - fire.damp)), big ? 1.35 : 0.9, big ? 0.9 : 0.4);
       }
     });
   }
@@ -371,6 +371,7 @@ export function createProps(scene, deps) {
   const byDistance = [];
 
   let wasNight = null;
+  const glowList = { lanterns, outside, fires, gloom: 0 };
   return {
     interactables,
     onBell(cb) { bellListeners.push(cb); },
@@ -383,8 +384,10 @@ export function createProps(scene, deps) {
     stoke(f) {
       if (f.fire.scheduled && !f.fire.lit) return; // the camp fire waits for 18:00; the wood is simply added to the stack
       f.fire.lit = true; f.fire.boost = 1;
-      for (let i = 0; i < 14; i++) spawn(sparkGeo, sparkMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, f.y + (f.big ? 1.4 : 0.7), f.z + (Math.random() - 0.5) * 0.6), new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.6 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1.2, { gravity: 1.2, flutter: 0.8 });
+      emitSparks(f.x, f.y + (f.big ? 1.3 : 0.6), f.z, f.big ? 40 : 24, f.big ? 2 : 1.6, f.big ? 1.2 : 0.6); // a burst as the wood lands
     },
+    // What glows, for the halos drawn on Graphics: Low (src/world/particles.js). Live objects, read only.
+    glows() { glowList.gloom = 0.7 * dimness(); return glowList; },
     // How loudly the nearest burning fire can be heard from here, 0 to 1.
     fireLoudness(x, z) { let best = 0; for (const f of fires) best = Math.max(best, f.fire.level * (1 - 0.45 * f.fire.damp) * f.loud * Math.max(0, 1 - Math.hypot(x - f.x, z - f.z) / f.reach)); return best; },
     update(dt, elapsed, nightF) {
@@ -428,7 +431,7 @@ export function createProps(scene, deps) {
         if (p.m.position.y < p.floor) { p.m.position.y = p.floor; p.vel.set(0, 0, 0); p.gravity = 0; p.spin = 0; p.flutter = 0; }
         p.m.rotation.x += p.spin * dt; p.m.rotation.z += p.spin * 0.7 * dt;
         const t = p.age / p.life;
-        p.m.material.opacity = p.alpha * (p.flick ? 0.55 + 0.45 * Math.sin(p.age * 38 + i * 5.7) : 1) * (t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)) * (p.grow ? Math.min(1, t * 6) : 1);
+        p.m.material.opacity = p.alpha * (t < 0.7 ? 1 : Math.max(0, 1 - (t - 0.7) / 0.3)) * (p.grow ? Math.min(1, t * 6) : 1);
         if (p.grow) p.m.scale.setScalar(1 + p.grow * t);
         if (t >= 1) { scene.remove(p.m); p.m.material.dispose(); particles.splice(i, 1); }
       }

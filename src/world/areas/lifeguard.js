@@ -140,7 +140,7 @@ function buildTower() {
   H.push(piece(new THREE.CylinderGeometry(0.29, 0.29, 0.08, 14), 0x2a2e33, 0, 0.36, 0.28, Math.PI / 2, 0, 0));
   const make = (list) => { const g = mergeGeometries(list); g.computeVertexNormals(); const m = new THREE.Mesh(g, MAT); m.castShadow = true; m.receiveShadow = true; return m; };
   const head = new THREE.Group(); head.add(make(H));
-  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.24, 18), new THREE.MeshBasicMaterial({ color: 0x9a9a8a })); lens.position.set(0, 0.36, 0.325); head.add(lens);
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.24, 18), new THREE.MeshBasicMaterial({ color: 0x9a9a8a })); lens.position.set(0, 0.36, 0.325); lens.name = 'searchlightLens'; head.add(lens); // named: its Low-graphics halo finds it (src/world/particles.js)
   // The beam: a long soft cone of light from the lens (only drawn at night).
   const beamGeo = new THREE.CylinderGeometry(0.24, 3.4, 30, 20, 1, true); beamGeo.translate(0, 15, 0); beamGeo.rotateX(Math.PI / 2);
   const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0xfff0c4, transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));

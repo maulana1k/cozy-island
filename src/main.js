@@ -33,6 +33,7 @@ import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector, placeFor } from './cutscene.js';
 import { createFinish } from './finish.js';
+import { createParticles } from './world/particles.js';
 import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
@@ -137,6 +138,7 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 // A forward beam only: a cone from the hand, soft at its rim but lighting nothing beside or behind the scout.
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
+const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
 const say = (text, pic) => hud.note(text, pic);
@@ -891,6 +893,7 @@ function step() {
   scatter.update(elapsed, player.position);
   props.update(dt, elapsed, night);
   effects.update(dt);
+  particles.update(dt, night);
   ui.update(dt, elapsed);
 
   // Shadows are redrawn every second picture at the smooth rate: nobody sees a shadow one frame late.

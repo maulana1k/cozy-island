@@ -1,5 +1,9 @@
 // What feet do to the ground: dust, flying grass, mud splats, ripples and footprints.
+// Puffs and water drops fly in the shared instanced pool (src/world/particles.js); dust only rises from
+// dry trails and sand, never from grass or rain-soaked ground.
 import * as THREE from 'three';
+import { emitPuffs, emitDrops } from './world/particles.js';
+import { WET } from './world/weather.js';
 
 const PRINTS = 70;
 
@@ -20,7 +24,8 @@ export function createEffects(scene, groundAt) {
   }
 
   // Soft round puffs: dust, sand, spray.
-  function puff(x, y, z, count = 1, color = 0xead9b0, spread = 0.2, lift = 0.5) {
+  function puff(x, y, z, count = 1, color = 0xead9b0, spread = 0.2, lift = 0.5, alpha = 1) {
+    if (emitPuffs(x, y, z, count, color, spread, lift, alpha)) return;
     for (let i = 0; i < count; i++) {
       const m = spawn('puff', puffGeo);
       m.material.color.setHex(color);
@@ -86,10 +91,11 @@ export function createEffects(scene, groundAt) {
         footprint(p.x, p.z, heading, 0x5a6b70, running ? 6 : 4);
         if (surface !== 'mud' && surface !== 'sand') return;
       }
-      if (surface === 'water') { ripple(p.x, p.z, 0.7); ripple(p.x, p.z, 1.15, 0.18); puff(p.x, 0, p.z, 2 + n * 2, 0xe6f7fa, 0.25, 0.9 + n * 0.4); }
+      const dry = Math.max(0, 1 - wet / 0.25); // dust needs dry ground
+      if (surface === 'water') { ripple(p.x, p.z, 0.7); ripple(p.x, p.z, 1.15, 0.18); puff(p.x, 0, p.z, 2 + n * 2, 0xe6f7fa, 0.25, 0.9 + n * 0.4); emitDrops(p.x, 0, p.z, 3 + n * 5, running ? 1.15 : 0.8); }
       else if (surface === 'mud') { flecks(p.x, p.y, p.z, 3 + n * 3, MUD, 0.7); footprint(p.x, p.z, heading, 0x4f3d2c, 16); }
-      else if (surface === 'sand') { if (running) puff(p.x, p.y, p.z, 2, 0xf7ecc8, 0.2, 0.3); footprint(p.x, p.z, heading, 0xc9b27e, 12); }
-      else if (surface === 'dirt') { puff(p.x, p.y, p.z, 1 + n * 2, 0xe9d3a0, 0.18, 0.3); if (running) footprint(p.x, p.z, heading, 0xc9a26a, 5); }
+      else if (surface === 'sand') { if (dry > 0) puff(p.x, p.y, p.z, 1 + n * 2, 0xf7ecc8, 0.2, running ? 0.35 : 0.22, (running ? 0.9 : 0.55) * dry); footprint(p.x, p.z, heading, 0xc9b27e, 12); }
+      else if (surface === 'dirt') { if (dry > 0) puff(p.x, p.y, p.z, 1 + n * 2, 0xe9d3a0, 0.18, running ? 0.35 : 0.25, (running ? 1 : 0.7) * dry); if (running) footprint(p.x, p.z, heading, 0xc9a26a, 5); }
       else if (surface === 'grass') flecks(p.x, p.y, p.z, 1 + n * 3, GRASS, 0.8);
       else if (surface === 'meadow') flecks(p.x, p.y, p.z, 2 + n * 3, GREEN, 0.85);
       else if (surface === 'forest') flecks(p.x, p.y, p.z, 2 + n * 3, LEAF, 0.75);
@@ -97,10 +103,12 @@ export function createEffects(scene, groundAt) {
     },
     // Landing from a jump throws up a lot more of the same.
     land(surface, p) {
-      if (surface === 'water') { ripple(p.x, p.z, 1.2); ripple(p.x, p.z, 1.9, 0.15); ripple(p.x, p.z, 2.6, 0.32); puff(p.x, 0, p.z, 9, 0xe6f7fa, 0.5, 1.5); }
+      const dry = Math.max(0, 1 - WET.value / 0.25);
+      if (surface === 'water') { ripple(p.x, p.z, 1.2); ripple(p.x, p.z, 1.9, 0.15); ripple(p.x, p.z, 2.6, 0.32); puff(p.x, 0, p.z, 9, 0xe6f7fa, 0.5, 1.5); emitDrops(p.x, 0, p.z, 14, 1.3); }
       else if (surface === 'mud') { flecks(p.x, p.y, p.z, 12, MUD, 1.1); puff(p.x, p.y, p.z, 3, 0x86654a, 0.4, 0.3); }
-      else if (surface === 'grass' || surface === 'meadow' || surface === 'forest') { flecks(p.x, p.y, p.z, 9, surface === 'grass' ? GRASS : surface === 'meadow' ? GREEN : LEAF, 1.1); puff(p.x, p.y, p.z, 3, 0xe9d3a0, 0.4, 0.3); }
-      else puff(p.x, p.y, p.z, 7, surface === 'sand' ? 0xf7ecc8 : 0xe9d3a0, 0.45, 0.4);
+      else if (surface === 'grass' || surface === 'meadow' || surface === 'forest') flecks(p.x, p.y, p.z, 9, surface === 'grass' ? GRASS : surface === 'meadow' ? GREEN : LEAF, 1.1);
+      else if (surface === 'dirt' || surface === 'sand') { if (dry > 0) puff(p.x, p.y, p.z, 7, surface === 'sand' ? 0xf7ecc8 : 0xe9d3a0, 0.45, 0.4, dry); }
+      else if (surface === 'rock' && dry > 0) puff(p.x, p.y, p.z, 3, 0xd8d0c8, 0.3, 0.3, 0.6 * dry);
     },
     update(dt) {
       for (let i = live.length - 1; i >= 0; i--) {

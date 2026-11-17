@@ -1,5 +1,5 @@
 // Life around the pond: reeds, lily pads, stepping stones, a pair of ducks,
-// butterflies over the meadow by day and fireflies at night.
+// (the butterflies over its meadow and the fireflies at night are in src/world/particles.js).
 import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { createRng } from '../logic/rng.js';
@@ -65,22 +65,7 @@ export function createPond(scene) {
 
   waterObstacles.mover((out) => { for (const k of ducks) if (k.d.visible) out.push({ x: k.d.position.x, z: k.d.position.z, r: 0.2, kind: 3 }); });
 
-  // Butterflies by day, fireflies by night
-  const wingGeo = new THREE.PlaneGeometry(0.16, 0.2); wingGeo.translate(0.08, 0, 0);
-  const flutter = [0xf2b63b, 0xffffff, 0xe8503a, 0x7fb3f0, 0xf7b7cf, 0xffffff, 0xf2b63b].map((col, i) => {
-    const b = new THREE.Group();
-    const m = new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, transparent: true });
-    const l = new THREE.Mesh(wingGeo, m), r = new THREE.Mesh(wingGeo, m); r.scale.x = -1;
-    b.add(l, r); g.add(b);
-    const a = rng() * Math.PI * 2, rad = POND.rw + 1 + rng() * 9;
-    return { b, l, r, m, cx: POND.x + Math.cos(a) * rad, cz: POND.z + Math.sin(a) * rad, phase: rng() * 10, i };
-  });
-  const flyCount = 46;
-  const flyPos = new Float32Array(flyCount * 3), flySeed = [];
-  for (let i = 0; i < flyCount; i++) { const a = rng() * Math.PI * 2, rad = rng() * (POND.rw + 11); flySeed.push({ x: POND.x + Math.cos(a) * rad, z: POND.z + Math.sin(a) * rad, p: rng() * 20, h: 0.5 + rng() * 1.6 }); }
-  const flyGeo = new THREE.BufferGeometry(); flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos, 3));
-  const flies = new THREE.Points(flyGeo, new THREE.PointsMaterial({ color: 0xe9ff8a, size: 0.14, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  flies.frustumCulled = false; g.add(flies);
+  // Butterflies and fireflies round the pond live in the shared pools (src/world/particles.js).
 
   return {
     // `viewer` (optional): where the player is. From far off the little life (pads, ducks, butterflies) is not drawn.
@@ -93,24 +78,6 @@ export function createPond(scene) {
         const a = elapsed * k.speed + k.phase;
         k.d.position.set(POND.x + Math.cos(a) * k.r, 0.02 + Math.sin(elapsed * 2 + k.phase) * 0.015, POND.z + Math.sin(a) * k.r);
         k.d.rotation.y = Math.atan2(-Math.sin(a), Math.cos(a)); k.d.rotation.z = Math.sin(elapsed * 2.4 + k.phase) * 0.06;
-      }
-      const day = 1 - night;
-      for (const f of flutter) {
-        const e = elapsed * 0.5 + f.phase;
-        f.b.visible = near && day > 0.05; f.m.opacity = day;
-        f.b.position.set(f.cx + Math.sin(e) * 3 + Math.sin(e * 2.3) * 1.2, heightAt(f.cx, f.cz) + 1.0 + Math.sin(e * 1.7) * 0.5 + Math.abs(Math.sin(elapsed * 9 + f.i)) * 0.12, f.cz + Math.cos(e * 0.8) * 3);
-        f.b.rotation.y = e * 1.3;
-        const flap = Math.sin(elapsed * 16 + f.i * 2) * 1.0;
-        f.l.rotation.y = flap; f.r.rotation.y = -flap;
-      }
-      flies.material.opacity = night * (0.65 + Math.sin(elapsed * 3) * 0.2);
-      if (night > 0.02) {
-        for (let i = 0; i < flyCount; i++) {
-          const s = flySeed[i], e = elapsed * 0.35 + s.p;
-          const x = s.x + Math.sin(e) * 1.6, z = s.z + Math.cos(e * 1.3) * 1.6;
-          flyPos[i * 3] = x; flyPos[i * 3 + 1] = Math.max(0.2, heightAt(x, z)) + s.h + Math.sin(e * 2.1) * 0.4; flyPos[i * 3 + 2] = z;
-        }
-        flyGeo.attributes.position.needsUpdate = true;
       }
     },
   };

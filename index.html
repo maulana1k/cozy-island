@@ -40,13 +40,20 @@
     #hud .line .time { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
     #hud .now { margin-top: 5px; font-size: 15px; font-weight: 700; }
 
-    #hud .stats { margin-top: 10px; display: grid; gap: 5px; }
-    #hud .stat { display: flex; align-items: center; gap: 8px; }
-    #hud .stat .ico { width: 16px; height: 16px; }
-    #hud .meter { width: 96px; height: 4px; border-radius: 9px; background: rgba(255, 255, 255, 0.32); overflow: hidden; box-shadow: 0 1px 3px rgba(20, 20, 30, 0.3); }
+    /* How you feel: small icons, only shown when low or for a moment after a change */
+    #hud .stats { margin-top: 10px; display: flex; gap: 12px; align-items: flex-start; min-height: 30px; }
+    #hud .stat { display: flex; flex-direction: column; align-items: center; gap: 3px; opacity: 0; transform: scale(0.8); transition: opacity 0.9s ease, transform 0.9s ease; }
+    #hud .stat.seen, #hud .stat.low { opacity: 0.95; transform: none; transition-duration: 0.35s; }
+    #hud .stat .ico { width: 18px; height: 18px; }
+    #hud .meter { width: 18px; height: 3px; border-radius: 9px; background: rgba(255, 255, 255, 0.32); overflow: hidden; box-shadow: 0 1px 3px rgba(20, 20, 30, 0.3); }
     #hud .meter i { display: block; height: 100%; width: 50%; background: #fff; border-radius: 9px; transition: width 0.5s ease; }
-    #hud .stat.low { color: #ffc2ad; animation: pulse 1.3s ease-in-out infinite; }
+    #hud .stat.low { color: #ffc2ad; animation: pulse 1.6s ease-in-out infinite; }
     #hud .stat.low .meter i { background: #ff9a7a; }
+
+    /* Calm: the clock block, the toolbar and the pocket belt fade out when idle (rule in src/hud.js) */
+    #hud .fade { transition: opacity 0.4s ease; }
+    #hud.playing .fade.away { opacity: 0; transition: opacity 1.6s ease; }
+    #hud .fade.away button { pointer-events: none; }
 
     /* The belt: what is in the first pockets, one number key each */
     #hud .belt { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; gap: 14px; opacity: 0; transition: opacity 0.7s ease; }
@@ -77,6 +84,8 @@
     #hud .hints { position: absolute; right: 0; bottom: 22px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
     #hud .hint { display: flex; align-items: center; gap: 9px; padding: 5px 22px 5px 7px; min-width: 150px; font-size: 14px; font-weight: 700;
       background: linear-gradient(90deg, rgba(70, 48, 34, 0.5), rgba(70, 48, 34, 0.28)); border-radius: 999px 0 0 999px; }
+    #hud .hint { animation: hintin 0.5s ease; }
+    @keyframes hintin { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
     #hud .hint.strong { background: linear-gradient(90deg, rgba(40, 30, 24, 0.72), rgba(40, 30, 24, 0.45)); font-size: 15px; }
 
     #hud .toasts { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
@@ -86,6 +95,31 @@
     #hud .toast.out { opacity: 0; transform: translateY(-10px); }
     @keyframes pop { from { opacity: 0; transform: translateY(-14px) scale(0.85); } to { opacity: 1; transform: none; } }
     @keyframes spin { from { transform: rotate(-120deg) scale(0.2); } to { transform: none; } }
+
+
+    /* A find: a paper card (same paper as the journal) slides in from the left, the title fills in like ink, a stamp lands */
+    #hud .rewards { position: absolute; left: 24px; top: 34%; display: flex; flex-direction: column; gap: 12px; opacity: 0; transition: opacity 0.7s ease; }
+    #hud.playing .rewards { opacity: 1; }
+    #hud.filming .rewards { opacity: 0 !important; }
+    #hud .reward { position: relative; display: flex; align-items: center; gap: 12px; min-width: 220px; max-width: 300px; padding: 12px 20px 12px 28px; box-sizing: border-box; color: var(--ink); text-shadow: none;
+      background: #fffdf8; border-radius: 6px 16px 16px 6px; box-shadow: 0 8px 22px rgba(20, 30, 50, 0.3); transform: rotate(-1.2deg);
+      animation: rwin 0.6s cubic-bezier(.2, 1.15, .3, 1) both; transition: opacity 0.7s ease, transform 0.7s ease; }
+    #hud .reward.out { opacity: 0; transform: translateX(-30px) rotate(-3deg); }
+    #hud .reward .rw-margin { position: absolute; left: 14px; top: 0; bottom: 0; width: 2px; background: #dbe9f4; }
+    #hud .reward .stamp { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #e8563f; box-shadow: inset 0 0 0 2.5px currentColor, 0 0 0 3px rgba(232, 86, 63, 0.18); background: rgba(232, 86, 63, 0.08);
+      opacity: 0; animation: rwstamp 0.5s cubic-bezier(.3, 1.6, .5, 1) 0.55s both; }
+    #hud .reward .stamp .ico { width: 22px; height: 22px; }
+    #hud .reward .stamp svg { filter: none; }
+    #hud .reward .stamp .pic { font-size: 22px; line-height: 1; }
+    #hud .reward.badge .stamp { color: #c98a00; box-shadow: inset 0 0 0 2.5px currentColor, 0 0 0 3px rgba(201, 138, 0, 0.2); background: rgba(255, 210, 74, 0.2); }
+    #hud .reward.note .stamp, #hud .reward.guide .stamp { color: #3f7f4a; box-shadow: inset 0 0 0 2.5px currentColor, 0 0 0 3px rgba(63, 127, 74, 0.18); background: rgba(63, 127, 74, 0.08); }
+    #hud .reward .rw-kind { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: #7fb0d6; }
+    #hud .reward .rw-title { position: relative; font-size: 17px; font-weight: 800; line-height: 1.2; color: #cfc8b6; }
+    #hud .reward .rw-title::after { content: attr(data-t); position: absolute; inset: 0; color: var(--ink); clip-path: inset(0 100% 0 0); animation: rwink 0.8s ease-out 0.3s forwards; }
+    #hud .reward .rw-sub { margin-top: 2px; font-size: 12px; font-weight: 600; color: #8a95a3; }
+    @keyframes rwin { from { opacity: 0; transform: translateX(-60px) rotate(-5deg); } to { opacity: 1; transform: rotate(-1.2deg); } }
+    @keyframes rwink { to { clip-path: inset(0 0 0 0); } }
+    @keyframes rwstamp { from { opacity: 0; transform: scale(2.2) rotate(-25deg); } to { opacity: 0.95; transform: rotate(-8deg); } }
 
     #hud .banner { position: absolute; top: 17%; left: 50%; transform: translate(-50%, -16px); opacity: 0; text-align: center; transition: opacity 0.5s ease, transform 0.6s cubic-bezier(.2, 1.3, .4, 1); }
     #hud .banner.show { opacity: 1; transform: translate(-50%, 0); }

@@ -287,10 +287,12 @@ export function createHUD(handlers) {
   const wxEl = el('span', 'wx'); // the weather: a small icon and word next to the clock
   clockLine.append(clockIco, time, phase, wxEl);
   const nowLine = el('div', 'line now');
-  // How you are feeling: four thin white bars
+  // How you are feeling: four small icons that only show when a stat is low, or for a moment when it changes
   const statBox = el('div', 'stats'); const statRows = {};
-  for (const k of STAT_KEYS) { const row = el('div', 'stat'); row.title = STAT_LABEL[k]; const fill = el('i'); const meter = el('div', 'meter'); meter.append(fill); row.append(icon(k), meter); statBox.append(row); statRows[k] = { row, fill }; }
-  tl.append(rankLine, bar, clockLine, nowLine, statBox);
+  for (const k of STAT_KEYS) { const row = el('div', 'stat'); row.title = STAT_LABEL[k]; const fill = el('i'); const meter = el('div', 'meter'); meter.append(fill); row.append(icon(k), meter); statBox.append(row); statRows[k] = { row, fill, shown: null, timer: null }; }
+  // Rank, clock and weather fade away when idle (see "calm" below); the stat icons have their own rule.
+  const topGroup = el('div', 'fade'); topGroup.append(rankLine, bar, clockLine, nowLine);
+  tl.append(topGroup, statBox);
 
   // ---- Bottom-left: line-drawn buttons, and what you are standing on
   const bl = el('div', 'bl');
@@ -301,10 +303,10 @@ export function createHUD(handlers) {
   const journalBtn = mkBtn('book', 'Journal', 'J'), mapBtn = mkBtn('map', 'Map', 'M'), lookBtn = mkBtn('mouse', 'Free look: move the mouse to turn the camera', 'C'), soundBtn = mkBtn('sound', 'Sound', 'N'), menuBtn = mkBtn('pause', 'Pause', 'Esc');
   const dot = el('span', 'dot'); journalBtn.append(dot);
   tools.append(bagBtn, journalBtn, mapBtn, lookBtn, soundBtn, menuBtn);
-  bl.append(ground, tools);
+  bl.classList.add('fade'); bl.append(ground, tools);
 
   // ---- Bottom-centre: the first few pockets of the backpack, one key each
-  const belt = el('div', 'belt');
+  const belt = el('div', 'belt fade');
 
   // ---- Backpack: a canvas flap with pockets
   const packSheet = el('div', 'sheet packsheet off');
@@ -323,6 +325,7 @@ export function createHUD(handlers) {
 
   // ---- Pop-ups
   const toasts = el('div', 'toasts');
+  const rewards = el('div', 'rewards'); // paper cards that slide in and fill in for each find
   const banner = el('div', 'banner'); const bannerBig = el('div', 'big'); const bannerSmall = el('div', 'small'); banner.append(bannerBig, el('i'), bannerSmall);
   const danger = el('div', 'danger'); const alertBox = el('div', 'alert'); alertBox.append(el('div', 'big', '⚠ DANGER ⚠'), el('div', 'small', 'You are too deep in the wild jungle. Go back to camp!'));
   const stop = el('div', 'stop'); stop.append(el('div', 'hand', '✋'), el('div', 'big', 'STOP'), el('div', 'small', 'You cannot go any further. It is not safe.'), el('div', 'small dim', 'Heading back to camp…'));
@@ -440,7 +443,7 @@ export function createHUD(handlers) {
   paintCursor();
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, rewards, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -457,11 +460,72 @@ export function createHUD(handlers) {
   // Buttons must not keep keyboard focus, or Space and Enter would press them again.
   root.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); });
 
+  // ---- Calm: the picture first --------------------------------------------------------------------------
+  // ONE RULE for the clock/day/weather block (with rank), the bottom-left toolbar and the pocket belt: each fades out
+  // after QUIET seconds and wakes for QUIET seconds when: the pointer goes near its corner or edge; a related key is
+  // pressed (B J M C N Esc Tab T for the top and toolbar, 1-6 for the belt); the time of day changes (top and toolbar);
+  // something is picked up or used (belt, and the top block on a find); or while Alt is held (everything stays).
+  // The first run ever keeps it all up for a full minute before the first fade, later runs for 8 s.
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } },
+  };
+  const QUIET = 6000;
+  const runs = store.get('cozy.hud.runs', 0); store.set('cozy.hud.runs', runs + 1);
+  const calm = {
+    top: { node: topGroup, until: 0 }, bar: { node: bl, until: 0 }, belt: { node: belt, until: 0 },
+    alt: false, first: runs === 0,
+  };
+  const wake = (names, ms = QUIET) => {  const t = performance.now() + ms; for (const n of names) calm[n].until = Math.max(calm[n].until, t); paintCalm(); };
+  function paintCalm() {
+    const now = performance.now();
+    for (const n of ['top', 'bar', 'belt']) calm[n].node.classList.toggle('away', hud.started && !calm.alt && now > calm[n].until);
+  }
+  setInterval(paintCalm, 500);
+  const ZONES = { top: (x, y) => x < 400 && y < 170, bar: (x, y) => x < 460 && y > innerHeight - 130, belt: (x, y) => Math.abs(x - innerWidth / 2) < 260 && y > innerHeight - 120 };
+  window.addEventListener('mousemove', (e) => { for (const n in ZONES) if (ZONES[n](e.clientX, e.clientY)) wake([n]); });
+  const KEY_WAKES = { KeyB: ['bar'], KeyJ: ['bar'], KeyM: ['bar'], KeyC: ['bar'], KeyN: ['bar'], Escape: ['bar', 'top'], Tab: ['bar', 'top'], KeyT: ['top'] };
+  for (let i = 1; i <= 6; i++) KEY_WAKES[`Digit${i}`] = ['belt'];
+  // Key hints: the plain how-to-move hints go away once the key has been used a few times (saved per key).
+  const LEARN = { 'W A S D': ['move', 5], Shift: ['shift', 3], Space: ['hop', 3], X: ['sit', 3] };
+  const LEARN_CODES = { KeyW: 'move', KeyA: 'move', KeyS: 'move', KeyD: 'move', ArrowUp: 'move', ArrowDown: 'move', ArrowLeft: 'move', ArrowRight: 'move', ShiftLeft: 'shift', ShiftRight: 'shift', Space: 'hop', KeyX: 'sit' };
+  const used = store.get('cozy.hud.keys', {});
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Alt') { calm.alt = true; paintCalm(); }
+    if (!hud.started) return;
+    if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const w = KEY_WAKES[e.code]; if (w) wake(w);
+      const id = LEARN_CODES[e.code];
+      if (id && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) { used[id] = (used[id] || 0) + 1; store.set('cozy.hud.keys', used); if (used[id] <= 5) { lastHints = ''; if (lastHintList) hud.setHints(lastHintList); } }
+    }
+  });
+  window.addEventListener('keyup', (e) => { if (e.key === 'Alt') { calm.alt = false; wake(['top', 'bar', 'belt'], 1500); } });
+  window.addEventListener('blur', () => { calm.alt = false; });
+  let lastHintList = null, lastPhase = null, lastBagSig = null, lastCount = null;
+
+  // ---- A find: a paper card slides in, its title fills in like ink, and a stamp lands (src/hud.js, rewards) ---
+  const REWARD_KIND = { discovery: 'Discovery', note: 'Journal note', badge: 'Badge earned', guide: 'Field guide' };
+  function reward({ kind = 'discovery', title, sub = '', pic = '' }) {
+    const card = el('div', `reward ${kind}`);
+    const stamp = el('span', 'stamp'); if (pic) stamp.append(el('span', 'pic', pic)); else stamp.append(icon('star', 'ico'));
+    const txt = el('div', 'rw-text');
+    const t = el('div', 'rw-title', title); t.dataset.t = title;
+    txt.append(el('div', 'rw-kind', REWARD_KIND[kind] || kind), t);
+    if (sub) txt.append(el('div', 'rw-sub', sub));
+    card.append(el('i', 'rw-margin'), stamp, txt);
+    rewards.append(card);
+    while (rewards.children.length > 3) rewards.firstChild.remove();
+    setTimeout(() => card.classList.add('out'), 4300);
+    setTimeout(() => card.remove(), 5000);
+    wake(['top']);
+    if (handlers.onReward) handlers.onReward(kind);
+  }
+
   let lastWeather = '', lastClock = '', lastGround = '', lastHints = '', bannerTimer = null, bubbleTimer = null, steps = 0, frame = 0;
 
   const hud = {
     menuOpen: false, started: false, journalOpen: false, mapOpen: false, bagOpen: false,
-    begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); },
+    begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); wake(['top', 'bar', 'belt'], calm.first ? 60000 : 8000); },
     openMenu() { hud.menuOpen = true; menu.classList.remove('off'); showKeys(false); col = 0; row = 0; if (handlers.getTime) { timeAt = nearestTime(handlers.getTime()); showTime(); } paintCursor(); },
     // Leaves the key list for the menu. Returns true when it did (so Esc or Tab only step back).
     menuBack() { if (!inKeys) return false; showKeys(false); return true; },
@@ -489,7 +553,11 @@ export function createHUD(handlers) {
       for (const k of STAT_KEYS) {
         const v = Math.round(s[k]), low = s[k] < LOW;
         if (statRows[k].v === v) continue;
-        statRows[k].v = v; statRows[k].fill.style.width = `${v}%`; statRows[k].row.classList.toggle('low', low);
+        const R = statRows[k];
+        R.v = v; R.fill.style.width = `${v}%`; R.row.classList.toggle('low', low);
+        // Shown while low; otherwise for a few seconds after a real change (not every tiny drain tick).
+        if (R.shown === null) R.shown = v;
+        else if (Math.abs(v - R.shown) >= 6) { R.shown = v; R.row.classList.add('seen'); clearTimeout(R.timer); R.timer = setTimeout(() => R.row.classList.remove('seen'), 3500); }
         feelRows[k].fill.style.width = `${v}%`; feelRows[k].n.textContent = v; feelRows[k].r.classList.toggle('low', low);
       }
       statRows.energy.row.classList.toggle('low', s.winded || s.energy < LOW);
@@ -497,6 +565,9 @@ export function createHUD(handlers) {
     // view: { slots: [{ id, count, label? }], capacity }. Redraws the belt and the pockets.
     setBag(view) {
       bagView = view;
+      const sig = view.slots.map((s) => `${s.id}:${s.count}:${s.label || ''}`).join('|');
+      if (lastBagSig !== null && sig !== lastBagSig) wake(['belt']);
+      lastBagSig = sig;
       if (selected >= view.slots.length) selected = Math.max(0, view.slots.length - 1);
       belt.replaceChildren(...view.slots.slice(0, 6).map((s, i) => {
         const b = el('button', 'slot'); b.title = ITEMS[s.id].name;
@@ -552,6 +623,8 @@ export function createHUD(handlers) {
       way.style.opacity = 1; way.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -50%)`;
       way.classList.toggle('edge', !!edge); wayDist.textContent = `${Math.round(metres)} m`;
     },
+    // A find: kind 'discovery' | 'note' | 'badge' | 'guide'. Also calls handlers.onReward(kind) (main.js nudges the camera).
+    reward,
     tip(text) { tipQueue.push(text); if (!tipTimer) nextTip(); },
     // A film: everything else steps back (the picture keeps the whole screen).
     setCine(on) { root.classList.toggle('filming', on); if (!on) setCaption(); },
@@ -568,12 +641,16 @@ export function createHUD(handlers) {
       lastClock = key;
       clockIco.innerHTML = ICONS[isNight ? 'moon' : 'sun'];
       time.textContent = text; phase.textContent = `${phaseText} · Day ${dayNumber}`;
+      if (lastPhase !== null && lastPhase !== phaseText) wake(['top', 'bar']);
+      lastPhase = phaseText;
     },
-    setWeather(kind, label) { if (kind === lastWeather) return; lastWeather = kind; wxEl.innerHTML = `${ICONS[{ sun: 'sun', wind: 'wind', rain: 'rain', fog: 'fog' }[kind]] || ''}${label}`; wxEl.dataset.kind = kind; },
+    setWeather(kind, label) { if (kind === lastWeather) return; if (lastWeather) wake(['top']); lastWeather = kind; wxEl.innerHTML = `${ICONS[{ sun: 'sun', wind: 'wind', rain: 'rain', fog: 'fog' }[kind]] || ''}${label}`; wxEl.dataset.kind = kind; },
     setSteps(n) { steps = n; },
     setGround(label, color) { if (label === lastGround) return; lastGround = label; groundText.textContent = label; groundDot.style.background = color; },
     // The list of keys, bottom-right: only what is useful at this moment.
-    setHints(list) {
+    setHints(rawList) {
+      lastHintList = rawList;
+      const list = rawList.filter(([k, , strong]) => { const l = !strong && LEARN[k]; return !l || (used[l[0]] || 0) < l[1]; });
       const key = list.map((h) => `${h[0]}:${h[1]}:${h[2] ? 1 : 0}`).join('|');
       if (key === lastHints) return;
       lastHints = key;
@@ -582,6 +659,8 @@ export function createHUD(handlers) {
     // Rank, progress bar and the notebook pages all come from the same numbers.
     setProgress(list, rank, count, total) {
       num.textContent = count;
+      if (lastCount !== null && count !== lastCount) wake(['top']);
+      lastCount = count;
       const span = rank.next ? rank.next.at - rank.from : 1, pct = rank.next ? Math.round(((count - rank.from) / span) * 100) : 100;
       rankName.textContent = rank.name; barFill.style.width = `${pct}%`;
       lastProgress = { list, rank, count, total };
@@ -604,12 +683,7 @@ export function createHUD(handlers) {
       }));
     },
     toast(label, count, total) {
-      const t = el('div', 'toast');
-      t.append(icon('star', 'ico gold'), el('span', 'label', label), el('b', 'count', `${count}/${total}`));
-      toasts.append(t);
-      while (toasts.children.length > 3) toasts.firstChild.remove();
-      setTimeout(() => t.classList.add('out'), 3200);
-      setTimeout(() => t.remove(), 3800);
+      reward({ kind: 'discovery', title: label, sub: `${count} of ${total} found` });
       if (!hud.journalOpen) dot.classList.add('on');
     },
     // Big words across the top: a new rank, or the camp moving on to its next activity.

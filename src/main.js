@@ -492,7 +492,9 @@ const relockPress = (e) => {
 };
 window.addEventListener('pointerdown', relockPress, true);
 window.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.preventDefault(); e.stopImmediatePropagation(); return; } syncLook(); }, true);
+let rewardBump = 9; // seconds since the last find: the camera dips toward the scout for 0.3 s
 const hud = createHUD({
+  onReward: () => { rewardBump = 0; },
   onResume: () => { hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
   getTime: () => timeOfDay,
@@ -741,7 +743,7 @@ function step() {
   else {
     if (join) hintList.push(['F', player.act ? `${join.verb} (move to stop)` : join.verb, false]);
     hintList.push(['X', player.sitting ? 'stand up' : 'sit down', false]);
-    if (elapsed < 14) hintList.push(['W A S D', 'move', false], ['Shift', 'walk / run', false], ['Space', 'hop', false]);
+    hintList.push(['W A S D', 'move', false], ['Shift', 'walk / run', false], ['Space', 'hop', false]); // the HUD hides each once it has been used a few times
   }
   hud.setHints(hud.started ? hintList : []);
 
@@ -884,6 +886,7 @@ function step() {
     else { if (hadRideCam) storyRt.blendFrom(); rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? player.riding.camSpeed ?? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
   }
   hadRideCam = !!rideCam;
+  if (rewardBump < 0.3) { rewardBump += clampDt(raw); camera.translateZ(-Math.sin(Math.min(1, rewardBump / 0.3) * Math.PI) * 0.05); } // find: a 5 cm nudge in and back
   weather.update(dt, timeOfDay, camera, player.position, night);
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);

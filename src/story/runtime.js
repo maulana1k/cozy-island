@@ -36,10 +36,10 @@ export function createStoryRuntime(io) {
     else if (kind === 'quest' && d.started) { io.say(`New quest: ${d.quest.title}`, '📜'); audio.play('discover'); }
     else if (kind === 'quest' && d.stage) io.say(d.stage.text.split('. ')[0].replace(/\.$/, ''), '🧭');
     else if (kind === 'step') { io.say(`${d.step.title}: done`, '✅'); io.cheer(4); }
-    else if (kind === 'note') io.say(`New note: ${d.title}`, '📝');
-    else if (kind === 'badge') { hud.rankUp(d.name, 'Badge earned'); audio.play('rank'); }
+    else if (kind === 'note') { hud.reward({ kind: 'note', title: d.title, sub: 'Added to your notes', pic: '📝' }); audio.play('discover'); }
+    else if (kind === 'badge') { hud.rankUp(d.name, 'Badge earned'); hud.reward({ kind: 'badge', title: d.name, sub: 'Badge earned', pic: d.icon }); audio.play('rank'); }
     else if (kind === 'gear') io.say(`New gear: ${d.name}`, d.icon);
-    else if (kind === 'guide') io.say(`Field guide: ${d.name}`, d.icon);
+    else if (kind === 'guide') { hud.reward({ kind: 'guide', title: d.name, sub: 'Added to your field guide', pic: d.icon }); audio.play('discover'); }
     else if (kind === 'puzzle') audio.play('discover');
     io.refreshQuest(); io.refreshJournal();
   });

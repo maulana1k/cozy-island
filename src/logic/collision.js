@@ -38,6 +38,7 @@ export function resolveCollisions(pos, radius, colliders) {
   for (let pass = 0; pass < 3; pass++) {
     const bx = p.x, bz = p.z;
     for (const c of colliders) {
+      if (!c || !(c.x === c.x) || !(c.z === c.z)) continue; // a broken collider (NaN position) would freeze the player: skip it
       if (c.r !== undefined) pushFromCircle(p, radius, c);
       else pushFromBox(p, radius, c);
     }

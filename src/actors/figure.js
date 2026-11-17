@@ -688,6 +688,8 @@ export function createFigure({
   let lastYaw = null, turn = 0, fidgetIn = 3 + Math.random() * 9, fidget = null;
   const face = [0, 0, 0.75, 1]; // eased toward whichever face fits the moment
   let blinkIn = 1 + Math.random() * 4, blink = 0, gaze = 0, gazeUp = 0, headLook = 0, mouthOpen = 0, hello = 0, wasNear = false;
+  // Glancing at the scout: a look of a second or two, then back to what they were doing, then maybe another. Idle weight shifts: now and then the hips settle onto the other foot.
+  let glance = 0, glanceRest = Math.random() * 2, shiftIn = 2 + Math.random() * 6, shiftTo = 0, shiftK = 0;
   const seed = Math.random() * 10, slot = Math.floor(Math.random() * 3);
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
   const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0, trunk: 0, fL: 0, fR: 0 };
@@ -884,7 +886,10 @@ export function createFigure({
       const lift0 = legs[0].stance ? 0 : Math.sin(Math.PI * legs[0].w), lift1 = legs[1].stance ? 0 : Math.sin(Math.PI * legs[1].w);
       const rollP = walkW * (1 - run) * 0.045 * (lift0 - lift1);
       // Standing, the weight drifts gently from foot to foot (the hips tilt a touch with it).
-      const sway = Math.sin((elapsed + seed) * 0.55) * 0.015 * (1 - gait) * (o.pose || o.sitting || o.sitGround ? 0 : 1);
+      const standing = o.pose || o.sitting || o.sitGround ? 0 : 1;
+      if (!self && standing && speed < 0.05) { shiftIn -= dt; if (shiftIn <= 0) { shiftIn = 4 + Math.random() * 7; shiftTo = shiftTo > 0 ? -1 : shiftTo < 0 ? 1 : Math.random() < 0.5 ? -1 : 1; } } else shiftTo = 0;
+      shiftK += (shiftTo - shiftK) * Math.min(1, dt * 1.6); // eased onto the other foot over about a second
+      const sway = (Math.sin((elapsed + seed) * 0.55) * 0.012 + shiftK * 0.022) * (1 - gait) * standing;
       const yawS = P.hipX * Math.sin(yawP), rollS = P.hipX * Math.sin(rollP + sway); // leg 0's hip joint forward, and down; leg 1's the other way
       const lead = legs[0].u < 0.5 ? legs[0] : legs[1], sLd = Math.min(lead.u / D, wkSH), ld = lead === legs[0] ? 1 : -1;
       // (Between a run and a walk, in a moment off the ground there is no planted leg for the walking hips to
@@ -1364,9 +1369,17 @@ export function createFigure({
       const tx = o.look ? o.look.x : self ? null : scout.x, tz = o.look ? o.look.z : self ? null : scout.z;
       if (tx !== null && !lying) {
         const dx = tx - group.position.x, dz = tz - group.position.z, d2 = dx * dx + dz * dz;
-        if (d2 < (o.look ? 64 : 20) && d2 > 0.04) {
+        if (d2 < (o.look ? 64 : 30) && d2 > 0.04) {
           let rel = Math.atan2(dx, dz) - group.rotation.y; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-          if (Math.abs(rel) < 2.0) { wantYaw = clamp(rel, -1.15, 1.15); near = d2 < 9; }
+          if (Math.abs(rel) < 2.0) {
+            near = d2 < 9;
+            // Others glance at the scout and look back again (they keep looking only from very close).
+            if (!o.look) {
+              if (near && !wasNear) { glance = 0; glanceRest = 0; }
+              if (glance > 0) glance -= dt; else if ((glanceRest -= dt) <= 0) { glance = 1.4 + Math.random() * 2; glanceRest = 2.5 + Math.random() * 5; }
+            }
+            if (o.look || glance > 0 || d2 < 2.2) wantYaw = clamp(rel, -1.15, 1.15);
+          }
         }
       }
       headLook += (wantYaw * 0.72 - headLook) * ease(5);

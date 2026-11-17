@@ -1,6 +1,7 @@
 // The soundscape director: works out which areas you are in (a soft blend), hands that to the audio
 // beds, and makes the birds you can see sing from where they are. Music cues for dawn and the
-// evening campfire start here too. All sound itself is in src/audio.js.
+// evening campfire start here too, and the score is told the time of day and the rain. All sound itself
+// is in src/audio.js (the score in src/music.js).
 import { AREAS, POND } from './config.js';
 import { riverAt, wildness, shoreR } from './logic/terrain.js';
 import { jungleAt, CHICKEN_YARD } from './logic/layout.js';
@@ -36,6 +37,8 @@ export function createAmbience(audio, scene) {
     update(dt, ctx) {
       if (!audio.started) return;
       const p = ctx.player.position, t = ctx.timeOfDay, wx = ctx.weather || {};
+      // The score's mood follows the time of day and the rain (src/music.js).
+      if (audio.setMood) audio.setMood(t, ctx.night, wx.rain || 0);
       // Cue music at sunrise and when the campfire evening begins.
       const block = blockAt(t).id;
       if (lastT !== null && !ctx.paused) {

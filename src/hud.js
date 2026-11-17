@@ -9,6 +9,7 @@ import { beltOf, BELT_SIZE, TOOLS } from './logic/belt.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
 import { VERSION_LABEL, FEEDBACK_URL } from './config.js';
 import { settings } from './settings.js';
+import { sfx, lift } from './audio.js';
 
 const WEATHERS = [['Auto', 'auto'], ['Sunny', 'sun'], ['Windy', 'wind'], ['Rainy', 'rain'], ['Foggy', 'fog']];
 const TIMES = [['Morning', 0.2], ['Midday', 0.45], ['Afternoon', 0.64], ['Sunset', 0.78], ['Night', 0.95]];
@@ -520,6 +521,31 @@ export function createHUD(handlers) {
   const showInvert = () => { invertRow.val.textContent = settings.invertZoom ? 'On' : 'Off'; };
   showInvert();
   invertRow.addEventListener('click', () => { settings.invertZoom = !settings.invertZoom; showInvert(); });
+  // Volume sliders (0..100, saved in src/settings.js, applied live by src/audio.js). A D or the left/right arrows step
+  // them by 10 while one is highlighted; with the mouse, click or drag along the bar.
+  const slider = (label, kind) => {
+    const row = opt(label), track = el('span'), fill = el('span'), num = el('span');
+    track.style.cssText = 'display:inline-block;position:relative;width:96px;height:6px;margin:0 10px 2px 0;border-radius:3px;background:rgba(255,255,255,0.25);vertical-align:middle;overflow:hidden';
+    fill.style.cssText = 'position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:rgba(255,255,255,0.9)';
+    num.style.cssText = 'display:inline-block;min-width:2.2em;text-align:right';
+    track.append(fill); row.val.append(track, num);
+    row.slider = true;
+    const show = () => { const v = settings.volume(kind); fill.style.width = `${v}%`; num.textContent = String(v); };
+    const set = (v) => { const was = settings.volume(kind); settings.setVolume(kind, v); show(); return settings.volume(kind) !== was; };
+    row.step = (d) => { if (set(settings.volume(kind) + d * 10)) sfx('menuStep', d); };
+    const fromX = (x) => { const r = track.getBoundingClientRect(); return Math.round(((x - r.left) / r.width) * 20) * 5; };
+    row.addEventListener('pointerdown', (e) => {
+      const r = track.getBoundingClientRect();
+      if (e.clientX < r.left - 10 || e.clientX > r.right + 10) return;
+      set(fromX(e.clientX));
+      const move = (ev) => set(fromX(ev.clientX));
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); sfx('menuStep', 1); };
+      window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+    });
+    show();
+    return row;
+  };
+  const musicRow = slider('Music', 'music'), ambRow = slider('Ambience', 'ambience'), sfxRow = slider('Sound effects', 'sfx');
   const feedbackRow = FEEDBACK_URL ? el('button', 'word', 'Send feedback') : null;
   if (feedbackRow) feedbackRow.addEventListener('click', () => { try { window.open(FEEDBACK_URL, '_blank', 'noopener'); } catch { /* popup blocked */ } });
   // Time of day and Weather step through their choices (Auto for the random weather). Time shows the nearest preset when the menu opens.
@@ -535,11 +561,11 @@ export function createHUD(handlers) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
   const gamePanel = el('div', 'panel'); gamePanel.append(el('h3', null, 'Game'), resume, speedRow, timeRow, weatherRow, keysRow, ...(feedbackRow ? [feedbackRow] : []));
-  const setPanel = el('div', 'panel'); setPanel.append(el('h3', null, 'Settings'), guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow, invertRow, el('p', 'ver', VERSION_LABEL));
+  const setPanel = el('div', 'panel'); setPanel.append(el('h3', null, 'Settings'), guideRow, filmRow, saverRow, lookRow, soundRow, musicRow, ambRow, sfxRow, gfxRow, invertRow, el('p', 'ver', VERSION_LABEL));
   const mbody = el('div', 'mbody'); mbody.append(gamePanel, setPanel);
   const backRow = el('button', 'word', 'Back');
   const keyPanel = el('div', 'panel ctl'); keyPanel.append(el('h3', null, 'Controls'), controls, backRow);
-  const mhelp = el('p', 'mhelp', '↑↓ move · ←→ switch panel · A D change · Enter pick · Tab/Esc close');
+  const mhelp = el('p', 'mhelp', '↑↓ move · ←→ switch panel · A D change (←→ on a slider) · Enter pick · Tab/Esc close');
   menu.append(el('h2', null, 'Paused'), mbody, keyPanel, mhelp);
   keyPanel.style.display = 'none';
   guideRow.addEventListener('click', () => handlers.onToggleGuide());
@@ -550,7 +576,7 @@ export function createHUD(handlers) {
   timeRow.addEventListener('click', () => stepTime(1));
   weatherRow.addEventListener('click', () => stepWeather(1));
   // Keyboard highlight: cols[0] is the Game panel, cols[1] the Settings panel; the key list has only Back.
-  const cols = [[resume, speedRow, timeRow, weatherRow, keysRow, ...(feedbackRow ? [feedbackRow] : [])], [guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow, invertRow]];
+  const cols = [[resume, speedRow, timeRow, weatherRow, keysRow, ...(feedbackRow ? [feedbackRow] : [])], [guideRow, filmRow, saverRow, lookRow, soundRow, musicRow, ambRow, sfxRow, gfxRow, invertRow]];
   let col = 0, row = 0, inKeys = false;
   const allItems = cols[0].concat(cols[1], [backRow]);
   function paintCursor() { const cur = inKeys ? backRow : cols[col][row]; for (const o of allItems) o.classList.toggle('sel', o === cur); }
@@ -558,6 +584,8 @@ export function createHUD(handlers) {
   keysRow.addEventListener('click', () => showKeys(true));
   backRow.addEventListener('click', () => showKeys(false));
   cols.forEach((list, c) => list.forEach((o, r) => o.addEventListener('mouseenter', () => { col = c; row = r; paintCursor(); })));
+  // Picking anything in the menu (click, Enter or E) gives the same small wooden "tok"; sliders tick as they move instead.
+  for (const o of allItems) if (!o.slider) o.addEventListener('click', () => sfx('menuSelect'));
   paintCursor();
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
@@ -617,6 +645,9 @@ export function createHUD(handlers) {
       const w = KEY_WAKES[e.code]; if (w) wake(w);
       const id = LEARN_CODES[e.code];
       if (id && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen) { used[id] = (used[id] || 0) + 1; store.set('cozy.hud.keys', used); if (used[id] <= 5) { lastHints = ''; if (lastHintList) hud.setHints(lastHintList); } }
+      // A quick-bar slot chosen with 1-8: a small wooden tick (not while talking, where 1-4 answer, or during a film).
+      const slotKey = /^Digit([1-8])$/.exec(e.code);
+      if (slotKey && !hud.menuOpen && bagView && !root.classList.contains('talking') && !root.classList.contains('filming') && beltOf(bagView.slots)[slotKey[1] - 1]) sfx('slot', slotKey[1] - 1);
     }
   });
   window.addEventListener('keyup', (e) => { if (e.key === 'Alt') { calm.alt = false; wake(['top', 'bar', 'belt'], 1500); } });
@@ -638,6 +669,7 @@ export function createHUD(handlers) {
     setTimeout(() => card.classList.add('out'), 4300);
     setTimeout(() => card.remove(), 5000);
     wake(['top']);
+    sfx('card');
     if (handlers.onReward) handlers.onReward(kind);
   }
 
@@ -646,7 +678,7 @@ export function createHUD(handlers) {
   const hud = {
     menuOpen: false, started: false, journalOpen: false, mapOpen: false, bagOpen: false,
     begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); wake(['top', 'bar', 'belt'], calm.first ? 60000 : 8000); },
-    openMenu() { hud.menuOpen = true; menu.classList.remove('off'); showKeys(false); col = 0; row = 0; if (handlers.getTime) { timeAt = nearestTime(handlers.getTime()); showTime(); } paintCursor(); },
+    openMenu() { if (!hud.menuOpen) sfx('menuOpen'); hud.menuOpen = true; menu.classList.remove('off'); showKeys(false); col = 0; row = 0; if (handlers.getTime) { timeAt = nearestTime(handlers.getTime()); showTime(); } paintCursor(); },
     // Leaves the key list for the menu. Returns true when it did (so Esc or Tab only step back).
     menuBack() { if (!inKeys) return false; showKeys(false); return true; },
     // Keys for the open menu. Returns true when it used the key.
@@ -654,20 +686,23 @@ export function createHUD(handlers) {
       const c = e.code;
       if (inKeys) { if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') showKeys(false); return ['Enter', 'NumpadEnter', 'KeyE', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(c); }
       const list = cols[col], cur = list[row];
-      if (c === 'KeyW' || c === 'ArrowUp') { row = Math.max(0, row - 1); paintCursor(); return true; }
-      if (c === 'KeyS' || c === 'ArrowDown') { row = Math.min(list.length - 1, row + 1); paintCursor(); return true; }
+      if (c === 'KeyW' || c === 'ArrowUp') { const was = row; row = Math.max(0, row - 1); paintCursor(); if (row !== was) sfx('menuMove'); return true; }
+      if (c === 'KeyS' || c === 'ArrowDown') { const was = row; row = Math.min(list.length - 1, row + 1); paintCursor(); if (row !== was) sfx('menuMove'); return true; }
+      // On a volume slider the left/right arrows change the value (like A and D) instead of switching panels.
+      if (cur.slider && (c === 'ArrowLeft' || c === 'ArrowRight')) { cur.step(c === 'ArrowLeft' ? -1 : 1); return true; }
       if (c === 'ArrowLeft' || c === 'ArrowRight') {
         const to = c === 'ArrowLeft' ? 0 : 1;
-        if (to !== col) { const y = cur.getBoundingClientRect().top, other = cols[to]; let best = 0; other.forEach((o, i) => { if (Math.abs(o.getBoundingClientRect().top - y) < Math.abs(other[best].getBoundingClientRect().top - y)) best = i; }); col = to; row = best; paintCursor(); }
+        if (to !== col) { const y = cur.getBoundingClientRect().top, other = cols[to]; let best = 0; other.forEach((o, i) => { if (Math.abs(o.getBoundingClientRect().top - y) < Math.abs(other[best].getBoundingClientRect().top - y)) best = i; }); col = to; row = best; paintCursor(); sfx('menuMove'); }
         return true;
       }
-      if (c === 'KeyA' || c === 'KeyD') { if (cur !== resume && cur !== keysRow) { const d = c === 'KeyA' ? -1 : 1; if (cur.step) cur.step(d); else cur.click(); } return true; }
+      if (c === 'KeyA' || c === 'KeyD') { if (cur !== resume && cur !== keysRow) { const d = c === 'KeyA' ? -1 : 1; if (cur.step) { cur.step(d); if (!cur.slider) sfx('menuStep', d); } else cur.click(); } return true; }
       if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') { cur.click(); return true; }
       return false;
     },
-    closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
-    toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
-    toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); paintCalm(); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
+    closeMenu() { if (hud.menuOpen) sfx('menuClose'); hud.menuOpen = false; menu.classList.add('off'); },
+    // The three sheets close each other quietly (quiet = true), so one key makes one sound.
+    toggleJournal(quiet) { hud.journalOpen = !hud.journalOpen; if (!quiet) sfx(hud.journalOpen ? 'journalOpen' : 'journalClose'); book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(true); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(true); },
+    toggleBag(quiet) { hud.bagOpen = !hud.bagOpen; if (!quiet) sfx(hud.bagOpen ? 'bagOpen' : 'bagClose'); packSheet.classList.toggle('off', !hud.bagOpen); paintCalm(); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(true); if (hud.mapOpen) hud.toggleMap(true); renderDetail(); } },
     // The bars top-left and the numbers in the backpack.
     setStats(s) {
       for (const k of STAT_KEYS) {
@@ -704,7 +739,7 @@ export function createHUD(handlers) {
         }
         b.title = ITEMS[s.id].name;
         b.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : '')), el('em', null, String(i + 1)));
-        b.addEventListener('click', () => handlers.onUseItem(s.id));
+        b.addEventListener('click', () => { sfx('slot', i); handlers.onUseItem(s.id); });
         return b;
       }));
       packCount.textContent = `${view.slots.length} of ${view.capacity} pockets`;
@@ -712,7 +747,7 @@ export function createHUD(handlers) {
       const total = Math.max(view.capacity, bagOrder.length);
       for (let i = 0; i < total; i++) {
         const s = bagOrder[i], c = el('button', s ? (i === selected ? 'cell on' : 'cell') : 'cell empty');
-        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); if (i < BELT_SIZE) c.append(el('em', null, String(i + 1))); c.addEventListener('click', () => { selected = i; hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
+        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); if (i < BELT_SIZE) c.append(el('em', null, String(i + 1))); c.addEventListener('click', () => { selected = i; sfx('slot', i); hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
         else if (i < BELT_SIZE) { const tool = TOOLS[i]; c.title = tool ? `${ITEMS[tool].name} (not found yet)` : 'Empty'; c.append(el('span', 'pic', tool ? ITEMS[tool].icon : ''), el('b', null, ''), el('em', null, String(i + 1))); c.style.opacity = '0.3'; c.style.filter = 'grayscale(1)'; c.style.pointerEvents = 'none'; }
         cells.push(c);
       }
@@ -729,7 +764,7 @@ export function createHUD(handlers) {
       setTimeout(() => t.classList.add('out'), 2600);
       setTimeout(() => t.remove(), 3200);
     },
-    toggleMap() { hud.mapOpen = !hud.mapOpen; sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen && hud.bagOpen) hud.toggleBag(); },
+    toggleMap(quiet) { hud.mapOpen = !hud.mapOpen; if (!quiet) sfx(hud.mapOpen ? 'mapOpen' : 'mapClose'); sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(true); if (hud.mapOpen && hud.bagOpen) hud.toggleBag(true); },
     setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.val.textContent = on ? 'On' : 'Off'; },
     setLookHint(on) { lookHint.classList.toggle('show', !!on); },
     setLook(on) { lookBtn.classList.toggle('active', on); lookRow.val.textContent = on ? 'Free look' : 'Hold and drag'; },
@@ -740,6 +775,7 @@ export function createHUD(handlers) {
       quest.classList.toggle('off', !shown || !card);
       guideRow.val.textContent = shown ? 'On' : 'Off';
       if (!card) return;
+      if (shown && hud.started && questTitle.textContent && card.title !== questTitle.textContent) sfx('questCard');
       questHead.textContent = card.head; questTitle.textContent = card.title; questText.textContent = card.text;
     },
     hideStart(on) { start.classList.toggle('off', on); },
@@ -761,7 +797,7 @@ export function createHUD(handlers) {
     reward,
     tip(text) { tipQueue.push(text); if (!tipTimer) nextTip(); },
     // A film: everything else steps back (the picture keeps the whole screen).
-    setCine(on) { root.classList.toggle('filming', on); if (!on) setCaption(); },
+    setCine(on) { root.classList.toggle('filming', on); if (!on) setCaption(); lift('cine', on); }, // the music lifts a little during a film
     // place: 'lower-left', 'lower-right', 'upper-left', 'upper-right', 'center', 'lower-center'; hold: seconds on screen.
     setCaption,
     // The hard stop: the whole screen is taken over while you are walked back.

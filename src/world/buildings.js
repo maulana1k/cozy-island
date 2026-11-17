@@ -136,7 +136,7 @@ export function createBuildings(scene, deps) {
       interactables.push({
         id: `door-${index}`, kind: 'door', position: doorSpot, markerY: groundY + (T ? Math.max(1.6, dh + 0.5) : 2.25),
         prompt: () => (T ? (door.open ? 'E — close door' : 'E — open door') : (door.open ? 'E — close flap' : 'E — open flap')),
-        interact() { door.open = !door.open; if (T) audio.play('zip'); else audio.play('door'); },
+        interact() { door.open = !door.open; if (T) audio.play('tentZip'); else audio.play('door'); },
       });
     }
 

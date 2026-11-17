@@ -61,7 +61,7 @@ export function createStoryRuntime(io) {
     if (t.hold) t.hold(true);
     player.gesture(t.thing ? 'peer' : 'wave', 0.9, t.position);
     shot.active = true; shot.k = 0; shot.from.copy(camera.position);
-    ui.show(view, CONTENT.characters[who]); audio.play('ui');
+    ui.show(view, CONTENT.characters[who]); audio.play('ui'); if (audio.lift) audio.lift('talk', true); // the music lifts a little while you talk
     io.syncLook();
     return true;
   }
@@ -73,7 +73,7 @@ export function createStoryRuntime(io) {
   }
   function close() { if (story.talking) story.end(); finish(); }
   function finish() {
-    ui.hide();
+    ui.hide(); if (audio.lift) audio.lift('talk', false);
     if (talkTarget && talkTarget.hold) talkTarget.hold(false);
     talkTarget = null; shot.active = false; shot.out = 0.6;
     io.refreshQuest(); io.refreshJournal(); io.syncLook();

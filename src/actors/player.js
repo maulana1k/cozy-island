@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createFigure } from './figure.js';
 import { heightAt, wadeSpeedFactor, constrainToShore } from '../logic/terrain.js';
 import { resolveCollisions } from '../logic/collision.js';
+import { sfx } from '../audio.js';
 import { WALK_SPEED, RUN_SPEED, HOP_VELOCITY, GRAVITY, PLAYER_RADIUS, PLAYER_START, PALETTE } from '../config.js';
 
 
@@ -172,13 +173,14 @@ export function createPlayer(scene, opts = {}) {
         // Jumping: from standing, crouch for a moment first (the push comes from the legs); from a run, go at once.
         if (buffer > 0 && coyote > 0 && windUp < 0) { buffer = 0; windUp = speed < WIND_UP_BELOW ? 0 : WIND_UP; }
         if (windUp >= 0) { windUp += dt; if (airborne && coyote <= 0) windUp = -1; }
-        if (windUp >= WIND_UP) { vy = HOP_VELOCITY; airborne = true; coyote = 0; windUp = -1; }
+        if (windUp >= WIND_UP) { vy = HOP_VELOCITY; airborne = true; coyote = 0; windUp = -1; sfx('hop'); }
         if (airborne) {
           vy -= GRAVITY * (vy > 0 ? 1 : 1.7) * dt; // falls a little faster than it rises
           position.y += vy * dt;
           if (position.y <= ground && vy <= 0) {
             position.y = ground; yVel = 0; airborne = false; land = Math.min(1, -vy / HOP_VELOCITY + 0.3); vy = 0;
             if (player.onLand) player.onLand(surface);
+            sfx('land', land); // a soft body thump under the footstep onLand plays
           }
         } else {
           // Follow the ground smoothly (critically damped, so steps and bumps never jolt). Feet sink a little into mud.

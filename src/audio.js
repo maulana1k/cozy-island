@@ -1,7 +1,18 @@
 // All sound is synthesised with the Web Audio API. Nothing here may throw: the game must
 // keep working when audio is unavailable or has not been allowed to start yet.
 
+import { settings } from './settings.js';
+import { createMusic } from './music.js';
+
 const C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880.0;
+
+// The audio made last (the game makes one). Modules without an audio handle (the HUD, the player) play through
+// sfx() and lift() below; both do nothing until it exists.
+let shared = null;
+export function sfx(name, arg) { if (shared) shared.play(name, arg); }
+export function lift(id, on) { if (shared) shared.lift(id, on); }
+// A volume setting 0..100 as a gain: a gentle curve so the low end of the slider is usable.
+const volGain = (v) => Math.pow(Math.min(100, Math.max(0, v)) / 100, 1.6);
 
 export function createAudio(makeContext = () => new AudioContext()) {
   let ctx = null, master = null, noise = null, cricketTimer = null;
@@ -9,6 +20,8 @@ export function createAudio(makeContext = () => new AudioContext()) {
   let rainLevel = 0, rainIndoor = false, rainGain = null, rainOut = 0;
   // Ambience and music (see ambience(), call() and cue() below, and src/ambience.js).
   let ambBus = null, ambLp = null, musicBus = null, windGain = null, windLfoGain = null, voices = 0;
+  // The three volume groups (Settings sliders): every sound ends in one of these, then the master (mute).
+  let musicOut = null, ambOut = null, sfxOut = null, music = null, uiQuiet = 0;
   const mix = { camp: 0, jungle: 0, water: 0, fall: 0, beach: 0, village: 0, hill: 0, night: 0, dawn: 0, rain: 0, wind: 0, murmur: 0, kids: 0 };
   const lis = { x: 0, y: 0, z: 0, fx: 0, fz: -1 };
   const beds = {};
@@ -27,16 +40,21 @@ export function createAudio(makeContext = () => new AudioContext()) {
         master.connect(ctx.destination);
         // Ambience runs through its own bus (muffled indoors, dipped under music); music has a soft echo.
         ambBus = ctx.createGain(); ambLp = ctx.createBiquadFilter(); ambLp.type = 'lowpass'; ambLp.frequency.value = 18000;
-        ambBus.connect(ambLp).connect(master);
-        musicBus = ctx.createGain(); musicBus.gain.value = 0.8; musicBus.connect(master);
+        musicOut = ctx.createGain(); ambOut = ctx.createGain(); sfxOut = ctx.createGain();
+        for (const g of [musicOut, ambOut, sfxOut]) g.connect(master);
+        applyVolumes();
+        ambBus.connect(ambLp).connect(ambOut);
+        musicBus = ctx.createGain(); musicBus.gain.value = 0.8; musicBus.connect(musicOut);
         const echo = ctx.createDelay(1); echo.delayTime.value = 0.34;
         const fb = ctx.createGain(); fb.gain.value = 0.3; const wet = ctx.createGain(); wet.gain.value = 0.22;
         const echoLp = ctx.createBiquadFilter(); echoLp.type = 'lowpass'; echoLp.frequency.value = 2400;
-        musicBus.connect(echo); echo.connect(echoLp).connect(fb).connect(echo); echoLp.connect(wet).connect(master);
+        musicBus.connect(echo); echo.connect(echoLp).connect(fb).connect(echo); echoLp.connect(wet).connect(musicOut);
         noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
         const data = noise.getChannelData(0);
         for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
         startAmbience();
+        // The score: pieces that come and go (src/music.js), through the same bus and instruments as the cues.
+        music = createMusic({ ctx, out: musicBus, mallet, pluck, pad, nf, roots: ROOTS, isMuted: () => api.muted || settings.volume('music') === 0 });
         api.started = true;
         if (ctx.state === 'suspended') ctx.resume().catch(() => {});
         setTimeout(() => api.cue('title'), 700); // a soft theme as the game opens
@@ -113,13 +131,24 @@ export function createAudio(makeContext = () => new AudioContext()) {
       if (!api.started || !ctx || !musicBus || api.muted) return;
       try { playCue(name); } catch { /* audio is optional */ }
     },
-    play(name) {
+    play(name, arg) {
       if (!api.started || !ctx) return;
       if (CUE_FOR[name]) { api.cue(CUE_FOR[name]); return; }
       const sound = SOUNDS[name];
       if (!sound) return;
-      try { sound(); } catch { /* audio is optional */ }
+      // The menus, backpack, journal and map play their own sound from the HUD; the plain 'ui' tick the game
+      // plays right after it would only double it.
+      const nowMs = performance.now();
+      if (name === 'ui' && nowMs < uiQuiet) return;
+      if (UI_OWN.has(name)) uiQuiet = nowMs + 200;
+      try { sound(arg); } catch { /* audio is optional */ }
     },
+    // The music's mood: time of day 0..1, night 0..1, rain 0..1 (src/ambience.js calls this every frame).
+    setMood(t, nightLevel = 0, rain = 0) { if (music) music.setMood(t, nightLevel, rain); },
+    // A film ('cine') or conversation ('talk') lifts the score a little while `on`.
+    lift(id, on) { if (music) music.lift(id, !!on); },
+    // Applies the saved Music, Ambience and SFX volumes (also called live by the Settings sliders via settings.onVolume).
+    applyVolumes,
     // The camera lens motor: call every frame with the zoom speed (0 = still, 1 = fast). A soft geared whirr (filtered noise
     // plus a slight pitched buzz) whose pitch and volume rise with the speed; a tiny click when it settles. Silent when muted.
     lensMotor(speed) {
@@ -130,7 +159,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
         if (!motor) {
           const n = noiseSource(true), bp = filter('bandpass', 1400, 2.5), o = ctx.createOscillator(), og = amp(0.35), g = amp(0);
           o.type = 'sawtooth'; o.frequency.value = 150;
-          n.connect(bp).connect(g); o.connect(og).connect(g); g.connect(master);
+          n.connect(bp).connect(g); o.connect(og).connect(g); g.connect(sfxOut);
           n.start(0, Math.random() * 1.5); o.start();
           motor = { g, bp, o, on: false };
         }
@@ -142,6 +171,22 @@ export function createAudio(makeContext = () => new AudioContext()) {
     },
   };
   let motor = null;
+  shared = api;
+  settings.onVolume(() => applyVolumes());
+  // Autoplay policy: a context made outside a user gesture (a ?play link starts the game on load) stays suspended,
+  // and some browsers suspend it again later (iOS after a call, a background tab). Any press resumes it.
+  const unlock = () => { if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {}); };
+  try { for (const ev of ['pointerdown', 'keydown', 'touchend']) window.addEventListener(ev, unlock, { capture: true, passive: true }); } catch { /* no window (tests) */ }
+
+  function applyVolumes() {
+    if (!ctx || !musicOut) return;
+    try {
+      const now = ctx.currentTime;
+      musicOut.gain.setTargetAtTime(volGain(settings.volume('music')), now, 0.05);
+      ambOut.gain.setTargetAtTime(volGain(settings.volume('ambience')), now, 0.05);
+      sfxOut.gain.setTargetAtTime(volGain(settings.volume('sfx')), now, 0.05);
+    } catch { /* audio is optional */ }
+  }
 
   function noiseSource(loop = false) {
     const src = ctx.createBufferSource();
@@ -158,7 +203,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.07;
     lfo.connect(lfoGain).connect(swell.gain);
     seaGain = ctx.createGain(); seaGain.gain.value = 0.3;
-    waves.connect(lp).connect(swell).connect(seaGain).connect(master);
+    waves.connect(lp).connect(swell).connect(seaGain).connect(ambOut);
     waves.start(); lfo.start();
 
     // Wind: a thin band of noise, quieter still.
@@ -176,19 +221,19 @@ export function createAudio(makeContext = () => new AudioContext()) {
     const roarBand = ctx.createBiquadFilter(); roarBand.type = 'bandpass'; roarBand.frequency.value = 420; roarBand.Q.value = 0.5;
     roarBand.frequency.value = 950; roarBand.Q.value = 0.35;
     fireGain = ctx.createGain(); fireGain.gain.value = 0;
-    roar.connect(roarBand).connect(fireGain).connect(master); roar.start(0, 1.1);
+    roar.connect(roarBand).connect(fireGain).connect(ambOut); roar.start(0, 1.1);
     setInterval(() => {
       if (!ctx || fireLevel < 0.04 || Math.random() > 0.25 + fireLevel * 0.45) return;
       try {
         // Dry wood snapping: a sharp tick, now and then a deeper pop with a little shower of ticks after it.
         const loud = fireLevel * (0.35 + Math.random() * 0.65);
-        hiss({ type: 'bandpass', freq: 2600 + Math.random() * 2200, q: 3, dur: 0.012 + Math.random() * 0.02, gain: 0.16 * loud });
-        if (Math.random() < 0.18) { tone(150 + Math.random() * 70, { type: 'sine', dur: 0.06, gain: 0.07 * loud, to: 70, attack: 0.002 }); for (let k = 1; k <= 3; k++) hiss({ type: 'bandpass', freq: 3200 + Math.random() * 1500, q: 4, dur: 0.01, gain: 0.08 * loud, delay: 0.04 * k + Math.random() * 0.03 }); }
+        hiss({ type: 'bandpass', freq: 2600 + Math.random() * 2200, q: 3, dur: 0.012 + Math.random() * 0.02, gain: 0.16 * loud, out: ambOut });
+        if (Math.random() < 0.18) { tone(150 + Math.random() * 70, { type: 'sine', dur: 0.06, gain: 0.07 * loud, to: 70, attack: 0.002, out: ambOut }); for (let k = 1; k <= 3; k++) hiss({ type: 'bandpass', freq: 3200 + Math.random() * 1500, q: 4, dur: 0.01, gain: 0.08 * loud, delay: 0.04 * k + Math.random() * 0.03, out: ambOut }); }
       } catch { /* audio is optional */ }
     }, 70);
 
     // Rain: a soft bed of band-shaped noise, a low hush under it, and a thin patter of tiny drop ticks on top.
-    rainGain = ctx.createGain(); rainGain.gain.value = 0; rainGain.connect(master);
+    rainGain = ctx.createGain(); rainGain.gain.value = 0; rainGain.connect(ambOut);
     const bed = noiseSource(true), bedBand = ctx.createBiquadFilter(); bedBand.type = 'bandpass'; bedBand.frequency.value = 1500; bedBand.Q.value = 0.35;
     const bedLow = ctx.createBiquadFilter(); bedLow.type = 'lowpass'; bedLow.frequency.value = 4200;
     const bedGain = ctx.createGain(); bedGain.gain.value = 0.16;
@@ -206,7 +251,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
       if (!ctx || rainOut < 0.05) return;
       try {
         const n = 1 + (Math.random() * 3 * rainOut) | 0;
-        for (let i = 0; i < n; i++) hiss({ type: 'bandpass', freq: 4200 + Math.random() * 4500, q: 4, dur: 0.008 + Math.random() * 0.012, gain: (0.01 + Math.random() * 0.02) * rainOut, delay: Math.random() * 0.06 });
+        for (let i = 0; i < n; i++) hiss({ type: 'bandpass', freq: 4200 + Math.random() * 4500, q: 4, dur: 0.008 + Math.random() * 0.012, gain: (0.01 + Math.random() * 0.02) * rainOut, delay: Math.random() * 0.06, out: ambOut });
       } catch { /* audio is optional */ }
     }, 70);
 
@@ -224,7 +269,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
   }
 
   // A short note with a soft attack and a fading tail.
-  function tone(freq, { type = 'triangle', dur = 0.4, gain = 0.12, delay = 0, attack = 0.008, to = null, out = master } = {}) {
+  function tone(freq, { type = 'triangle', dur = 0.4, gain = 0.12, delay = 0, attack = 0.008, to = null, out = sfxOut } = {}) {
     const t = ctx.currentTime + delay;
     const osc = ctx.createOscillator(); osc.type = type; osc.frequency.setValueAtTime(freq, t);
     if (to) osc.frequency.exponentialRampToValueAtTime(to, t + dur);
@@ -237,7 +282,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
   }
 
   // A burst of filtered noise.
-  function hiss({ type = 'bandpass', freq = 2000, q = 0.8, dur = 0.2, gain = 0.05, delay = 0, out = master } = {}) {
+  function hiss({ type = 'bandpass', freq = 2000, q = 0.8, dur = 0.2, gain = 0.05, delay = 0, out = sfxOut } = {}) {
     const t = ctx.currentTime + delay;
     const src = noiseSource();
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
@@ -254,7 +299,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     const k = Math.min(1, Math.max(0.15, strength)) * (rainIndoor ? 0.45 : 1);
     const t0 = ctx.currentTime + Math.max(0, delay);
     const crack = Math.random() < 0.55;
-    if (crack) hiss({ type: 'bandpass', freq: 900 + Math.random() * 700, q: 0.7, dur: 0.22, gain: 0.05 * k, delay: Math.max(0, delay) });
+    if (crack) hiss({ type: 'bandpass', freq: 900 + Math.random() * 700, q: 0.7, dur: 0.22, gain: 0.05 * k, delay: Math.max(0, delay), out: ambOut });
     const lead = crack ? 0.35 + Math.random() * 0.3 : 0, rise = 1.2 + Math.random() * 1.2, roll = 4.5 + Math.random() * 4;
     const src = noiseSource(true), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
     const f0 = 170 + Math.random() * 90;
@@ -265,7 +310,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
     g.gain.linearRampToValueAtTime(peak * 0.55, a + rise + roll * 0.3);
     g.gain.linearRampToValueAtTime(peak * (0.75 + Math.random() * 0.2), a + rise + roll * 0.42); // a second roll
     g.gain.exponentialRampToValueAtTime(0.0001, a + rise + roll);
-    src.connect(lp).connect(g).connect(master);
+    src.connect(lp).connect(g).connect(ambOut);
     src.start(a, Math.random() * 1.5); src.stop(a + rise + roll + 0.1);
   }
 
@@ -468,23 +513,24 @@ export function createAudio(makeContext = () => new AudioContext()) {
   // few variants and a random key, so it is never quite the same twice.
   const PENTA = [0, 2, 4, 7, 9], ROOTS = [261.63, 293.66, 329.63, 349.23];
   const nf = (root, d) => root * Math.pow(2, (PENTA[((d % 5) + 5) % 5] + 12 * Math.floor(d / 5)) / 12);
-  function partial(f, t, g, dur, type = 'sine', attack = 0.004) {
+  // Each instrument plays into `dest` (the music bus, or the score's own fader in src/music.js).
+  function partial(f, t, g, dur, type = 'sine', attack = 0.004, dest = musicBus) {
     const o = ctx.createOscillator(); o.type = type; o.frequency.value = f;
     const e = ctx.createGain(); e.gain.setValueAtTime(0.0001, t); e.gain.linearRampToValueAtTime(g, t + attack); e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(e).connect(musicBus); o.start(t); o.stop(t + dur + 0.05);
+    o.connect(e).connect(dest); o.start(t); o.stop(t + dur + 0.05);
   }
-  function mallet(f, t, g) { partial(f, t, g, 1.5); partial(f * 4, t, g * 0.16, 0.22); partial(f * 10, t, g * 0.03, 0.05); }
-  function pluck(f, t, g) {
+  function mallet(f, t, g, dest = musicBus) { partial(f, t, g, 1.5, 'sine', 0.004, dest); partial(f * 4, t, g * 0.16, 0.22, 'sine', 0.004, dest); partial(f * 10, t, g * 0.03, 0.05, 'sine', 0.004, dest); }
+  function pluck(f, t, g, dest = musicBus) {
     const lp = filter('lowpass', 3200), e = ctx.createGain();
     lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.8);
     e.gain.setValueAtTime(0.0001, t); e.gain.linearRampToValueAtTime(g, t + 0.005); e.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
-    lp.connect(e).connect(musicBus);
+    lp.connect(e).connect(dest);
     for (const [m, type, k] of [[1, 'triangle', 1], [2, 'sine', 0.3]]) { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * m; const og = amp(k); o.connect(og).connect(lp); o.start(t); o.stop(t + 1.7); }
   }
-  function pad(fs, t, dur, g) {
+  function pad(fs, t, dur, g, dest = musicBus) {
     const lp = filter('lowpass', 1000), e = ctx.createGain();
     e.gain.setValueAtTime(0.0001, t); e.gain.linearRampToValueAtTime(g, t + dur * 0.35); e.gain.setValueAtTime(g, t + dur * 0.6); e.gain.linearRampToValueAtTime(0.0001, t + dur);
-    lp.connect(e).connect(musicBus);
+    lp.connect(e).connect(dest);
     for (const f of fs) for (const det of [-6, 6]) { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.detune.value = det; o.connect(lp); o.start(t); o.stop(t + dur + 0.1); }
   }
   // n: [time s, scale step, 'p' for pluck], pad: [time s, [scale steps], length s]. Step 0 is the root, 5 an octave up.
@@ -520,6 +566,8 @@ export function createAudio(makeContext = () => new AudioContext()) {
     const c = CUES[name];
     if (!c) return;
     const now = ctx.currentTime;
+    // While a piece of the score is playing, the quiet time-of-day cues (dawn, evening, title) are left out.
+    if (c.prio <= 1 && music && music.playing) return;
     // Finds can come thick and fast: the full motif at most every 8 s, the old chime in between.
     if (name === 'discover' && now - lastDiscover < 8) { SOUNDS.discover(); return; }
     if (now < cueUntil && c.prio <= cuePrio) {
@@ -538,13 +586,24 @@ export function createAudio(makeContext = () => new AudioContext()) {
     for (const [t, ds, dur] of v.pad || []) pad(ds.map((d) => nf(root, d)), t0 + t, dur, 0.016 * k);
     if (name === 'discover') lastDiscover = now;
     cueUntil = now + c.dur; cuePrio = c.prio;
+    if (music) music.duck(c.dur);
     // The ambience steps back a little while the music plays.
     ambBus.gain.cancelScheduledValues(now); ambBus.gain.setTargetAtTime(0.65, now, 0.3); ambBus.gain.setTargetAtTime(1, now + c.dur, 1.2);
   }
 
+  // The interface palette: a soft wooden knock (a sine dropping slightly in pitch, a faint overtone, a felt click)
+  // and paper (a breath of band-passed noise).
+  function wood(f, { gain = 0.04, delay = 0, dur = 0.12 } = {}) {
+    tone(f, { type: 'sine', dur, gain, delay, attack: 0.003, to: f * 0.94 });
+    tone(f * 2.9, { type: 'sine', dur: dur * 0.35, gain: gain * 0.15, delay, attack: 0.002 });
+    hiss({ type: 'bandpass', freq: Math.min(5000, f * 4), q: 2, dur: 0.012, gain: gain * 0.25, delay });
+  }
+  function paper({ gain = 0.025, delay = 0, dur = 0.16, freq = 2600, q = 0.6 } = {}) { hiss({ type: 'bandpass', freq: freq * (0.85 + Math.random() * 0.3), q, dur, gain, delay }); }
+  const SLOT_HZ = [392, 440, 523.25, 587.33, 659.25, 783.99, 880, 1046.5];
   const SOUNDS = {
     lantern() { tone(E5, { dur: 0.5, gain: 0.09 }); tone(A5, { dur: 0.6, gain: 0.07, delay: 0.09 }); },
-    zip() { hiss({ type: 'highpass', freq: 3400, dur: 0.75, gain: 0.035 }); },
+    // A tent's door zip (buildings.js). It was called 'zip' too, so the flying fox's 8 s whirr below played instead.
+    tentZip() { hiss({ type: 'highpass', freq: 3400, dur: 0.75, gain: 0.035 }); },
     door() { tone(170, { type: 'sine', dur: 0.16, gain: 0.16, to: 110 }); hiss({ type: 'lowpass', freq: 900, dur: 0.08, gain: 0.05 }); },
     bell() {
       for (const [mult, gain, dur] of [[1, 0.13, 2.4], [2.01, 0.06, 1.8], [2.76, 0.04, 1.3], [5.4, 0.02, 0.8]]) {
@@ -578,7 +637,33 @@ export function createAudio(makeContext = () => new AudioContext()) {
     // Interface sounds
     discover() { [E5, G5, C5 * 2].forEach((f, i) => tone(f, { dur: 0.5, gain: 0.08, delay: i * 0.09 })); },
     rank() { [C5, E5, G5, C5 * 2, E5 * 2].forEach((f, i) => tone(f, { dur: 0.7, gain: 0.09, delay: i * 0.11 })); tone(C5 / 2, { type: 'sine', dur: 1.2, gain: 0.07 }); },
-    ui() { tone(A5, { type: 'sine', dur: 0.08, gain: 0.04 }); },
+    // The plain interface tick (signposts, toggles): a small wooden knock, never a beep.
+    ui() { wood(E5, { gain: 0.03, dur: 0.07 }); },
+    // ---- Menus, backpack, journal, map, cards: one family of soft wood and paper sounds (played from src/hud.js).
+    menuOpen() { paper({ gain: 0.022, freq: 1700, dur: 0.22 }); wood(440, { gain: 0.042 }); wood(D5, { gain: 0.036, delay: 0.075 }); },
+    menuClose() { paper({ gain: 0.018, freq: 1500, dur: 0.18 }); wood(D5, { gain: 0.036 }); wood(440, { gain: 0.034, delay: 0.075 }); },
+    menuMove() { wood(E5, { gain: 0.02, dur: 0.05 }); },
+    // A value stepped left (d < 0) or right: a slightly lower or higher tick.
+    menuStep(d) { wood(d < 0 ? 494 : 740, { gain: 0.024, dur: 0.06 }); },
+    menuSelect() { wood(C5, { gain: 0.042, dur: 0.11 }); wood(G5, { gain: 0.018, delay: 0.045, dur: 0.08 }); },
+    // The backpack: a canvas flap and a wooden toggle.
+    bagOpen() { hiss({ type: 'lowpass', freq: 900, dur: 0.2, gain: 0.045 }); hiss({ freq: 1300, q: 0.8, dur: 0.12, gain: 0.02, delay: 0.05 }); wood(330, { gain: 0.04, delay: 0.1 }); },
+    bagClose() { hiss({ type: 'lowpass', freq: 800, dur: 0.15, gain: 0.038 }); wood(294, { gain: 0.04, delay: 0.06 }); },
+    // The journal: the cover and a couple of pages turning; shut with a soft clap.
+    journalOpen() { hiss({ type: 'lowpass', freq: 600, dur: 0.1, gain: 0.025 }); paper({ gain: 0.028, freq: 3000, dur: 0.12, delay: 0.04 }); paper({ gain: 0.026, freq: 2200, dur: 0.18, delay: 0.13 }); },
+    journalClose() { paper({ gain: 0.02, freq: 2400, dur: 0.1 }); hiss({ type: 'lowpass', freq: 600, dur: 0.12, gain: 0.035, delay: 0.06 }); wood(262, { gain: 0.035, delay: 0.06 }); },
+    // The paper map: unfolded in a few crinkles, folded away in two.
+    mapOpen() { for (let i = 0; i < 3; i++) paper({ gain: 0.024, freq: 1800 + i * 700, q: 1.1, dur: 0.08, delay: i * 0.07 + Math.random() * 0.02 }); hiss({ type: 'lowpass', freq: 700, dur: 0.22, gain: 0.025, delay: 0.05 }); },
+    mapClose() { for (let i = 0; i < 2; i++) paper({ gain: 0.022, freq: 2600 - i * 600, q: 1.1, dur: 0.08, delay: i * 0.08 }); hiss({ type: 'lowpass', freq: 650, dur: 0.16, gain: 0.022 }); },
+    // Choosing a quick-bar slot (0..7): a wooden tick pitched up the scale by slot.
+    slot(i = 0) { wood(SLOT_HZ[(i | 0) % SLOT_HZ.length], { gain: 0.026, dur: 0.07 }); },
+    // A reward card slides in on paper and its stamp lands (src/hud.js reward(); the stamp lands at about 0.7 s).
+    card() { paper({ gain: 0.028, freq: 1400, q: 0.5, dur: 0.35 }); tone(150, { type: 'sine', dur: 0.12, gain: 0.055, delay: 0.68, to: 85, attack: 0.003 }); hiss({ type: 'lowpass', freq: 500, dur: 0.05, gain: 0.03, delay: 0.68 }); },
+    // The quest card top-right changing to a new step.
+    questCard() { paper({ gain: 0.02, freq: 2400, dur: 0.2 }); wood(D5, { gain: 0.02, delay: 0.06 }); },
+    // The body: a soft push off and a soft landing (k 0..1 how hard). Footsteps are the step:* sounds above.
+    hop() { hiss({ type: 'lowpass', freq: 650, dur: 0.05, gain: 0.028 }); hiss({ freq: 900, q: 0.7, dur: 0.14, gain: 0.014, delay: 0.02 }); },
+    land(k = 0.6) { const a = Math.min(1, Math.max(0.2, k)); tone(110, { type: 'sine', dur: 0.1, gain: 0.05 * a, to: 70, attack: 0.003 }); hiss({ type: 'lowpass', freq: 500, dur: 0.07, gain: 0.03 * a }); },
     // The flying fox trolley whirring down the cable.
     zip() { hiss({ freq: 2200, q: 2.5, dur: 8.2, gain: 0.05 }); tone(220, { type: 'sawtooth', dur: 8, gain: 0.016, to: 560 }); },
     whistle() { tone(2300, { type: 'sine', dur: 0.16, gain: 0.05 }); tone(2300, { type: 'sine', dur: 0.4, gain: 0.05, delay: 0.22 }); },
@@ -587,14 +672,16 @@ export function createAudio(makeContext = () => new AudioContext()) {
     alarm() { for (let i = 0; i < 3; i++) { tone(620, { type: 'square', dur: 0.16, gain: 0.035, delay: i * 0.34 }); tone(465, { type: 'square', dur: 0.16, gain: 0.035, delay: i * 0.34 + 0.17 }); } },
     growl() { tone(62, { type: 'sawtooth', dur: 1.3, gain: 0.07, to: 48 }); tone(93, { type: 'sawtooth', dur: 1.1, gain: 0.03, to: 70, delay: 0.1 }); hiss({ type: 'lowpass', freq: 300, dur: 1.2, gain: 0.05 }); },
     song() { [C5, C5, G5, G5, A5, A5, G5, 0, E5 * 1.0, E5, D5, D5, C5].forEach((f, i) => { if (f) { tone(f, { dur: 0.42, gain: 0.05, delay: i * 0.36 }); tone(f / 2, { type: 'sine', dur: 0.42, gain: 0.035, delay: i * 0.36 }); } }); },
-    pickup() { tone(G5, { dur: 0.12, gain: 0.07 }); tone(C5 * 2, { dur: 0.22, gain: 0.07, delay: 0.07 }); },
-    munch() { for (let i = 0; i < 4; i++) hiss({ type: 'bandpass', freq: 1300 + Math.random() * 500, q: 1.2, dur: 0.07, gain: 0.07, delay: i * 0.17 }); },
-    gulp() { for (let i = 0; i < 3; i++) tone(240, { type: 'sine', dur: 0.12, gain: 0.09, delay: i * 0.22, to: 420 }); },
+    // Into the pocket: two soft wooden notes and a brush of cloth.
+    pickup() { wood(C5, { gain: 0.045 }); wood(G5, { gain: 0.038, delay: 0.075 }); paper({ gain: 0.014, freq: 1800, dur: 0.12, delay: 0.03 }); },
+    // Eating: a few soft crunchy bites. Drinking: three gentle swallows.
+    munch() { for (let i = 0; i < 3; i++) { hiss({ type: 'bandpass', freq: 1000 + Math.random() * 500, q: 1.4, dur: 0.06, gain: 0.045, delay: i * 0.2 + Math.random() * 0.03 }); hiss({ type: 'lowpass', freq: 450, dur: 0.05, gain: 0.025, delay: i * 0.2 }); } },
+    gulp() { for (let i = 0; i < 3; i++) tone(210 + i * 12, { type: 'sine', dur: 0.12, gain: 0.055, delay: i * 0.24, to: 360, attack: 0.02 }); },
     pour() { hiss({ freq: 1800, q: 0.5, dur: 0.9, gain: 0.05 }); tone(300, { type: 'sine', dur: 0.9, gain: 0.03, to: 760 }); },
     rumble() { tone(70, { type: 'sine', dur: 0.5, gain: 0.12, to: 95 }); tone(88, { type: 'triangle', dur: 0.35, gain: 0.06, delay: 0.3, to: 60 }); },
     bugle() { [[G5 / 2, 0], [C5, 0.16], [E5, 0.32], [G5, 0.48]].forEach(([f, d]) => { tone(f, { type: 'sawtooth', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.035, delay: d }); tone(f, { type: 'triangle', dur: d > 0.4 ? 0.6 : 0.16, gain: 0.06, delay: d }); }); },
     sizzle() { hiss({ type: 'highpass', freq: 3200, dur: 1.0, gain: 0.05 }); },
-    click() { tone(900, { type: 'square', dur: 0.03, gain: 0.03 }); },
+    click() { wood(880, { gain: 0.03, dur: 0.04 }); hiss({ type: 'bandpass', freq: 2600, q: 5, dur: 0.012, gain: 0.02 }); },
     // The telescope: a soft detent click as the zoom ring passes each step, and a small motor whirr as it turns.
     scopeTick() { hiss({ type: 'bandpass', freq: 2600, q: 7, dur: 0.016, gain: 0.05 }); tone(520, { type: 'square', dur: 0.018, gain: 0.01 }); },
     scopeWhirr() { tone(170, { type: 'sawtooth', dur: 0.35, gain: 0.01, to: 260, attack: 0.04 }); hiss({ type: 'bandpass', freq: 1100, q: 3, dur: 0.35, gain: 0.018 }); },
@@ -611,7 +698,7 @@ export function createAudio(makeContext = () => new AudioContext()) {
       tone(700, { type: 'square', dur: 0.012, gain: 0.008, delay: 0.075 });
     },
     scopeIn() { hiss({ type: 'lowpass', freq: 700, dur: 0.5, gain: 0.03 }); tone(330, { type: 'sine', dur: 0.12, gain: 0.025, delay: 0.55, to: 300 }); },
-    nope() { tone(220, { type: 'triangle', dur: 0.12, gain: 0.06 }); tone(180, { type: 'triangle', dur: 0.16, gain: 0.06, delay: 0.1 }); },
+    nope() { wood(330, { gain: 0.045, dur: 0.1 }); wood(262, { gain: 0.045, delay: 0.11, dur: 0.12 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
     // ---- Things to use with E (src/world/play.js)
     // Wind chimes: a few hollow tubes, each a bright pure tone with a long tail.
@@ -641,6 +728,8 @@ export function createAudio(makeContext = () => new AudioContext()) {
     star() { tone(2400, { type: 'sine', dur: 0.9, gain: 0.012, to: 1300, attack: 0.05 }); },
   };
 
+  // The interface sounds the HUD plays itself; a plain 'ui' right after one of them is dropped (see play()).
+  const UI_OWN = new Set(['menuOpen', 'menuClose', 'menuSelect', 'menuStep', 'bagOpen', 'bagClose', 'journalOpen', 'journalClose', 'mapOpen', 'mapClose']);
   // Old sound names that now play a music cue (the story and HUD call play('rank') and play('discover')).
   const CUE_FOR = { rank: 'badge', discover: 'discover', quest: 'quest', badge: 'badge', dawn: 'dawn', evening: 'evening', title: 'title' };
 

@@ -19,6 +19,7 @@ import { createWildlife } from './actors/wildlife.js';
 import { createFollowCamera } from './camera.js';
 import { createUI } from './ui.js';
 import { createAudio } from './audio.js';
+import { createAmbience } from './ambience.js';
 import { createHUD } from './hud.js';
 import { createEffects } from './effects.js';
 import { createCrowd, blockAt, blockProgress, JOIN, nearJoinSpot } from './actors/schedule.js';
@@ -140,6 +141,7 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
+const ambience = createAmbience(audio, scene); // area sound beds, real birds singing, dawn and campfire cues
 const react = params.has('noreact') ? { colliders: [], update() {} } : createReact(scene, { props, audio, player, groundAt }); // V3: plants part, loose things roll, hanging things swing, tents ripple (?noreact: off, for measuring)
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
@@ -808,6 +810,7 @@ function step() {
   scene.fog.density = sky.fogDensity * (1 + wn * 1.6);
   audio.setRain(weather.rain, !!buildings.inside);
   audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
+  ambience.update(dt, { player, camera, timeOfDay, night, weather, inside: !!buildings.inside, paused });
   hud.setStats(vitals);
   // The torch shines from the hand, a step ahead.
   torch.position.set(player.position.x + player.facing.x * 0.38 - player.facing.z * 0.17, player.position.y + 0.82, player.position.z + player.facing.z * 0.38 + player.facing.x * 0.17);

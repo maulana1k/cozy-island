@@ -32,7 +32,7 @@ export function createStoryRuntime(io) {
   story.on((kind, d) => {
     if (['quest', 'step', 'note', 'badge', 'gear', 'chapter', 'close', 'puzzle'].includes(kind)) { dirty = true; saveSoon = 1.5; }
     if (!started) return;
-    if (kind === 'quest' && d.done && !d.quest.side) { hud.rankUp(d.quest.title, `Chapter ${d.quest.chapter} complete`); audio.play('rank'); }
+    if (kind === 'quest' && d.done && !d.quest.side) { hud.rankUp(d.quest.title, `Chapter ${d.quest.chapter} complete`); audio.play('quest'); }
     else if (kind === 'quest' && d.started) { io.say(`New quest: ${d.quest.title}`, '📜'); audio.play('discover'); }
     else if (kind === 'quest' && d.stage) io.say(d.stage.text.split('. ')[0].replace(/\.$/, ''), '🧭');
     else if (kind === 'step') { io.say(`${d.step.title}: done`, '✅'); io.cheer(4); }

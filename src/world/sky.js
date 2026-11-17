@@ -170,7 +170,7 @@ export function createSky(scene, renderer) {
       // stay still instead of crawling and shimmering as you walk or turn.
       let fx = focus ? focus.x : 0, fz = focus ? focus.z : 0;
       {
-        const texel = (2 * SHADOW_HALF) / SHADOW_TEXELS;
+        const texel = (2 * SHADOW_HALF) / sunLight.shadow.mapSize.x; // Graphics Low uses a smaller map (main.js)
         snapRight.set(dir.z, 0, -dir.x); if (snapRight.lengthSq() < 1e-6) snapRight.set(1, 0, 0); snapRight.normalize();
         snapUp.crossVectors(dir, snapRight).normalize();
         const r = Math.round((fx * snapRight.x + fz * snapRight.z) / texel) * texel, u = Math.round((fx * snapUp.x + fz * snapUp.z) / texel) * texel;

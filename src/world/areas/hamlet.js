@@ -22,6 +22,7 @@ import {
   buildStiltHouse, buildMeetingHall, buildEarthFill, buildMarketStall, buildWell, buildShadeTree, buildWashingLine, buildPathLamp, SHADE_TREE_BENCH,
 } from '../../kit/hamlet.js';
 import { buildYard, buildRetainingWall, buildStoneSteps, buildHedge, buildFenceSection, buildFlowerArch, buildHandcart, buildWaterJars, buildFirewoodStack } from '../../kit/yard.js';
+import { createWaterfront } from './waterfront.js';
 
 const VF = AREAS.villageFrame, VP = AREAS.villagePoint, TER = AREAS.terraces;
 const C = { x: AREAS.square.x, z: AREAS.square.z };   // the middle of the square
@@ -211,6 +212,10 @@ export function create(scene, deps) {
     const p = VP(ue, v); place(make(), { ...p, ry: downAt(v) + turn }, groundAt(p.x, p.z) - 0.02);
   }
   mergeStatic(village, { ao: { ground: groundAt } }); scene.add(village);
+  // ---- The fishing waterfront on the village's south shore (src/world/areas/waterfront.js): the fish market, the
+  // fishermen's yard, the boat beach and Darto's jetty. Its colliders, lanterns and paths join the village's.
+  const waterfront = createWaterfront(scene, { ...deps, groundAt, heightAt, keepClear });
+  colliders.push(...waterfront.colliders); lampSpots.push(...waterfront.lamps);
 
   // ---- The walking network: terrace walks, the steps, the ramp and the way out to the paddy ---------------
   const NODES = {}, EDGES = [];
@@ -236,6 +241,9 @@ export function create(scene, deps) {
   // Out to the farm along the painted path: from the square terrace's north end, down the spur's flank to the paddy.
   const fe = AREAS.paths.toFarmEast;
   node('f0', fe[0]); node('f1', fe[1]); node('f2', fe[2]); link(wAt(2, -18), 'f0'); link('f0', 'f1'); link('f1', 'f2');
+  // Down to the waterfront: from the ramp's foot along the top of the beach to the market, down to the sand, and
+  // from the market's east end back up to the ramp's top.
+  waterfront.network(node, link, 'r0', `r${AREAS.ramp.path.length - 1}`);
 
   // Is the straight line from a to b clear of every building, dry, and never up or down a terrace face? `skipEnd`
   // metres at the b end are not checked (a keeper steps in behind the counter, a sitter onto the bench).
@@ -346,7 +354,7 @@ export function create(scene, deps) {
   for (const l of lampSpots) {
     let g;
     if (l.n) { g = new THREE.PlaneGeometry(0.62, 0.58); g.rotateY(Math.atan2(l.n.x, l.n.z)); g.translate(l.x - l.n.x * 0.12, l.y, l.z - l.n.z * 0.12); }
-    else { g = new THREE.IcosahedronGeometry(0.15, 0); g.translate(l.x, l.y, l.z); }
+    else { g = new THREE.IcosahedronGeometry(l.r || 0.15, 0); g.translate(l.x, l.y, l.z); }
     g = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k);
     glowGeos.push(g);
   }
@@ -380,11 +388,11 @@ export function create(scene, deps) {
   let shown = true, first = true;
 
   return {
-    lamps: halos.map((l) => ({ x: l.x, y: l.y - 0.1, z: l.z })), // lit by the shared lamp lights at night
+    lamps: halos.filter((l) => l.light !== false).map((l) => ({ x: l.x, y: l.y - 0.1, z: l.z })), // lit by the shared lamp lights at night (the market's stall lanterns only glow)
     interactables,
     colliders() { people.forEach((p, i) => { circles[i].x = p.x; circles[i].z = p.z; circles[i].r = p.hidden || !shown ? 0 : 0.3; }); return colliders.concat(circles); },
     // For checks from the console (window.__game.areas): the layout, the people and the walking network.
-    debug: { people, colliders, homes, keepers, customers, seats, chat, farm, play, wellSpot, washSpot, NODES, EDGES, platforms, clear, route, decide, phaseOf },
+    debug: { people, colliders, homes, keepers, customers, seats, chat, farm, play, wellSpot, washSpot, NODES, EDGES, platforms, clear, route, decide, phaseOf, waterfront: waterfront.debug },
     update(dt, elapsed, player, night) {
       const px = player.position.x, pz = player.position.z;
       shown = Math.hypot(px - C.x, pz - C.z) < SHOW_WITHIN;
@@ -392,6 +400,7 @@ export function create(scene, deps) {
       // only the people need hiding at range.
       const seen = Math.hypot(px - C.x, pz - C.z) < BUILDINGS_WITHIN;
       village.visible = seen; glow.visible = halo.visible = seen && night > 0.3;
+      waterfront.update(dt, elapsed, player, night);
       const t = deps.dayTime();
       if (first) for (const p of people) p.phase = null;
       for (const p of people) {

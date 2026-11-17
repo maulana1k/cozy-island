@@ -20,7 +20,7 @@ export function goldenHour(t) {
 function haloTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  r.addColorStop(0, 'rgba(255,236,200,0.9)'); r.addColorStop(0.18, 'rgba(255,214,160,0.45)'); r.addColorStop(0.5, 'rgba(255,180,120,0.12)'); r.addColorStop(1, 'rgba(255,160,110,0)');
+  r.addColorStop(0, 'rgba(255,255,250,1)'); r.addColorStop(0.09, 'rgba(255,252,240,0.95)'); r.addColorStop(0.2, 'rgba(255,240,215,0.45)'); r.addColorStop(0.45, 'rgba(255,220,180,0.12)'); r.addColorStop(1, 'rgba(255,200,150,0)');
   g.fillStyle = r; g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
@@ -56,10 +56,10 @@ export function createSunFx(scene) {
       const near = ok ? smooth(-e, -1.7, -0.95) : 0, inView = ok ? smooth(-e, -1.12, -0.8) : 0;
       const c = skyColors(t);
       const low = 1 - smooth(s.y, 0.1, 0.26); // 1 from about 15 degrees down to the horizon
-      // The sky's disc (High): fades out as the sun climbs (the core takes over), deepens to orange and flattens a
-      // little as it sets. Graphics: Low keeps sky.js's own disc.
+      // The sky's disc (High and Low): fades out as the sun climbs (the core takes over), deepens to orange and flattens a
+      // little as it sets. On Low a sprite takes the core's place.
       if (!disc) disc = scene.getObjectByName('sunDisc') || null;
-      if (disc && high && !moon) {
+      if (disc && !moon) {
         const set = 1 - smooth(s.y, 0.0, 0.08);
         disc.material.opacity *= Math.sqrt(low);
         disc.material.blendAlpha *= 1 - 0.75 * low; // less bloom, so the low disc keeps a readable edge
@@ -67,13 +67,14 @@ export function createSunFx(scene) {
         disc.scale.set(1, 1 - 0.14 * set, 1);
       } else if (disc) disc.scale.set(1, 1, 1);
 
-      // Graphics: Low: the sprite halo only.
+      // Graphics: Low: one additive sprite: a white-hot core that blooms out at high sun (where the disc is gone),
+      // a smaller warm halo round the visible disc at low sun.
       sprite.visible = !high && up * clear > 0.02;
       if (sprite.visible) {
         sprite.position.copy(sunPos);
-        sprite.material.color.setHex(c.sun);
-        sprite.material.opacity = up * clear * (0.35 + 0.65 * gold);
-        sprite.scale.setScalar(260 + 160 * gold);
+        sprite.material.color.setHex(c.sun).lerp(tmp.setRGB(1, 1, 1), 0.6 * (1 - low));
+        sprite.material.opacity = up * clear * (1 - 0.6 * low);
+        sprite.scale.setScalar(700 - 360 * low);
       }
 
       pack.dt = dt; pack.fresh = !wasOn;

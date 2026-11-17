@@ -1,6 +1,7 @@
 // Small helpers shared by the things built from simple shapes.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { bakeAO, aoGrid } from './ao.js';
 
 export const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
@@ -78,8 +79,32 @@ const asMat = (m) => (typeof m === 'number' ? shared(m) : m);
 // Nothing hand-built is perfectly square. A steady pseudo-random number from where a thing stands,
 // so each crate, plank and pole is a little off true, and the same every time the game starts.
 const off = (x, y, z, k) => { const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + k * 4.137) * 43758.5453; return (v - Math.floor(v)) * 2 - 1; };
+// A box with its 12 edges chipped off at 45 degrees (The Trail's props never have razor corners): 44
+// triangles instead of 12, flat faces, UVs projected per face like BoxGeometry's so textures still fit.
+// Cached per size. Only used for chunky things (see box()); thin planks and big slabs stay plain boxes.
+const chipCache = new Map();
+export function chippedBox(w, h, d, c) {
+  const key = `${w.toFixed(3)},${h.toFixed(3)},${d.toFixed(3)},${c.toFixed(3)}`;
+  if (chipCache.has(key)) return chipCache.get(key);
+  const pts = [], X = w / 2, Y = h / 2, Z = d / 2;
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    pts.push(new THREE.Vector3(sx * (X - c), sy * (Y - c), sz * Z), new THREE.Vector3(sx * (X - c), sy * Y, sz * (Z - c)), new THREE.Vector3(sx * X, sy * (Y - c), sz * (Z - c)));
+  }
+  const g = new ConvexGeometry(pts), pos = g.attributes.position, nor = g.attributes.normal, uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(nor.getX(i)), ay = Math.abs(nor.getY(i)), az = Math.abs(nor.getZ(i)), px = pos.getX(i) / w + 0.5, py = pos.getY(i) / h + 0.5, pz = pos.getZ(i) / d + 0.5;
+    const [u, v] = ax >= ay && ax >= az ? [pz, py] : ay >= az ? [px, pz] : [px, py];
+    uv[i * 2] = u; uv[i * 2 + 1] = v;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  chipCache.set(key, g);
+  return g;
+}
 export function box(w, h, d, m, x = 0, y = 0, z = 0, ry = 0) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), asMat(m));
+  const small0 = Math.min(w, h, d), big0 = Math.max(w, h, d);
+  // Chunky props (crates, posts, benches, blocks) get chipped edges; thin boards and large slabs do not.
+  const geo = small0 >= 0.07 && big0 <= 3.2 ? chippedBox(w, h, d, Math.min(0.045, small0 * 0.14)) : new THREE.BoxGeometry(w, h, d);
+  const mesh = new THREE.Mesh(geo, asMat(m));
   mesh.position.set(x, y, z); mesh.rotation.y = ry; mesh.castShadow = true; mesh.receiveShadow = true;
   // Small loose things (crates, planks, shelves) sit slightly askew and are not all one size.
   const big = Math.max(w, h, d), small = Math.min(w, h, d);

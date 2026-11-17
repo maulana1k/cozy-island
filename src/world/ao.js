@@ -8,6 +8,8 @@
 //   across a face, so a tall wall gets a crisp dark foot, not a gradient over its whole height). The
 //   darkening also leans a little more saturated, so it reads as painted shade, never grey dirt.
 //   A geometry without the attribute reads the attribute's default, whose w is always 1: no change.
+//   The crease shade also carries a soft top-to-bottom gradient over the first AO.gradH metres (Alba's
+//   gradient-painted walls): lighter at the top, a little darker and cooler toward the foot.
 // - Glow: an opaque lit material writes how brightly it glows (its emitted light past a floor) into the
 //   picture's alpha, as 1 + glow. Only the finishing pass reads it; the screen ignores alpha.
 //
@@ -20,6 +22,9 @@ export const AO = {
   crease: 0.42,   // how dark a fully enclosed crease is
   under: 0.16,    // extra shade on faces looking straight down (eaves, plank undersides)
   sat: 0.55,      // how much more saturated the shaded part gets
+  grad: 0.15,     // big surfaces: how much darker the foot is than the top (a soft top-to-bottom gradient)
+  gradH: 2.6,     // metres above the ground over which that gradient runs (higher up is untouched)
+  cool: 0.35,     // how far the shade leans cool (teal) as it darkens, so it reads as shade, not dirt
 };
 const GLOW_FLOOR = 0.35, GLOW_GAIN = 0.9; // emitted light (luminance) below the floor does not glow
 
@@ -36,7 +41,7 @@ const FRAG = /* glsl */`#include <color_fragment>
 	if ( aoOn > 0.001 ) {
 		float aoK = clamp( vBakeAO.x, 0.0, 1.0 ) * ( 1.0 - vBakeAO.z * ( 1.0 - smoothstep( 0.0, 1.0, vBakeAO.y ) ) );
 		aoK = mix( 1.0, aoK, aoOn );
-		vec3 aoC = diffuseColor.rgb * aoK;
+		vec3 aoC = diffuseColor.rgb * aoK * mix( vec3( 1.0 ), vec3( 0.9, 1.0, 1.08 ), ( 1.0 - aoK ) * ${(AO.cool * 2).toFixed(2)} );
 		float aoL = dot( aoC, vec3( 0.2126, 0.7152, 0.0722 ) );
 		diffuseColor.rgb = max( mix( vec3( aoL ), aoC, 1.0 + ( 1.0 - aoK ) * ${AO.sat.toFixed(2)} ), 0.0 );
 	}
@@ -69,6 +74,7 @@ export function bakeAO(geo, opts = {}) {
   if (!geo.attributes.normal) geo.computeVertexNormals();
   const nor = geo.attributes.normal, n = pos.count;
   const fade = opts.fade ?? AO.fade, strength = opts.strength ?? AO.ground, crease = opts.crease ?? AO.crease, under = opts.under ?? AO.under;
+  const grad = opts.grad ?? AO.grad, gradH = opts.gradH ?? AO.gradH;
   const ground = opts.ground === undefined ? 0 : opts.ground;
   const out = new Float32Array(n * 4);
   const w = new THREE.Vector3(), m = opts.matrix || null;
@@ -85,10 +91,12 @@ export function bakeAO(geo, opts = {}) {
     if (ny < 0) shade *= 1 - under * Math.min(1, -ny);
     if (occ) shade *= 1 - crease * occ[i];
     let h = 1e3, k = 0;
-    // Faces looking up (a path, a deck, a tent floor) lie on the ground themselves: no ground band on them.
-    if (ground !== null && ny < 0.85) {
+    if (ground !== null) {
       if (typeof ground === 'function') { w.set(x, y, z); if (m) w.applyMatrix4(m); h = w.y - ground(w.x, w.z); } else h = y - ground;
-      k = strength * (1 - THREE.MathUtils.smoothstep(ny, 0.45, 0.85));
+      // The soft gradient on walls, trunks, rocks and tents (per vertex, so it spans a whole face).
+      if (grad > 0) shade *= 1 - grad * (1 - THREE.MathUtils.smoothstep(h, 0, gradH)) * (1 - THREE.MathUtils.smoothstep(ny, 0.6, 0.95)); // not on floors and decks
+      // Faces looking up (a path, a deck, a tent floor) lie on the ground themselves: no ground band on them.
+      if (ny < 0.85) k = strength * (1 - THREE.MathUtils.smoothstep(ny, 0.45, 0.85)); else h = 1e3;
     }
     out[i * 4] = shade; out[i * 4 + 1] = Math.max(-1, h / fade); out[i * 4 + 2] = k; out[i * 4 + 3] = 0;
   }

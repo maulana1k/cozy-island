@@ -20,6 +20,8 @@ export const ITEMS = {
   friedEgg: { name: 'Campfire egg', icon: '🍳', kind: 'food', stack: 6, eat: { food: 26, energy: 8 }, desc: 'Cooked on a hot stone.' },
   marshmallow: { name: 'Marshmallow', icon: '🍬', kind: 'food', stack: 8, eat: { food: 5, cheer: 3 }, cook: 'toasted', desc: 'Fine as it is. Glorious toasted.' },
   toasted: { name: 'Toasted marshmallow', icon: '🍡', kind: 'food', stack: 8, eat: { food: 9, cheer: 14 }, desc: 'Golden outside, gooey inside.' },
+  fish: { name: 'Fresh fish', icon: '🐟', kind: 'food', stack: 4, cook: 'grilledFish', desc: 'Caught off the fishing dock. Cook it over a fire.' },
+  grilledFish: { name: 'Grilled fish', icon: '🍢', kind: 'food', stack: 4, eat: { food: 34, cheer: 6 }, desc: 'Crispy skin, flaky inside. You caught this yourself!' },
   // ---- Useful things
   bandage: { name: 'Bandage', icon: '🩹', kind: 'kit', stack: 3, use: 'bandage', verb: 'Patch up', desc: 'For scraped knees. Puts a spring back in your step.' },
   stick: { name: 'Firewood', icon: '🪵', kind: 'find', stack: 8, use: 'stoke', verb: 'Feed fire', desc: 'Dry sticks from the jungle floor. A campfire loves them.' },
@@ -27,6 +29,8 @@ export const ITEMS = {
   // ---- Keepsakes
   shell: { name: 'Seashell', icon: '🐚', kind: 'find', stack: 12, use: 'keepsake', verb: 'Listen', say: 'You can hear the sea in it.', desc: 'Washed up on the beach.' },
   flower: { name: 'Wild flower', icon: '🌼', kind: 'find', stack: 12, use: 'keepsake', verb: 'Smell', say: 'It smells of summer.', desc: 'Picked on the meadow.' },
+  mug: { name: 'Tin mug', icon: '☕', kind: 'find', stack: 2, use: 'keepsake', verb: 'Look', say: 'A dented tin camp mug. Perfect for cocoa.', desc: 'Found in a crate. Someone will be glad of it.' },
+  rope: { name: 'Coil of rope', icon: '🪢', kind: 'find', stack: 2, use: 'keepsake', verb: 'Tie a knot', say: 'You tie a neat bowline. Right first time!', desc: 'Good scout rope from a crate.' },
   feather: { name: 'Feather', icon: '🪶', kind: 'find', stack: 12, use: 'keepsake', verb: 'Tickle', say: 'Ha! That tickles.', desc: 'Light as air. Lost by a bird.' },
 };
 

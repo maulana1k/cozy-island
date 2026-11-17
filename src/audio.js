@@ -573,6 +573,32 @@ export function createAudio(makeContext = () => new AudioContext()) {
     scopeIn() { hiss({ type: 'lowpass', freq: 700, dur: 0.5, gain: 0.03 }); tone(330, { type: 'sine', dur: 0.12, gain: 0.025, delay: 0.55, to: 300 }); },
     nope() { tone(220, { type: 'triangle', dur: 0.12, gain: 0.06 }); tone(180, { type: 'triangle', dur: 0.16, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },
+    // ---- Things to use with E (src/world/play.js)
+    // Wind chimes: a few hollow tubes, each a bright pure tone with a long tail.
+    chime() { const n = [C5 * 2, D5 * 2, E5 * 2, G5 * 2, A5 * 2]; for (let i = 0; i < 4; i++) { const f = n[Math.random() * n.length | 0]; tone(f, { type: 'sine', dur: 2.2, gain: 0.035, delay: i * 0.13 + Math.random() * 0.08, attack: 0.003 }); tone(f * 2.76, { type: 'sine', dur: 0.8, gain: 0.008, delay: i * 0.13, attack: 0.003 }); } },
+    chimeSoft() { const n = [C5 * 2, E5 * 2, G5 * 2]; tone(n[Math.random() * 3 | 0], { type: 'sine', dur: 1.8, gain: 0.014, attack: 0.003 }); },
+    // The guard tower siren: two slow wails up and down.
+    siren() { for (let k = 0; k < 2; k++) { tone(320, { type: 'sawtooth', dur: 0.9, gain: 0.02, to: 760, delay: k * 1.7, attack: 0.25 }); tone(760, { type: 'sawtooth', dur: 0.8, gain: 0.02, to: 330, delay: k * 1.7 + 0.9, attack: 0.02 }); tone(322, { type: 'triangle', dur: 0.9, gain: 0.04, to: 765, delay: k * 1.7, attack: 0.25 }); tone(765, { type: 'triangle', dur: 0.8, gain: 0.04, to: 332, delay: k * 1.7 + 0.9, attack: 0.02 }); } },
+    // A wooden lid or a rope creaking.
+    creak() { tone(150, { type: 'sawtooth', dur: 0.45, gain: 0.02, to: 230, attack: 0.05 }); tone(310, { type: 'sawtooth', dur: 0.3, gain: 0.012, to: 260, delay: 0.15, attack: 0.04 }); hiss({ freq: 900, q: 4, dur: 0.4, gain: 0.02 }); },
+    thud() { tone(120, { type: 'sine', dur: 0.14, gain: 0.12, to: 70 }); hiss({ type: 'lowpass', freq: 600, dur: 0.06, gain: 0.04 }); },
+    // Water filling a flask: bubbles climbing in pitch as it fills.
+    glug() { for (let i = 0; i < 6; i++) tone(170 + i * 45, { type: 'sine', dur: 0.1, gain: 0.08, delay: i * 0.15, to: 260 + i * 50 }); hiss({ freq: 1600, q: 0.5, dur: 1.0, gain: 0.03 }); },
+    // Fresh wood on a fire: pops and crackles.
+    crackle() { for (let i = 0; i < 7; i++) hiss({ type: 'highpass', freq: 2500 + Math.random() * 2500, q: 0.7, dur: 0.03 + Math.random() * 0.04, gain: 0.05 + Math.random() * 0.04, delay: Math.random() * 0.9 }); hiss({ type: 'lowpass', freq: 500, dur: 0.6, gain: 0.06 }); },
+    // A stone skipping off the water, and a stone sinking.
+    plink() { tone(1100 + Math.random() * 300, { type: 'sine', dur: 0.08, gain: 0.05, to: 650 }); hiss({ freq: 2200, q: 0.8, dur: 0.08, gain: 0.035 }); },
+    plop() { tone(420, { type: 'sine', dur: 0.16, gain: 0.08, to: 180 }); hiss({ freq: 1200, q: 0.6, dur: 0.18, gain: 0.04 }); },
+    // Jumping into the water.
+    bigSplash() { hiss({ type: 'lowpass', freq: 1400, dur: 0.7, gain: 0.12 }); hiss({ freq: 2600, q: 0.5, dur: 0.4, gain: 0.05, delay: 0.05 }); tone(160, { type: 'sine', dur: 0.3, gain: 0.08, to: 70 }); },
+    whoosh() { hiss({ freq: 700, q: 0.7, dur: 0.5, gain: 0.03 }); },
+    // Fishing: the cast, a bite on the bobber, the reel clicking in.
+    cast() { hiss({ type: 'highpass', freq: 2600, dur: 0.35, gain: 0.025 }); tone(900, { type: 'sine', dur: 0.3, gain: 0.015, to: 1400 }); },
+    bite() { tone(760, { type: 'sine', dur: 0.09, gain: 0.07, to: 420 }); tone(700, { type: 'sine', dur: 0.09, gain: 0.06, delay: 0.14, to: 380 }); hiss({ freq: 1500, q: 0.6, dur: 0.12, gain: 0.04 }); },
+    reel() { for (let i = 0; i < 10; i++) hiss({ type: 'bandpass', freq: 3200, q: 6, dur: 0.02, gain: 0.05, delay: i * 0.07 }); },
+    quack() { for (let i = 0; i < 2; i++) { tone(430, { type: 'sawtooth', dur: 0.13, gain: 0.03, to: 330, delay: i * 0.2 }); tone(860, { type: 'square', dur: 0.1, gain: 0.008, to: 600, delay: i * 0.2 }); } },
+    // A shooting star: a faint high glissando.
+    star() { tone(2400, { type: 'sine', dur: 0.9, gain: 0.012, to: 1300, attack: 0.05 }); },
   };
 
   // Old sound names that now play a music cue (the story and HUD call play('rank') and play('discover')).

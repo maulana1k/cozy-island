@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WIND } from './weather.js';
 import { createFlames } from './flames.js';
 import { emitSparks, emitSmoke } from './particles.js';
-import { createShadowProxies } from './shadowProxy.js';
+import { createShadowProxies, ownFixture } from './shadowProxy.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -20,6 +20,7 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
 const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
+const LAMP_FIXTURE = 7; // a layer: the shadowing lamp's own post/arm/lantern. Fires' cubes draw it; that lamp's cube does not
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
 export const SUN_PROXIES = 6; // a layer: welded still casters (src/world/shadowProxy.js) the sun's shadow camera also draws
 
@@ -294,7 +295,7 @@ export function createProps(scene, deps) {
       light.shadow.camera.near = 0.6;
       light.shadow.autoUpdate = false; light.shadow.needsUpdate = false;
       light.shadow.intensity = 1;
-      light.shadow.camera.layers.set(NEAR_CASTERS); // only what stands close to the fire is drawn into its cube
+      light.shadow.camera.layers.set(NEAR_CASTERS); light.shadow.camera.layers.enable(LAMP_FIXTURE); // only what stands close to the fire is drawn into its cube (a lamp's own fixture too: it must shade from the fire)
       shadowFires.push({ light, x: f.x, y, z: f.z });
     }
     g.position.set(f.x, y - 0.02, f.z);
@@ -363,7 +364,7 @@ export function createProps(scene, deps) {
   // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.
   // Still casters near the player are welded into a few shadow-only meshes (src/world/shadowProxy.js,
   // already on this layer), so the cubes draw those plus the people, and can be redrawn every picture.
-  const _c = new THREE.Vector3(); let casterScan = 0;
+  const _c = new THREE.Vector3(); let casterScan = 0, lastL0 = null;
   const proxies = createShadowProxies(scene, { cubeLayer: NEAR_CASTERS, sunLayer: SUN_PROXIES });
   proxies.onFree = (o) => o.layers.enable(NEAR_CASTERS); // drawn live at once; the next scan sorts near from far
   function markNearCasters(centres) {
@@ -375,7 +376,9 @@ export function createProps(scene, deps) {
       const r = bs.radius * o.matrixWorld.getMaxScaleOnAxis();
       let near = false;
       if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) { near = true; break; }
-      if (near) o.layers.enable(NEAR_CASTERS); else o.layers.disable(NEAR_CASTERS);
+      if (!near) { o.layers.disable(NEAR_CASTERS); o.layers.disable(LAMP_FIXTURE); }
+      else if (ownFixture(o, _c.x, _c.y, _c.z, r, centres)) { o.layers.enable(LAMP_FIXTURE); o.layers.disable(NEAR_CASTERS); } // the lamp's cube never sees its own fixture
+      else { o.layers.enable(NEAR_CASTERS); o.layers.disable(LAMP_FIXTURE); }
     });
   }
   const casterCentres = [];
@@ -424,13 +427,14 @@ export function createProps(scene, deps) {
       { // the first lamp light's shadow: redrawn every picture, so it keeps step with the people
         const l0 = dark > 0.3 ? byDistance[0] : null;
         if (l0) lampLights[0].shadow.needsUpdate = true;
+        if (l0 !== lastL0) { lastL0 = l0; casterScan = 0; } // another lamp took over the shadow: re-sort its fixture at once
         casterScan -= dt;
         if (casterScan <= 0) {
           casterScan = 0.25; casterCentres.length = 0;
           for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14 });
-          if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9 });
+          if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9, light: l0.pos });
+          proxies.scan(pp.x, pp.z, casterCentres); // first: it may hand casters back onto the cube layer
           if (casterCentres.length) markNearCasters(casterCentres);
-          proxies.scan(pp.x, pp.z, casterCentres);
         }
         proxies.check(); // a welded caster that moved or hid casts live again from this picture
       }

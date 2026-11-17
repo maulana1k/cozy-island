@@ -28,6 +28,16 @@ export function weldable(o) {
   return !onBone(o);
 }
 
+// Is this caster a lamp's own fixture (post, arm, lantern housing)? A small, non-skinned thing whose bounding
+// sphere encloses the light. A real lantern is a glowing area source a few tens of cm wide, so its own post
+// leaves only a faint soft penumbra; a point light would cast an endless hard wedge, so the lamp's cube must
+// not draw it. centres: entries with `light` (a Vector3) are the shadowing lamps. _v: the caster's world centre.
+export function ownFixture(o, cx, cy, cz, r, centres) {
+  if (r >= 1.6 || o.isSkinnedMesh || onBone(o)) return false;
+  for (const c of centres) if (c.light && (cx - c.light.x) ** 2 + (cy - c.light.y) ** 2 + (cz - c.light.z) ** 2 < (r + 0.1) ** 2) return true;
+  return false;
+}
+
 export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
   const root = new THREE.Group();
   root.name = 'shadowProxies'; root.matrixAutoUpdate = false; root.userData.shadowProxy = true;
@@ -122,6 +132,8 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
         const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
         _v.copy(g.boundingSphere.center).applyMatrix4(o.matrixWorld);
         const d2 = (_v.x - px) ** 2 + (_v.z - pz) ** 2;
+        const rw = g.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis();
+        if (centres.length && ownFixture(o, _v.x, _v.y, _v.z, rw, centres)) { if (welded) unweld(o); return; } // stays a live caster; the lamp's own cube skips it
         if (welded) {
           if (d2 > LET_GO * LET_GO) { unweld(o); return; }
           const st = cells.get(where.get(o)).members.get(o), near = isNear(g.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis(), centres);

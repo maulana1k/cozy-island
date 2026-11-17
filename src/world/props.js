@@ -4,6 +4,7 @@ import { heightAt } from '../logic/terrain.js';
 import { COTTAGES, LANTERNS, BELL, SEATS, CAMPFIRES, FLAGPOLE, SUMMIT } from '../logic/layout.js';
 import { PALETTE } from '../config.js';
 import { mergeStatic } from './build.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WIND } from './weather.js';
 import { createFlames } from './flames.js';
 import { emitSparks, emitSmoke } from './particles.js';
@@ -33,6 +34,7 @@ export function createProps(scene, deps) {
   const wood = flat(PALETTE.wood), woodDark = flat(PALETTE.woodDark), stone = flat(PALETTE.stone);
   const interactables = [];
   const updaters = [];
+  const hangers = []; // things hanging free that swing in the wind and when brushed (driven by src/world/react.js)
   const bellListeners = [];
   let flagState = null;
 
@@ -58,13 +60,17 @@ export function createProps(scene, deps) {
     g.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.9, 6), woodDark, 0, 0.95, 0));
     g.add(mesh(new THREE.BoxGeometry(0.5, 0.07, 0.07), woodDark, 0.2, 1.86, 0));
     const glassMat = new THREE.MeshStandardMaterial({ color: 0xfff1cf, emissive: PALETTE.lantern, emissiveIntensity: 0, roughness: 0.5 });
-    g.add(mesh(new THREE.BoxGeometry(0.24, 0.3, 0.24), glassMat, 0.4, 1.62, 0, false));
-    g.add(mesh(new THREE.ConeGeometry(0.22, 0.14, 4), woodDark, 0.4, 1.84, 0));
-    g.add(mesh(new THREE.BoxGeometry(0.28, 0.04, 0.28), woodDark, 0.4, 1.46, 0));
+    // The lamp hangs from a hook at the arm's end and can swing (src/world/react.js): glass, cap, base and hook in one pivot.
+    const hang = new THREE.Group(); hang.position.set(0.4, 1.86, 0);
+    const cap = new THREE.ConeGeometry(0.22, 0.14, 4).translate(0, -0.06, 0), base = new THREE.BoxGeometry(0.28, 0.04, 0.28).translate(0, -0.4, 0), hook = new THREE.CylinderGeometry(0.012, 0.012, 0.08, 4).translate(0, 0.0, 0);
+    hang.add(mesh(mergeGeometries([cap.toNonIndexed(), base.toNonIndexed(), hook.toNonIndexed()]), woodDark));
+    hang.add(mesh(new THREE.BoxGeometry(0.24, 0.3, 0.24), glassMat, 0, -0.24, 0, false));
     g.position.set(l.x, y, l.z);
     g.rotation.y = (l.x * 1.7 + l.z) % 6.28;
-    mergeStatic(g, { ao: true }); // post, arm, cap and base weld into one draw; the glass keeps its own (glowing) material
+    mergeStatic(g, { ao: true }); // post and arm weld into one draw; the hanging lamp stays out of the weld
+    g.add(hang);
     group.add(g);
+    hangers.push({ node: hang, x: l.x, z: l.z, len: 0.3, kind: 'lantern' });
     const lantern = { on: false, glow: 0, flicker: 1, pos: new THREE.Vector3(0.4, 1.6, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y).add(g.position) };
     lantern.set = (on) => { lantern.on = on; };
     interactables.push({
@@ -94,6 +100,10 @@ export function createProps(scene, deps) {
     pivot.add(mesh(new THREE.CylinderGeometry(0.13, 0.36, 0.5, 12), brass, 0, -0.52, 0));
     pivot.add(mesh(new THREE.SphereGeometry(0.15, 10, 8), brass, 0, -0.3, 0));
     pivot.add(mesh(new THREE.SphereGeometry(0.07, 8, 8), woodDark, 0, -0.82, 0));
+    // A pull rope hanging from the clapper, swinging on its own (src/world/react.js).
+    const rope = new THREE.Group(); rope.position.y = -0.86;
+    rope.add(mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.85, 5).translate(0, -0.425, 0), flat(0xe9dcc0)), mesh(new THREE.SphereGeometry(0.045, 6, 5).translate(0, -0.87, 0), flat(0xe9dcc0)));
+    pivot.add(rope);
     g.add(pivot);
     g.position.set(BELL.x, y, BELL.z);
     group.add(g);
@@ -101,8 +111,10 @@ export function createProps(scene, deps) {
     interactables.push({
       id: 'bell', kind: 'bell', position: { x: BELL.x, z: BELL.z }, markerY: y + 3.1,
       prompt: () => 'E — ring bell',
-      interact() { rung = 0; audio.play('bell'); bellListeners.forEach((cb) => cb({ x: BELL.x, z: BELL.z })); },
+      interact() { rung = 0; audio.play('bell'); bellRope.kick = 2.2; bellListeners.forEach((cb) => cb({ x: BELL.x, z: BELL.z })); },
     });
+    const bellRope = { node: rope, x: BELL.x, z: BELL.z, len: 0.9, kind: 'rope', kick: 0 };
+    hangers.push(bellRope);
     updaters.push((dt) => {
       rung += dt;
       pivot.rotation.z = rung < 1.5 ? Math.sin(rung * 10) * 0.55 * Math.exp(-rung * 2.2) : 0;
@@ -371,6 +383,7 @@ export function createProps(scene, deps) {
   const glowList = { lanterns, outside, fires, gloom: 0 };
   return {
     interactables,
+    hangers,
     onBell(cb) { bellListeners.push(cb); },
     // Lamps placed by other areas: [{ x, y, z }] in world space. They light up after dusk on their own.
     addLamps(points) { for (const p of points) outside.push({ pos: new THREE.Vector3(p.x, p.y, p.z), glow: 0, flicker: 1 }); },

@@ -233,10 +233,37 @@ export function create(scene, deps) {
     }
   }
 
+  // With a bread roll in the backpack you throw a few crumbs instead: the group swims over and nibbles.
+  const hasBread = () => !!(deps.has && deps.has('bread'));
+  function feed(gi, player) {
+    let near = null, bd = Infinity;
+    for (const d of duckGroups[gi]) { const dd = dist2(d.x, d.z, player.position.x, player.position.z); if (dd < bd) { bd = dd; near = d; } }
+    if (!near) return;
+    // Where the crumbs land: on the water on your side, level with the nearest duck.
+    const pr = riverAt(player.position.x, player.position.z), side = pr && pr.d !== Infinity ? Math.sign((player.position.x - at(near.s).cx) * at(near.s).nx + (player.position.z - at(near.s).cz) * at(near.s).nz) || 1 : 1;
+    const s = clamp(near.s, LO, HI), w = at(s).w, crumbs = { s, e: side * 0.55 * w }, p = at(crumbs.s, crumbs.e);
+    deps.player.gesture?.('throw', 0.9, p);
+    deps.later?.(0.45, () => {
+      const y = waterWave(p.x, p.z, deps.now ? deps.now() : 0);
+      deps.effects?.puff(p.x, y, p.z, 6, 0xe8c48a, 0.5, 0.5); deps.effects?.ripple(p.x, p.z, 0.6, 0, y + 0.03); deps.effects?.ripple(p.x, p.z, 0.9, 0.2, y + 0.03);
+      deps.audio?.play('splash');
+    });
+    duckGroups[gi].forEach((d, k) => {
+      if (d.land) { d.state = 'toWater'; d.target = { s: d.s, e: Math.sign(d.e || 1) * 0.4 * at(d.s).w }; d.speed = 1.2; d.queue = []; }
+      else d.state = 'feed';
+      const a = (k / duckGroups[gi].length) * Math.PI * 2;
+      d.feedAt = { s: crumbs.s + Math.cos(a) * 0.45, e: crumbs.e - side * 0.25 + Math.sin(a) * 0.35 }; if (d.state === 'feed') { d.target = d.feedAt; d.speed = 1.1; }
+      d.cool = 14;
+    });
+    deps.later?.(0.8, () => deps.audio?.play('quack'));
+  }
   const interactables = HOMES.map((h, gi) => ({
     id: `ducks-${gi}`, kind: 'ducks', position: { x: 0, z: 0 }, markerY: 0.8, enabled: false,
-    prompt: () => 'E — shoo ducks',
-    interact() { deps.player.gesture?.('shoo', 0.9, ducks.find((d) => d.gi === gi)); scatter(gi, deps.player.position); deps.say?.('Quack! Quack!', '🦆'); },
+    prompt: () => (hasBread() ? 'E — throw bread to the ducks' : 'E — shoo ducks'),
+    interact() {
+      if (hasBread() && deps.take && deps.take('bread')) { feed(gi, deps.player); deps.say?.('Just a few crumbs: too much bread is bad for ducks.', '🦆'); deps.fed?.(); return; }
+      deps.player.gesture?.('shoo', 0.9, ducks.find((d) => d.gi === gi)); scatter(gi, deps.player.position); deps.say?.('Quack! Quack!', '🦆');
+    },
   }));
 
   function stepDuck(d, dt, elapsed, player, night, dp) {
@@ -276,7 +303,9 @@ export function create(scene, deps) {
         d.calm = dp > 9 ? d.calm + dt : 0;
         if (d.calm > 4 && d.t <= 0) { d.state = 'toWater'; d.target = { s: d.s, e: Math.sign(d.e || 1) * 0.4 * at(d.s).w }; d.speed = 0.9; }
         break;
-      case 'toWater': if (goTo(d.speed)) { d.state = 'swim'; d.target = pickWater(d.gi); d.speed = 0.4; } break;
+      case 'toWater': if (goTo(d.speed)) { if (d.feedAt && d.cool > 4) { d.state = 'feed'; d.target = d.feedAt; d.speed = 1.1; } else { d.state = 'swim'; d.target = pickWater(d.gi); d.speed = 0.4; } } break;
+      // Paddling over to the crumbs, then nibbling them up (dabbling) for a while.
+      case 'feed': if (goTo(d.speed)) { d.state = 'dabble'; d.t = 5 + rnd() * 3; d.feedAt = null; if (rnd() < 0.5) deps.audio?.play('quack'); } break;
     }
     // A little push apart so a group does not stack up on one spot.
     for (const o of duckGroups[d.gi]) { if (o === d) continue; const dx = d.s - o.s, de = d.e - o.e, dd = Math.hypot(dx, de); if (dd < 0.55 && dd > 0.001 && d.state !== 'ashore') { d.s += (dx / dd) * dt * 0.4; d.e += (de / dd) * dt * 0.4; } }

@@ -125,6 +125,8 @@ function buildTower() {
   // The lifeguard's high chair at the front window
   P.push(piece(box(0.6, 0.06, 0.5), 0x3f4f6a, 0, FY + 0.6, F - 0.75), piece(box(0.6, 0.7, 0.06), 0x3f4f6a, 0, FY + 0.95, F - 1.02, -0.12, 0, 0));
   for (const sx of [-0.26, 0.26]) for (const dz of [-0.2, 0.2]) P.push(piece(cyl(0.025, 0.55, 6), STEEL, sx, FY + 0.32, F - 0.75 + dz));
+  // The siren's switch box on the back wall inside the cabin (E, by day: src/world/play.js lists it in V4)
+  P.push(piece(box(0.2, 0.28, 0.08), RED, 1.25, FY + 1.15, -F + 0.12), piece(box(0.06, 0.12, 0.05), 0xf2c94c, 1.25, FY + 1.17, -F + 0.18));
   // Rescue buoy on the front wall
   P.push(piece(new THREE.TorusGeometry(0.24, 0.075, 6, 14), 0xf26a3a, 1.3, FY + 0.62, F + 0.06));
   // ---- The roof, apart (one mesh of its own)
@@ -227,6 +229,7 @@ export function create(scene, deps) {
     }
   }
 
+  let sirenAt = 0;
   const interactables = [
     { id: 'guard-ladder', kind: 'ladder', position: foot, markerY: y0 + 2.0, get enabled() { return climb.phase === 'ground'; }, prompt: () => 'E — climb the guard tower', interact() { startUp(deps.player); } },
     { id: 'guard-hatch', kind: 'ladder', position: hatch, get markerY() { return deckTop + 0.5; }, get enabled() { return climb.phase === 'up'; }, prompt: () => 'E — climb down', interact() { startDown(deps.player); } },
@@ -239,6 +242,16 @@ export function create(scene, deps) {
         deps.player.position.set(stand.x, deckTop, stand.z);
         deps.scope.open({ x: eye.x, y: deckTop + 1.22, z: eye.z }, face, -0.2); // tipped down a little, at the camp
         if (deps.discover) deps.discover('telescope');
+      },
+    },
+    { // The siren: daytime only, a short wail, and the camp looks up at the tower.
+      id: 'guard-siren', kind: 'siren', position: W(1.25, -CAB + 0.75), get markerY() { return deckTop + 1.5; },
+      get enabled() { return climb.phase === 'up'; },
+      prompt: () => { const t = deps.dayTime(); return t < 0.27 || t > 0.8 ? 'The siren is for daytime only' : sirenAt > deps.now() ? 'The siren is still winding down' : 'E — sound the siren'; },
+      interact() {
+        const t = deps.dayTime(); if (t < 0.27 || t > 0.8 || sirenAt > deps.now()) return;
+        sirenAt = deps.now() + 6; if (audio) audio.play('siren'); if (deps.hear) deps.hear({ x: TOWER.x, z: TOWER.z }); react = { t: 0, dur: 1.4 };
+        if (deps.say) deps.say('Woooo-oooo! Everyone looks up at the tower.', '📢');
       },
     },
     {

@@ -14,7 +14,7 @@ function part(geo, material, x = 0, y = 0, z = 0) {
 }
 
 function buildGull() {
-  const g = new THREE.Group();
+  const g = new THREE.Group(); g.name = 'gull'; // src/ambience.js finds the gulls by name, to cry from where they fly
   const white = soft(0xffffff), grey = soft(0xcfd6dc);
   const body = part(new THREE.SphereGeometry(0.22, 8, 6), white); body.scale.set(0.8, 0.7, 1.9);
   const head = part(new THREE.SphereGeometry(0.13, 8, 6), white, 0, 0.06, 0.42);

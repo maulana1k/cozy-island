@@ -164,21 +164,27 @@ export const AREAS = (() => {
   };
   const spring = { x: 137.5, z: -106.8, r: 2.2 };
   // ---- The fishing waterfront: the village's south shore, between the river mouth and the south-east rocks
-  // (below the cart ramp's bamboo fence). A wide, gently sloping sand beach where the boats are dragged up
-  // and launched, the fishermen's corner at its west end and a covered fish market on the level grass above
-  // its east end. Given in the beach's own frame: `s` metres along the coast (east positive) from `o` (on the
-  // grass line), `d` metres seaward from the grass line. The waterline (sea level 0) is `depth` m out; the
-  // sand falls about 0.12 m per metre at the water, so a tide of +-0.5 m moves the waterline 4 to 8 m.
+  // (below the cart ramp's bamboo fence). A modern fishing port (owner revision, design section 10): a wide, nearly
+  // flat sand beach where the boats are hauled up and launched, the fishermen's yard at its west end, a concrete
+  // fish auction hall (TPI) on a raised slab above its east end, and a concrete pier from the hall out to deep water
+  // with a T-head where the fish carrier ship lies. Given in the beach's own frame: `s` metres along the coast (east
+  // positive) from `o` (on the grass line), `d` metres seaward from the grass line. The waterline (sea level 0) is
+  // `depth` m out; the sand falls about 0.033 m per metre, so a tide of +-0.5 m moves the waterline 10 to 15 m.
   const waterfront = (() => {
     const l = Math.hypot(0.995, 0.1), ax = 0.995 / l, az = 0.1 / l, o = { x: 112, z: -22 };
     const at = (s, d) => ({ x: +(o.x + ax * s - az * d).toFixed(2), z: +(o.z + az * s + ax * d).toFixed(2) });
     const along = +Math.atan2(ax, az).toFixed(4), sea = +Math.atan2(-az, ax).toFixed(4); // headings: east along the coast, out to sea
     return {
-      o, ax, az, nx: -az, nz: ax, at, along, sea, s0: -22, s1: 27, depth: 20,
-      // The market: a level rectangle (hw along the coast, hd up/down the beach) of packed gravel on the grass.
-      market: { ...at(15, -5.5), s: 15, d: -5.5, hw: 11.5, hd: 5.5, rot: sea }, // rot: a heading, hd along it (as in paintGround)
+      o, ax, az, nx: -az, nz: ax, at, along, sea, s0: -26, s1: 34, depth: 40, shelf: 0.0062,
+      // The market's ground: a level rectangle (hw along the coast, hd up/down the beach) over the grass, under the hall
+      // and its forecourt.
+      market: { ...at(17, -8.5), s: 17, d: -8.5, hw: 13.5, hd: 8.5, rot: sea }, // rot: a heading, hd along it (as in paintGround)
+      // The hall's raised concrete slab on that level (s0..s1 along, d0..d1 across; `slab` m proud) and its forecourt behind.
+      hall: { s0: 3.5, s1: 30.5, d0: -13, d1: 0, slab: 0.42 },
+      // The concrete pier: from the slab's seaward edge straight out to a T-head parallel to the coast.
+      pier: { s: 24.5, d0: 0, d1: 52, w: 4, deck: 1.85, ramp: 8, head: { s0: 6.5, s1: 42.5, d0: 52, d1: 57 } },
       // The fishermen's corner (west) and where Old Darto's hut stands, at the grass line looking out to sea.
-      fishers: { ...at(-8, 2), s: -8, d: 2 },
+      fishers: { ...at(-14, 4), s: -14, d: 4 },
       hut: { ...at(-17.5, -3.2), s: -17.5, d: -3.2, rot: sea },
     };
   })();
@@ -196,14 +202,13 @@ export const AREAS = (() => {
     // From the top of the ramp lane east over the low country to the jetty.
     jetty: [vw(62, laneV(3)), { x: 145, z: -42 }, { x: 156, z: -44 }, { x: 165, z: -51 }, { x: 170, z: -57 }, { x: 172.5, z: -62 }],
     ridgeTrail,
-    // The waterfront: from the foot of the cart ramp along the top of the beach, past the fishermen's corner, into
-    // the market's west end; and from the market's east end up over the low country to the jetty path.
-    beach: [ramp.path[0], waterfront.at(-27, -3), waterfront.at(-17, -6.6), waterfront.at(-6, -4.5), waterfront.at(3.5, -6.5)],
-    market: [waterfront.at(26.5, -7.5), waterfront.at(31, -12), { x: 141, z: -37.5 }, { x: 145, z: -42 }],
-    // Down to the sand: from the beach path between the shelter and the net racks, and from the market's aisle through
-    // the gap between its second and third pairs of stalls.
+    // The waterfront: from the foot of the cart ramp along the top of the beach, past the fishermen's corner, to the
+    // market hall's west steps; and from the hall's forecourt up over the low country to the jetty path.
+    beach: [ramp.path[0], waterfront.at(-27, -3), waterfront.at(-17, -6.6), waterfront.at(-6, -4.5), waterfront.at(1.5, -6.5)],
+    market: [waterfront.at(18, -15.2), { x: 141, z: -37.5 }, { x: 145, z: -42 }],
+    // Down to the sand: from the beach path between the shelter and the net racks, and from the hall's seaward steps.
     beachDown: [waterfront.at(-6, -4.5), waterfront.at(-7.8, -0.5), waterfront.at(-7.4, 3.0)],
-    marketDown: [waterfront.at(16.7, -3.4), waterfront.at(16.7, -0.4), waterfront.at(16.6, 2.6)],
+    marketDown: [waterfront.at(16.7, 0.4), waterfront.at(16.6, 4.5)],
   };
   const A = {
     river,

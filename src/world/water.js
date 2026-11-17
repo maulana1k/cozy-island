@@ -432,7 +432,7 @@ const waterFragment = /* glsl */ `
 
 // The coastline and the inland water over the new land and the camp's pond, baked once at 1 m (half floats):
 // R = shoreR (as before), G = the bed's height near the river, lake and pond (9 elsewhere), BA = the river's current.
-const LAND_BOX = { x0: -36, z0: -200, w: 250, h: 224 };
+const LAND_BOX = { x0: -36, z0: -200, w: 250, h: 274 }; // south to z = 74: over the fishing beach's broad shallows and its pier
 function bakeLand() {
   const { x0, z0, w, h } = LAND_BOX, n = w * h, toHalf = THREE.DataUtils.toHalfFloat;
   const sr = new Float32Array(n), bed = new Float32Array(n).fill(9), fx = new Float32Array(n), fz = new Float32Array(n);

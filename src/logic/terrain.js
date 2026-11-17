@@ -84,11 +84,13 @@ function capsuleD(x, z, a, b) {
   const dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz)));
   return Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
 }
-// The fishing beach (AREAS.waterfront): on the island's scale the measure runs from 48 (the grass line, which
-// wanders a little) to 60 (the waterline) over `depth` metres, so the sand is wide and falls gently to the sea and
-// on out into broad shallows. Past the beach's ends the measure climbs away, so the shore curves back in to the
-// old coast like the arms of a bay.
-const WF = AREAS.waterfront, WF_K = (ISLAND_RADIUS - GRASS_RADIUS) / WF.depth;
+// The fishing beach (AREAS.waterfront): a wide, nearly flat sand plain. On the island's scale the measure runs
+// from 48 at the grass line (which wanders a little) to 60 at the waterline `depth` m out (0.3 a metre), then on
+// out to sea a little faster each metre, so it meets the open sea's measure with no seam. The beach's own height
+// profile (beachShore below, used in place of the round island's `shore` wherever the beach governs) is read off
+// that measure, so the waterline the sea shader draws (measure 60) is always where the sand meets sea level 0.
+// Past the beach's ends the measure climbs away, so the shore curves back in to the old coast like a bay's arms.
+const WF = AREAS.waterfront, WF_K = (ISLAND_RADIUS - GRASS_RADIUS) / WF.depth, WF_SEA = 0.6, WF_SEA2 = 0.03;
 export function beachFrame(x, z) {
   const dx = x - WF.o.x, dz = z - WF.o.z;
   return { s: dx * WF.ax + dz * WF.az, d: dx * WF.nx + dz * WF.nz };
@@ -98,15 +100,41 @@ const grassLine = (s) => 1.3 * noise(s / 6.5 + 3.1, 11.7) + 0.55 * noise(s / 2.2
 // 1 on the fishing beach's sand, 0 on the grass above it: a soft, ragged edge a metre or two wide.
 export function beachSand(x, z) {
   const { s, d } = beachFrame(x, z);
-  if (s < WF.s0 - 30 || s > WF.s1 + 30 || d < -12 || d > 80) return 0;
+  if (s < WF.s0 - 30 || s > WF.s1 + 30 || d < -12 || d > 95) return 0;
   const out = Math.max(0, WF.s0 - s, s - WF.s1);
   return smooth((d - grassLine(s) + 0.5 + 0.45 * noise(x * 0.9 + 3, z * 0.9 + 8)) / 1.6) * (1 - smooth((out - 4) / 8));
 }
 function beachR(x, z) {
   const { s, d } = beachFrame(x, z);
-  if (s < WF.s0 - 40 || s > WF.s1 + 40 || d < -25 || d > 80) return Infinity;
+  if (s < WF.s0 - 40 || s > WF.s1 + 40 || d < -25 || d > 95) return Infinity;
+  // The west end curves back quickly, so the river mouth and the camp's sea beyond it stay deep; the east end
+  // runs on gently into the rocky point.
+  const ow = Math.max(0, WF.s0 - s), oe = Math.max(0, s - WF.s1), dd = d - grassLine(s), e = Math.max(0, dd - WF.depth);
+  return GRASS_RADIUS + Math.min(dd, WF.depth) * WF_K + e * (WF_SEA + WF_SEA2 * e) + ow * (1.4 + ow * 0.15) + oe * (0.5 + oe * 0.05);
+}
+// The beach's height for a measure r: level at the grass line, easing into an even fall of about 0.033 m a metre
+// (soft start, no crease), 0 at the waterline; under the sea the bed keeps that fall and slowly steepens to the
+// open sea's floor (-3 m) about 30 m out, where the pier head and the ship lie.
+const WF_SOFT = 4, WF_FALL = GRASS_HEIGHT / (Math.hypot(WF.depth, WF_SOFT) - WF_SOFT);
+function beachShore(r) {
+  if (r <= GRASS_RADIUS) return GRASS_HEIGHT;
+  if (r <= ISLAND_RADIUS) { const dd = (r - GRASS_RADIUS) / WF_K; return GRASS_HEIGHT - WF_FALL * (Math.hypot(dd, WF_SOFT) - WF_SOFT); }
+  const e = (-WF_SEA + Math.sqrt(WF_SEA * WF_SEA + 4 * WF_SEA2 * (r - ISLAND_RADIUS))) / (2 * WF_SEA2);
+  return Math.max(SEA_FLOOR_DEPTH, -WF_FALL * e - WF.shelf * e * e);
+}
+// How much the beach's profile governs at (x, z): 1 along the beach (and its curving ends), 0 well past them.
+function beachW(x, z) {
+  const { s, d } = beachFrame(x, z);
+  if (d < -20 || d > 100) return 0;
   const out = Math.max(0, WF.s0 - s, s - WF.s1);
-  return GRASS_RADIUS + (d - grassLine(s)) * WF_K + out * (0.35 + out * 0.035);
+  return 1 - smooth((out - 8) / 10);
+}
+// The shore's height for measure r at (x, z): the round island's, or the fishing beach's where it governs.
+function shoreAt(x, z, r) {
+  const w = beachW(x, z);
+  if (w <= 0) return shore(r);
+  const a = shore(r);
+  return a + (beachShore(r) - a) * w;
 }
 function localsR(x, z, rv) {
   let round = ISLAND_RADIUS + Math.hypot(x - LOC.x, z - LOC.z) - LOC.r;
@@ -151,7 +179,7 @@ const COAST_KEEP = [
   { a: { x: Math.cos(0.3142) * 50, z: Math.sin(0.3142) * 50 }, b: { x: Math.cos(0.3142) * 112, z: Math.sin(0.3142) * 112 }, near: 16, fade: 12 }, // layout.js DOCK (18 deg, radial), harbour.js ferry
   { a: { x: -32.63, z: 41.77 }, near: 10, fade: 8 },  // layout.js CAMPFIRE (128 deg, 53 m): the beach camp, its tents and props
   { a: { x: 36.6, z: 36.5 }, near: 5, fade: 8 },      // layout.js ZIPLINE.bottom: the flying fox landing
-  { a: AREAS.waterfront.at(AREAS.waterfront.s0, 12), b: AREAS.waterfront.at(AREAS.waterfront.s1, 12), near: 26, fade: 10 }, // the fishing beach (beachR below)
+  { a: AREAS.waterfront.at(AREAS.waterfront.s0, 30), b: AREAS.waterfront.at(AREAS.waterfront.s1, 30), near: 42, fade: 10 }, // the fishing beach and its pier (beachR below)
 ];
 const COAST_JETTY = { a: { x: 150, z: -62 }, b: { x: 196, z: -62 } };
 const COAST_NEAR = 14, COAST_FADE = 12;
@@ -297,7 +325,7 @@ const shore = (r) => {
   if (r <= ISLAND_RADIUS) { const t = (r - GRASS_RADIUS) / (ISLAND_RADIUS - GRASS_RADIUS); return GRASS_HEIGHT * (1 - t * t); }
   const s = Math.min(1, (r - ISLAND_RADIUS) / (SEA_FLOOR_RADIUS - ISLAND_RADIUS)); return SEA_FLOOR_DEPTH * (0.5 * s + 0.5 * s * s);
 };
-const inNew = (x, z) => x > 14 && x < 215 && z < (x > 80 ? 40 : 12) && z > -200; // east of x = 80 it reaches further south, under the fishing beach's shallows
+const inNew = (x, z) => x > 14 && x < 215 && z < (x > 80 ? (x < 175 ? 72 : 40) : x > 66 ? 72 : 12) && z > -200; // east of x = 80 it reaches further south, under the fishing beach's shallows and its pier
 // The river's cross-section: a bed too deep to wade in the middle, shallow at the edges, banks rising beyond.
 const riverBed = (d, w) => (d < w ? -RIVER_DEPTH * (1 - (d / w) ** 2) ** 0.8 : (d - w) * 0.32);
 const lakeBed = (d) => (d < LAKE.r ? -LAKE.depth * (1 - (d / LAKE.r) ** 2) ** 0.6 : (d - LAKE.r) * 0.3);
@@ -336,7 +364,7 @@ function localsBase(x, z, lr) {
   let b = 1.2 + 1.5 * smooth((x - 70) / 70) + calm * (0.42 * noise(x / 26 + 51, z / 26 + 7) + 0.16 * noise(x / 9 + 9, z / 9 + 61));
   b += 2.2 * smooth((-z - 100) / 22) * smooth((x - 74) / 12); // foothills under the cliffs
   if (n.d < 26) b += (streamBed(n.s) + STREAM_DEPTH + 0.05 * noise(x / 4, z / 4) - b) * (1 - smooth((n.d - 2.5) / 20));
-  return shore(lr) + inland * (b - GRASS_HEIGHT);
+  return shoreAt(x, z, lr) + inland * (b - GRASS_HEIGHT);
 }
 // The ridge's rise above the land: rounded on top, its flanks reaching `hw` either side of the crest.
 function ridgeRise(x, z, lr) {
@@ -442,7 +470,7 @@ function marketY() {
 // The locals' land at (x, z). `beforePaddies` leaves out the paddy levelling (and the market's, used to set their levels).
 function localsHeight(x, z, lr, rv, beforePaddies = false) {
   // The land as it was before the hillside, kept exactly along the river so its banks do not move.
-  let old = shore(lr);
+  let old = shoreAt(x, z, lr);
   if (lr < GRASS_RADIUS + 4) {
     const inland = smooth((GRASS_RADIUS + 4 - lr) / 16), dv = Math.hypot(x - OLD_VILLAGE.x, z - OLD_VILLAGE.z);
     old += inland * (0.55 + 0.55 * noise(x / 24 + 51, z / 24 + 7) + 0.2 * noise(x / 8 + 9, z / 8 + 61));
@@ -485,7 +513,7 @@ function localsHeight(x, z, lr, rv, beforePaddies = false) {
 
 function newLand(x, z, hOld, shift) {
   const rv = riverAt(x, z), lr = localsR(x, z, rv) + shift;
-  let h = lr < ISLAND_RADIUS + 2 ? localsHeight(x, z, lr, rv) : shore(lr);
+  let h = lr < ISLAND_RADIUS + 2 ? localsHeight(x, z, lr, rv) : shoreAt(x, z, lr);
   const hm = massifHeight(x, z);
   h = Math.max(hOld, h, hm);
   // Dig the river and the lake: inside them the bed is set; beside them the banks are trimmed

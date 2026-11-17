@@ -454,8 +454,10 @@ const FILMS = {
     { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 106, h: 74, h1: 56, a0: 0.5, a1: 1.15, lookH: 0, fov: 52, fov1: 47, dur: 6.5, drift: 0.6, aperture: 0.35, place: 'center', title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
     // A low dolly across the parade ground, the flagpole sliding past.
     { move: 'dolly', p0: ring(flag, 2.35, 18, 3.2), p1: ring(flag, 1.6, 13.5, 2.4), look: up(flag, 1.6), look1: up(flag, 2.4), dur: 5.5, aperture: 1.1, place: 'upper-left', title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
-    // From the pier: the ferry at its moorings, then a slow push in on you at the top of the gangway.
-    { move: 'push', at: () => player.position, a0: back - 0.7, a1: back - 0.35, r: 16, r1: 6.5, h: 5.5, h1: 2.2, lookH: 1.4, fov: 55, fov1: 44, dur: 6, aperture: 1.2, place: 'lower-right', title: 'Your ferry has just come in', sub: 'Welcome to camp, scout' },
+    // From beside the ferry, over the water off its pier side (a = -DOCK.rot points across the hull, away from the pier's
+    // length): outside the hull, at deck height and below the cabin roof, a slow push in on you at the top of the gangway.
+    // It circles `player.position`, which rides the ferry's deck, so the framing follows the ferry.
+    { move: 'push', at: () => player.position, a0: -DOCK.rot + 0.4, a1: -DOCK.rot + 0.25, r: 5.6, r1: 4, h: 1.5, h1: 1.3, lookH: 1.3, fov: 55, fov1: 44, dur: 6, aperture: 1.2, place: 'upper-right', title: 'Your ferry has just come in', sub: 'Welcome to camp, scout' },
   ]; },
   // A low tracking shot along the front row.
   exercise: () => { const p = on({ x: 8.5, z: 17.3 }); return [{ move: 'dolly', p0: ring(p, -0.55, 13, 1.5), p1: ring(p, -1.3, 10.5, 1.9), look: up(p, 1.0), look1: up(p, 1.2), dur: 7, aperture: 1.25, place: 'upper-right', title: 'Morning exercise', sub: 'One, two, three, four!' }]; },

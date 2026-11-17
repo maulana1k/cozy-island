@@ -28,8 +28,9 @@ import { buildStiltHouse, buildMeetingHall, buildEarthFill, buildWell, buildShad
 import { buildYard, buildRetainingWall, buildStoneSteps, buildHedge, buildFlowerArch } from '../../kit/yard.js';
 import {
   Mesher, TOWN_MAT, PROP_COLLIDE, STREETLIGHT_HEAD, house, ruko, warung, cafe, bengkel, mosque, kantorDesa, posRonda, minimarket, busStop, pickup,
-  road, lowFence, laundryLine, carvedPost, poleLine, buildWires, instanceProps,
+  road, lowFence, laundryLine, carvedPost, poleLine, buildWires, instanceProps, talud, concreteSteps, apron,
 } from '../../kit/town.js';
+import { paintGround, clearGroundStamps } from '../ground.js';
 import { bakeAO } from '../ao.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWaterfront } from './waterfront.js';
@@ -161,6 +162,23 @@ export function create(scene, deps) {
   }
 
   const uvOf = (p) => { const dx = p.x - VF.o.x, dz = p.z - VF.o.z, u = dx * VF.ux + dz * VF.uz, v = dx * VF.vx + dz * VF.vz; return { ue: u - VF.bow * (v - VF.vc) ** 2, v }; };
+  // ---- The town's ground (src/world/ground.js stamps; later stamps paint over earlier ones) ------------------------
+  // A tidy modern town, not buildings on bare earth: trimmed lawn over every terrace, asphalt lanes along the terrace
+  // walks and the ramp, concrete on the stair line from the bridge; paved aprons, the ruko's paving and the plaza are
+  // stamped where they are built below. The heritage spots (AREAS.town.heritage) get their packed earth back last.
+  const HERITAGE = AREAS.town.heritage, heritageNear = (p, pad = 0) => HERITAGE.some((h) => Math.hypot(p.x - h.x, p.z - h.z) < h.r + pad);
+  const LANE = 2.0, LANE_HALF = LANE / 2 + 0.6; // a lane's asphalt, and its half width with kerb and gutter
+  const TOWN_PATHS = { main: ['concrete', 2.6], walkLow: ['asphalt', 3.2], walkSecond: ['asphalt', 3.2], walkSquare: ['asphalt', 3.2], walkTop: ['asphalt', 3.2], ramp: ['asphalt', 3.4] };
+  for (const tag of ['plan-paths', 'plan-square', 'plan-yards']) clearGroundStamps(tag);
+  for (const t of TER) { const pts = []; for (let v = t.v0 - 1; v <= t.v1 + 1.01; v += 2) pts.push(VP((t.u0 + t.u1) / 2, v)); paintGround({ kind: 'lawn', path: pts, width: t.u1 - t.u0 + 0.4, ragged: 0.1, edge: 0.8, tag: 'town-ground' }); }
+  for (const [name, pts] of Object.entries(AREAS.paths)) {
+    const town = TOWN_PATHS[name];
+    if (town) { paintGround({ kind: town[0], path: pts, width: town[1], ragged: 0, edge: 0.45, tag: 'town-ground' }); continue; }
+    // Out of town the paths stay worn earth, as before (src/world/ground.js's own plan stamps).
+    const width = name.startsWith('walk') ? 1.6 : 1.4;
+    if (name === 'jetty') { paintGround({ kind: 'asphalt', path: pts.slice(0, 2), width: 3.2, ragged: 0, edge: 0.45, tag: 'town-ground' }); paintGround({ kind: 'path', path: pts.slice(1), width, ragged: 0.7, edge: 0.7, tag: 'plan-paths', strength: 0.92 }); continue; }
+    paintGround({ kind: 'path', path: pts, width, ragged: 0.7, edge: 0.7, tag: 'plan-paths', strength: name === 'ridgeTrail' ? 0.85 : 0.92 });
+  }
   // ---- Houses, shops and civic buildings on the plots, and their yards -----------------------------------
   const doors = [];
   AREAS.plots.forEach((pl, i) => {
@@ -174,11 +192,17 @@ export function create(scene, deps) {
     } else {
       const hd = spec.fn(new Mesher().frame(), spec.opts || {}).footprint.hd; // a dry run for the size
       c = VP(t.u1 - 1.25 - hd, pl.v); o = { x: c.x, z: c.z, ry };
-      // The yard is what is left before the terrace walk: a house's fence stands a metre short of the walk.
-      const avail = uvOf(toW(o, 0, hd)).ue - WALK[k], opts = { ...(spec.opts || {}), seed: i + 1 };
-      if (spec.fn === house) opts.fence = avail - 1.0 >= 1.0 ? Math.min(2.4, avail - 1.0) : 0;
-      if (spec.fn === kantorDesa) opts.yard = Math.max(1.2, avail - 0.8);
+      // The yard is what is left before the lane along the terrace walk: a paved apron with planted strips at its
+      // sides, a house's fence on its front edge.
+      const apronD = uvOf(toW(o, 0, hd)).ue - WALK[k] - LANE_HALF, opts = { ...(spec.opts || {}), seed: i + 1 };
+      if (spec.fn === house) opts.fence = apronD - 0.15 >= 1.0 ? Math.min(2.6, apronD - 0.15) : 0;
+      if (spec.fn === kantorDesa) opts.yard = Math.max(1.2, apronD - 0.2);
       made = townPiece(o, t.y, spec.fn, opts);
+      if (apronD > 0.4) {
+        const w = Math.min(7, made.footprint.hw * 2 + 0.8), ac = toW(o, 0, hd + apronD / 2);
+        townPiece({ ...toW(o, 0, hd), ry }, t.y - 0.01, apron, { width: w, depth: apronD, seed: i });
+        paintGround({ kind: 'paving', rect: { x: ac.x, z: ac.z, rot: ry, hw: w / 2, hd: apronD / 2 + hd }, ragged: 0, edge: 0.4, tag: 'town-ground' });
+      }
     }
     const foot = made.stepFeet[0], door = toW(o, foot.x, foot.z + 1.0);
     // Where the way out of the door (straight on, through the yard's clear middle) meets the terrace walk.
@@ -186,7 +210,8 @@ export function create(scene, deps) {
     doors.push({ ...door, rot: ry + Math.PI, k, v: uvOf(out).v, out });
     keepClear(c.x, c.z, spec.heritage ? 4.5 : 5); keepClear(door.x, door.z, 2.5);
     if (!spec.heritage) return;
-    // Heritage: the old yard in front of the door, and the elder's carved post beside the steps (story clue `carved-post`).
+    // Heritage: the old yard in front of the door (packed earth), and the elder's carved post beside the steps (story clue `carved-post`).
+    { const fx = Math.sin(pl.front), fz = Math.cos(pl.front); paintGround({ kind: 'packed', rect: { x: pl.x + fx * pl.d * 0.22, z: pl.z + fz * pl.d * 0.22, rot: pl.front, hw: pl.w / 2 + 0.3, hd: pl.d * 0.45 }, edge: 1, ragged: 0.45, strength: 0.85, tag: 'town-heritage' }); }
     townPiece({ ...toW(o, foot.x - 1.0, foot.z + 0.2), ry }, t.y - 0.02, carvedPost);
     // The yard in front of the door. On the low terrace it is shallow (the walk is close).
     // Its depth is what is left before the terrace walk (props further out are left out); a flower arch over the
@@ -220,6 +245,15 @@ export function create(scene, deps) {
   const B = AREAS.banyan, TREE = { x: B.x, z: B.z, ry: 0.3 }, treeBase = B.y - 0.02;
   place(buildShadeTree(), TREE, treeBase); keepClear(B.x, B.z, 7.5);
   keepClear(C.x, C.z, AREAS.square.r);
+  // The plaza: paving over the square and out to the ruko's pavement, concrete round the new corners; then the heritage
+  // ground: packed earth round the well, the hall and Wulan's yard (above), grass and earth under the banyan.
+  paintGround({ kind: 'paving', circle: { x: C.x, z: C.z, r: AREAS.square.r + 0.5 }, ragged: 0, edge: 0.6, tag: 'town-ground' });
+  paintGround({ kind: 'paving', rect: { x: T.ruko.x, z: T.ruko.z, rot: T.ruko.rot, hw: T.ruko.hw + 0.4, hd: T.ruko.hd + T.ruko.pave + 1.2 }, ragged: 0, edge: 0.4, tag: 'town-ground' });
+  for (const S of [T.posRonda, T.minimarket, T.busStop]) paintGround({ kind: 'concrete', rect: { x: S.x, z: S.z, rot: S.rot, hw: S.hw + 0.8, hd: S.hd + 1.6 }, ragged: 0, edge: 0.5, tag: 'town-ground' });
+  paintGround({ kind: 'packed', circle: { x: WELL.x, z: WELL.z, r: 2.6 }, edge: 0.9, ragged: 0.4, tag: 'town-heritage' });
+  paintGround({ kind: 'grass', circle: { x: B.x, z: B.z, r: 7.2 }, edge: 1.5, ragged: 0.5, strength: 0.8, tag: 'town-heritage' });
+  paintGround({ kind: 'packed', circle: { x: B.x, z: B.z, r: 3.6 }, edge: 1.2, ragged: 0.5, strength: 0.8, tag: 'town-heritage' });
+  paintGround({ kind: 'packed', rect: { x: H.x, z: H.z, rot: H.front, hw: H.w / 2 + 1.5, hd: H.d / 2 + 1.0 }, edge: 1.2, ragged: 0.45, strength: 0.85, tag: 'town-heritage' });
 
   // ---- Retaining walls along every terrace face, with gaps where the steps go up -------------------------
   for (let k = 0; k < TER.length - 1; k++) {
@@ -238,21 +272,44 @@ export function create(scene, deps) {
         const foot = Math.min(heightAt(VP(lo.u1 - 1.3, vm).x, VP(lo.u1 - 1.3, vm).z), lo.y), top = heightAt(VP(lo.u1 + 2.0, vm).x, VP(lo.u1 + 2.0, vm).z);
         if (top - foot < 0.25) continue;
         const a = VP(front, va - (i ? 0.03 : 0)), b = VP(front, vb + 0.03), len = Math.hypot(b.x - a.x, b.z - a.z), o = { x: a.x, z: a.z, ry: along(a, b) };
-        place(buildRetainingWall(len, top - foot + 0.25), o, foot - 0.25);
+        // Plastered walls with painted caps; dry stone only round the heritage spots.
+        if (heritageNear(VP(front, vm), 2)) place(buildRetainingWall(len, top - foot + 0.25), o, foot - 0.25);
+        else townPiece(o, foot - 0.25, talud, { len, h: top - foot + 0.25 });
         const f = buildEarthFill(len, FILL, top - foot + 0.25), fo = toW(o, 0, -0.5); f.group.position.set(fo.x, foot - 0.25 + 0.005, fo.z); f.group.rotation.y = o.ry; village.add(f.group);
       }
     }
   }
-  // ---- Stone steps up every flight: their treads are a walkable strip (the terrain alone is a plain slope under them) ----
+  // ---- Steps up every flight, concrete with a handrail (the flight up to the old hall stays stone): their treads are a
+  // walkable strip (the terrain alone is a plain slope under them) ----
   const platforms = [];
   for (const s of AREAS.steps) {
-    const o = { x: s.foot.x, z: s.foot.z, ry: Math.atan2(s.top.x - s.foot.x, s.top.z - s.foot.z) };
-    const made = place(buildStoneSteps(s.width, s.y1 - s.y0, Math.hypot(s.top.x - s.foot.x, s.top.z - s.foot.z)), o, s.y0);
+    const o = { x: s.foot.x, z: s.foot.z, ry: Math.atan2(s.top.x - s.foot.x, s.top.z - s.foot.z) }, run = Math.hypot(s.top.x - s.foot.x, s.top.z - s.foot.z);
+    const made = s.to === 'top' ? place(buildStoneSteps(s.width, s.y1 - s.y0, run), o, s.y0) : townPiece(o, s.y0, concreteSteps, { width: s.width, rise: s.y1 - s.y0, run });
     for (const p of made.platforms || []) {
       platforms.push(deps.addPlatform ? deps.addPlatform({ shape: 'strip', a: toW(o, p.a.x, p.a.z), b: toW(o, p.b.x, p.b.z), width: p.width, y0: s.y0 + p.y0, y1: s.y0 + p.y1, surface: 'rock' }) : null);
     }
     keepClear(s.x, s.z, 2.2);
   }
+  // ---- Lanes along the terrace walks: asphalt with low kerbs and gutters (not in front of the old hall, nor beside the
+  // ruko, whose own pavement and the plaza take over); concrete paths on the stair line from each walk to the steps,
+  // and from the bridge up to the low terrace ----
+  const LANE_SKIP = [null, null, (v) => v > 4.5, (v) => v > -8.5 && v < 6.5];
+  TER.forEach((t, k) => {
+    const v1 = t.v1 + 2.5 - 1.6, n = Math.ceil((v1 - (t.v0 + 0.3)) / 3);
+    for (let j = 0; j < n; j++) {
+      const va = t.v0 + 0.3 + ((v1 - t.v0 - 0.3) * j) / n, vb = t.v0 + 0.3 + ((v1 - t.v0 - 0.3) * (j + 1)) / n;
+      if (LANE_SKIP[k] && LANE_SKIP[k]((va + vb) / 2)) continue;
+      const a = VP(WALK[k], va), b = VP(WALK[k], vb);
+      townPiece({ ...a, ry: along(a, b) }, t.y - 0.035, road, { len: Math.hypot(b.x - a.x, b.z - a.z) + 0.04, width: LANE, kerb: 'plain', kerbH: 0.1, line: false });
+    }
+  });
+  const path = (a, b, w) => {
+    const len = Math.hypot(b.x - a.x, b.z - a.z); if (len < 0.3) return;
+    const ha = groundAt(a.x, a.z), hb = groundAt(b.x, b.z);
+    townPiece({ ...a, ry: along(a, b) }, ha - 0.035, road, { len, width: w, kerb: 'plain', kerbH: 0.08, gutter: false, line: false, surface: 0xc9c3b6 }, { roll: Math.atan2(hb - ha, len) });
+  };
+  for (const s of AREAS.steps) { const k = TER.findIndex((t) => t.id === s.from); if (s.to !== 'top' && s.from !== 'square') path(VP(WALK[k] + LANE_HALF, s.v), s.foot, s.width); }
+  { const m = AREAS.paths.main; path(m[0], m[1], 2.4); path(m[1], VP(WALK[0] - LANE_HALF, AREAS.steps[0].v), 2.4); }
   // ---- The cart ramp: an asphalt lane, low plastered fences along its open south side all the way up and on the north
   // side of each slope, power poles inside the south fence (and on along the road to the port) with their wires ----
   const rp = AREAS.ramp.path.map(uvOf);

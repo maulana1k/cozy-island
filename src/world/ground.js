@@ -13,7 +13,8 @@
 //   paintGround({ kind: 'packed', circle: { x, z, r: 4 } });              packed earth in a disc
 //   paintGround({ kind: 'packed', rect: { x, z, rot, hw, hd } });         ... or a rectangle (rot: heading)
 // kinds: path (worn dirt), packed (hard pale earth: squares, yards), dirt, clay, damp (dark wet earth),
-// mud, grass, dry (golden grass), sand. Options: strength 0..1 (default 1), edge (soft edge, metres,
+// mud, grass, dry (golden grass), sand, gravel, and the modern town's asphalt, concrete, paving (warm tiles) and lawn
+// (trimmed, even green). Options: strength 0..1 (default 1), edge (soft edge, metres,
 // default 0.5), ragged 0..1 (how much the edge wanders, default 0.5 for paths, 0.25 otherwise), tag.
 // Call it while an area is being made (in create): the tiles are built afterwards and the camp's mesh
 // repaints the touched part on its next frame. Calling it later also works (affected ground repaints).
@@ -34,6 +35,7 @@ const dirt = C(0xd3a46c), clay = C(0xcc8a5c), clayDark = C(0xb87250), damp = C(0
 const litter = C(0x8f8a52), forestGreen = C(0x7d9a4c), streamBed = C(0x8b7a5a);
 const STAMP = {
   path: C(0xdcb07a), packed: C(0xe3c391), dirt, clay, damp, mud, grass: green, dry, sand: bankSand, gravel: C(0xcdb894),
+  asphalt: C(0x6b6d70), concrete: C(0xcbc5b8), paving: C(0xcdc5b6), lawn: C(0x7fa04c),
 };
 const gravelDark = C(0xa8977a), gravelPale = C(0xe2d3b4);
 
@@ -105,6 +107,9 @@ function applyStamps(c, x, z) {
     if (s.kind === 'path' || s.kind === 'packed') t.lerp(dryPale, (vnoise(x * 0.7, z * 0.7) - 0.5) * 0.35 + 0.1).lerp(dirt, smooth((vnoise(x * 1.9 + 9, z * 1.9) - 0.55) / 0.3) * 0.35);
     // Gravel: grey-tan grit, darker where it is trodden and damp, paler chips here and there.
     if (s.kind === 'gravel') t.lerp(gravelDark, smooth((vnoise(x * 0.8 + 4, z * 0.8 + 1) - 0.45) / 0.35) * 0.55).lerp(gravelPale, smooth((vnoise(x * 3.1, z * 3.1 + 5) - 0.6) / 0.25) * 0.5);
+    // The town's hard ground: faintly weathered, never dirty; the lawn mown in soft bands.
+    if (s.kind === 'asphalt' || s.kind === 'concrete' || s.kind === 'paving') t.multiplyScalar(0.96 + 0.08 * vnoise(x * 0.6 + 2, z * 0.6 + 9));
+    if (s.kind === 'lawn') t.multiplyScalar(0.95 + 0.07 * Math.sin((x * 0.55 + z * 0.35)) * vnoise(x * 0.3, z * 0.3));
     c.lerp(t, k);
   }
 }

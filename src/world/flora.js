@@ -51,7 +51,7 @@ export const KINDS = {
 const seg = (a, b) => ({ a, b, dx: b.x - a.x, dz: b.z - a.z, l2: (b.x - a.x) ** 2 + (b.z - a.z) ** 2 || 1e-9 });
 const segDist = (s, x, z) => { const k = Math.max(0, Math.min(1, ((x - s.a.x) * s.dx + (z - s.a.z) * s.dz) / s.l2)); return Math.hypot(x - s.a.x - s.dx * k, z - s.a.z - s.dz * k); };
 const lineSegs = (pts, half) => pts.slice(1).map((b, i) => ({ ...seg(pts[i], b), half }));
-const PATH_HALF = (name) => (name === 'main' ? 1.0 : name === 'ramp' ? 1.6 : name.startsWith('walk') ? 0.85 : 0.75);
+const PATH_HALF = (name) => (name === 'main' ? 1.3 : name === 'ramp' ? 1.7 : name.startsWith('walk') ? 1.7 : 0.75); // the town's lanes are wider than the old walks
 const PATHS = [
   ...Object.entries(AREAS.paths).flatMap(([name, pts]) => lineSegs(pts, PATH_HALF(name))),
   ...AREAS.trails.flatMap((pts) => lineSegs(pts, 1.0)),
@@ -78,6 +78,11 @@ const CIRCLES = [
   { ...AREAS.lookout, r: AREAS.lookout.r + 2 },
 ];
 const CLEARING = AREAS.clearing;
+// The modern town (docs/superpowers/specs/2026-11-17-modern-village-design.md): on the terraces, outside the heritage
+// spots, nothing wild grows: no scrub, no stray flowers, no grass tufts (the lawns are mown); only the planted strips
+// along the walls, the gardens beside the houses and the plants the town kit sets in its pots and beds.
+const HERITAGE = TW.heritage;
+const inTown = (g, x, z) => !!g && g.terrace > 0.3 && !HERITAGE.some((h) => Math.hypot(x - h.x, z - h.z) < h.r + 1);
 
 // Is (x, z) a place a plant of this kind may stand? Returns the ground facts, or null.
 // `small` plants (ferns, flowers) may come closer to things than solid ones.
@@ -198,7 +203,7 @@ export function layOut() {
       const corner = at(side * (p.hw + 0.7), p.hd - 0.6);
       put(rng() < 0.5 ? 'pink' : 'red', corner.x, corner.z, 0.75 + rng() * 0.3);
       const f = at(side * (p.hw + 0.5 + rng()), p.hd + 0.3);
-      put('flowers', f.x, f.z, 0.9 + rng() * 0.3);
+      if (!inTown(groundKind(f.x, f.z), f.x, f.z)) put('flowers', f.x, f.z, 0.9 + rng() * 0.3);
     }
   }
   // Bushes in clumps along the foot of each terrace wall (on the lower terrace), softening its line.
@@ -207,10 +212,10 @@ export function layOut() {
     for (let d = 0.4; d < len; d += 0.9) {
       const x = w.a.x + (w.dx * d) / len, z = w.a.z + (w.dz * d) / len;
       if (wave(x, z, 3.1, 0.6) < -0.35) continue; // gaps between the clumps
-      const off = 0.75 + rng() * 0.5, r = rng();
-      const kind = r < 0.62 ? 'bush' : r < 0.74 ? 'pink' : r < 0.84 ? 'red' : 'fern';
-      put(kind, x + down.x * off, z + down.z * off, 0.7 + rng() * 0.4);
-      if (rng() < 0.35) put('flowers', x + down.x * (off + 0.8), z + down.z * (off + 0.8), 0.9);
+      const off = 0.75 + rng() * 0.5, r = rng(), town = inTown(groundKind(x, z), x, z);
+      const kind = r < 0.62 ? 'bush' : r < 0.74 ? 'pink' : r < 0.84 || town ? 'red' : 'fern';
+      const o2 = town ? 0.75 : off; put(kind, x + down.x * o2, z + down.z * o2, town ? 0.7 : 0.7 + rng() * 0.4); // a planted strip in town: one line, one size
+      if (rng() < 0.35 && !town) put('flowers', x + down.x * (off + 0.8), z + down.z * (off + 0.8), 0.9);
     }
   }
   // Wild flowers along the edges of the paths, in drifts.
@@ -220,8 +225,8 @@ export function layOut() {
       for (const side of [-1, 1]) {
         const x = s.a.x + (s.dx * d) / len, z = s.a.z + (s.dz * d) / len;
         if (wave(x + side * 3, z, 4.3, 2.2) < 0.15 || rng() < 0.35) continue;
-        const off = s.half + 0.4 + rng() * 0.6;
-        put('flowers', x + nx * off * side, z + nz * off * side, 0.8 + rng() * 0.4);
+        const off = s.half + 0.4 + rng() * 0.6, fx = x + nx * off * side, fz = z + nz * off * side;
+        if (!inTown(groundKind(fx, fz), fx, fz)) put('flowers', fx, fz, 0.8 + rng() * 0.4);
       }
     }
   }
@@ -230,6 +235,7 @@ export function layOut() {
   for (let gz = Z0; gz < Z1; gz += 3.5) for (let gx = X0; gx < X1; gx += 3.5) {
     const x = gx + rng() * 3.5, z = gz + rng() * 3.5, g = groundKind(x, z);
     if (!g || g.locals < 0.5 || g.rock > 0.3) continue;
+    if (inTown(g, x, z)) continue; // no filling in town: open ground there is lawn or paving
     const village = g.terrace > 0.3, R = village ? 4 : 6.5;
     if (around(x, z, R, () => true)) continue;
     const r = rng();
@@ -277,6 +283,7 @@ function grassCell(ix, iz) {
     if (PLOTS.some((p) => rectOut(p, x, z) < 0) || rectOut(HALL, x, z) < 0.3 || CIRCLES.some((c) => Math.hypot(x - c.x, z - c.z) < c.r - (c === CIRCLES[0] ? 0 : 1))) continue;
     if (STEPS.some((s) => segDist(s, x, z) < s.half + 0.3) || areaKeepsClear(x, z, -1.6)) continue;
     if (g.forest > -1 && r2 < 0.6) continue; // sparse on the forest floor
+    if (inTown(g, x, z)) continue; // mown lawns and paving
     const y = heightAt(x, z);
     if (y < 0.3) continue;
     paintC.setHex(0xd9be66);

@@ -106,3 +106,13 @@ Everything in sections 2 and 3 is live in `src/world/areas/hamlet.js`. Changes b
 | `topterrace` | 14.1 to 14.5, 689, 1.92 M | 13.4 to 13.5, 710, 1.95 M |
 
 Both stay under 900 calls and 16.7 ms. The triangle count was already over the 1.7 M guide before this change; the town adds about 1 to 2%.
+
+**Ground pass (owner feedback: "modern buildings placed into soil").** The town now stands on town ground:
+- **Lanes.** Asphalt lanes with low kerbs and gutters run along every terrace walk. They stop in front of the old hall and beside the ruko, where the pavement and plaza take over. Concrete paths run up the stair line and from the bridge.
+- **Yards.** Paved aprons with planted strips sit in front of every modern plot; house fences stand on the apron's edge.
+- **Walls and steps.** Retaining walls are plastered with white painted caps (`talud`). Dry stone stays within 2 m of a heritage spot. The steps are concrete with handrails, except the flight up to the hall.
+- **Stamps.** New ground kinds in `src/world/ground.js`: `asphalt`, `concrete`, `paving` and `lawn`. Mown lawn covers the terraces; asphalt and concrete lie under the lanes, ramp and stair line; paving covers the yards, ruko row and plaza.
+- **Heritage ground.** The heritage spots get packed earth back: Wulan's yard, round the well, under the hall, and grass and earth under the banyan.
+- **Planting.** `flora.js` grows nothing wild in the town zone: no scrub, no stray flowers, no grass tufts. It keeps only the trimmed strip along the wall feet and the gardens beside the houses.
+
+All of this is in the one town mesh or in stamps: no new draw calls. Same A/B after the ground pass: village 13.3 to 14.1 ms before, 12.8 to 13.4 after (699 to 716 calls); topterrace 15.5 to 15.8 before, 14.4 to 14.5 after (690 to 707 calls). Load takes about 0.35 s longer (AO is baked per piece against the terrain).

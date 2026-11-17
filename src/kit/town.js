@@ -506,6 +506,7 @@ export function warung(m, { seed = 3, paint = PAINT.peach } = {}) {
   m.box(0.75, 1.75, 0.6, C.red, hw - 0.6, 0.875, zb1 + 0.55); m.box(0.6, 1.35, 0.03, C.glassLt, hw - 0.6, 1.0, zb1 + 0.86); m.box(0.7, 0.2, 0.04, 0xf4efe2, hw - 0.6, 1.6, zb1 + 0.86);
   for (const [x, z] of [[-hw + 0.35, zb1 + 0.4], [-hw + 0.7, zb1 + 0.3]]) { m.cyl(0.15, 0.15, 0.3, 0x5fb06a, x, 0.2, z, 10); m.sph(0.15, 0x5fb06a, x, 0.35, z, 1, 0.6, 1, 10, 5); m.cyl(0.04, 0.04, 0.1, C.ink, x, 0.48, z, 6); }
   // The lean-to: two steel posts, a beam, the zinc sheet, a blank banner, a bulb.
+  tiles(m, -hw, hw, zb1, zf, 0.04, 0xe6dccb, 0xcfc2aa, 0.5); // a tiled floor under the lean-to
   for (const s of [-1, 1]) m.rod([s * (hw - 0.15), 0, zf - 0.1], [s * (hw - 0.15), H - 0.4, zf - 0.1], 0.045, 0.045, C.steel, 6);
   m.box(W - 0.2, 0.1, 0.1, C.steel, 0, H - 0.4, zf - 0.1);
   shedRoof(m, -hw - 0.1, hw + 0.1, zb1, H - 0.1, zf + 0.15, H - 0.45, 0x8fbf6a);
@@ -795,21 +796,67 @@ export function carvedPost(m) {
 }
 export const buildCarvedPost = () => wrap(carvedPost);
 
+// ---- Town ground: plastered retaining walls, concrete steps, paved aprons -----------------------------------------
+// A plastered retaining wall (talud) from x = 0 to len, its front face at z = 0 going back 0.55 m, its top flush with y = h:
+// a dark footing band, cream render with a faint stain at the foot, a white painted cap that overhangs, weep holes.
+// The same footprint and collider as kit/yard.js buildRetainingWall, so it drops into its place.
+export function talud(m, { len = 4, h = 1.3, render = 0xe9dfcc, cap = 0xf7f4ec } = {}) {
+  const T = 0.55;
+  m.box(len, h - 0.08, T, render, len / 2, (h - 0.08) / 2, -T / 2);
+  m.box(len + 0.01, 0.28, T + 0.02, 0x9d978a, len / 2, 0.14, -T / 2 + 0.01);
+  m.box(len + 0.02, 0.1, T + 0.12, cap, len / 2, h - 0.04, -T / 2 + 0.04);
+  for (let x = 0.75; x < len - 0.3; x += 1.5) m.box(0.08, 0.08, 0.02, 0x4a4640, x, 0.45, 0.005);
+  return { colliders: [{ x: len / 2, z: -T / 2, hw: len / 2, hd: T / 2, rot: 0 }], lamps: [], props: [], spots: {} };
+}
+// Concrete steps `width` wide climbing `rise` over `run` along +z from z = 0 (as kit/yard.js buildStoneSteps): solid treads
+// with pale nosings, plastered side walls with caps, a steel handrail on the right. Same colliders and walkable strip.
+export function concreteSteps(m, { width = 2.4, rise = 1.3, run = 2.8 } = {}) {
+  const n = Math.max(2, Math.round(rise / 0.17)), r = rise / n, t = run / n;
+  for (let i = 0; i < n; i++) { const h = (i + 1) * r, z = i * t + t / 2; m.box(width, h, t + 0.02, i % 2 ? C.concrete : shade(C.concrete, 0.96), 0, h / 2, z); m.box(width, 0.03, 0.07, 0xe8e4da, 0, h + 0.005, z - t / 2 + 0.035); }
+  for (const s of [-1, 1]) {
+    const x = s * (width / 2 + 0.12), sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(run, 0); sh.lineTo(run, rise + 0.3); sh.lineTo(0, r + 0.3); sh.closePath();
+    const wg = new THREE.ExtrudeGeometry(sh, { depth: 0.24, bevelEnabled: false }); wg.rotateY(-Math.PI / 2); wg.translate(0.12, 0, 0);
+    m.at(wg, 0xe9dfcc, x, 0, 0);
+    m.rod([x, r + 0.32, 0], [x, rise + 0.32, run], 0.07, 0.07, 0xf7f4ec, 4);
+  }
+  const hx = width / 2 - 0.05;
+  for (const z of [0.15, run / 2, run - 0.15]) { const y = (z / run) * rise; m.rod([hx, y + r, z], [hx, y + r + 0.9, z], 0.022, 0.022, C.steel, 5); }
+  m.rod([hx, r + 0.9, 0.15], [hx, rise + 0.9 - r * 0.3, run - 0.15], 0.025, 0.025, C.steel, 5);
+  const cols = [-1, 1].map((s) => ({ x: s * (width / 2 + 0.12), z: run / 2, hw: 0.14, hd: run / 2, rot: 0 }));
+  return { colliders: cols, lamps: [], props: [], spots: {}, platforms: [{ shape: 'strip', a: { x: 0, z: t / 2 }, b: { x: 0, z: run - t / 2 }, width, y0: r, y1: rise }] };
+}
+// The paved apron in front of a building, from its front (z = 0) out to `depth` along +z, `width` across: tiles, a
+// concrete edge where it meets the lane, and a planted strip (soil, trimmed shrubs, a flower or two) down each side.
+export function apron(m, { width = 7, depth = 2, seed = 1, strips = true } = {}) {
+  const rnd = rngOf(seed + 3), hw = width / 2, sw = strips ? 0.55 : 0;
+  tiles(m, -hw + sw, hw - sw, 0, depth - 0.2, 0.05, 0xe6dccb, 0xcfc2aa, 0.5);
+  m.box(width, 0.1, 0.2, C.concrete, 0, 0.03, depth - 0.1);
+  if (strips) for (const s of [-1, 1]) {
+    const x = s * (hw - sw / 2);
+    m.box(sw, 0.14, depth, C.concrete, x, 0.05, depth / 2); m.box(sw - 0.12, 0.02, depth - 0.12, 0x5e4632, x, 0.13, depth / 2);
+    for (let z = 0.3; z < depth - 0.2; z += 0.5) m.leaf(0.2 + rnd() * 0.05, pick(rnd, [C.leaf, C.leafDk, 0x6aa856]), x, 0.3, z, 1, 0.85, 1);
+    if (depth > 1.2) m.sph(0.06, pick(rnd, [0xe8508f, 0xf2c03b, 0xf4efe2]), x, 0.48, depth * 0.5, 1, 1, 1, 6, 4);
+  }
+  return { colliders: [], lamps: [], props: [], spots: {} };
+}
+
 // ---- Street ------------------------------------------------------------------------------------------------------
 // A straight piece of road along +x from 0 to len: asphalt, a dashed centre line, kerbs painted black and white (as on
 // a main road) or plain, a concrete gutter outside each kerb, and an optional pavement of tiles beyond it. Walkable, so
-// no colliders; `top` is the asphalt height. `zebra` paints a crossing in the middle.
-export function road(m, { len = 10, width = 5, kerb = 'painted', gutter = true, pavement = 0, zebra = false } = {}) {
+// no colliders; `top` is the asphalt height. `zebra` paints a crossing in the middle. A village lane: `kerbH` low kerbs
+// (people step over them), `line: false` (no centre dashes), `surface` C.concrete for a concrete lane.
+export function road(m, { len = 10, width = 5, kerb = 'painted', gutter = true, pavement = 0, zebra = false, kerbH = 0.2, line = true, surface = C.asphalt } = {}) {
   const hw = width / 2, top = 0.06;
-  m.box(len, 0.08, width, C.asphalt, len / 2, 0.02, 0);
-  for (let x = 0.75; x < len - 0.5; x += 3) m.box(1.5, 0.005, 0.12, 0xf1efe6, x + 0.75, top + 0.003, 0);
+  m.box(len, 0.08, width, surface, len / 2, 0.02, 0);
+  if (surface === C.concrete) for (let x = 2; x < len - 0.5; x += 2) m.box(0.025, 0.004, width, C.concreteDk, x, top + 0.002, 0); // expansion joints
+  if (line) for (let x = 0.75; x < len - 0.5; x += 3) m.box(1.5, 0.005, 0.12, 0xf1efe6, x + 0.75, top + 0.003, 0);
   if (zebra) for (let z = -hw + 0.4; z < hw - 0.3; z += 0.6) m.box(2.2, 0.005, 0.32, 0xf1efe6, len / 2, top + 0.004, z + 0.16);
   for (const s of [-1, 1]) {
     const kz = s * (hw + 0.09);
-    if (kerb === 'painted') for (let x = 0, k = 0; x < len - 1e-3; x += 1, k++) { const w = Math.min(1, len - x); m.box(w, 0.2, 0.18, k % 2 ? C.kerbK : C.kerbW, x + w / 2, 0.1, kz); }
-    else if (kerb) m.box(len, 0.2, 0.18, C.concrete, len / 2, 0.1, kz);
+    if (kerb === 'painted') for (let x = 0, k = 0; x < len - 1e-3; x += 1, k++) { const w = Math.min(1, len - x); m.box(w, kerbH, 0.18, k % 2 ? C.kerbK : C.kerbW, x + w / 2, kerbH / 2, kz); }
+    else if (kerb) m.box(len, kerbH, 0.18, C.concrete, len / 2, kerbH / 2, kz);
     let z = kz + s * 0.09;
-    if (gutter) { m.box(len, 0.04, 0.34, C.concreteDk, len / 2, -0.06, z + s * 0.17); m.box(len, 0.24, 0.08, C.concrete, len / 2, 0.0, z + s * 0.38); z += s * 0.42; }
+    if (gutter) { m.box(len, 0.04, 0.34, C.concreteDk, len / 2, -0.06, z + s * 0.17); m.box(len, 0.08 + kerbH / 2, 0.08, C.concrete, len / 2, kerbH / 4 - 0.02, z + s * 0.38); z += s * 0.42; }
     if (pavement > 0) tiles(m, 0, len, s > 0 ? z : z - pavement, s > 0 ? z + pavement : z, 0.2, 0xd8d2c4, 0xbdb5a5, 0.5);
   }
   return { colliders: [], lamps: [], props: [], spots: {}, top };

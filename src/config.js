@@ -144,6 +144,9 @@ export const AREAS = (() => {
       minimarket, busStop,
       poles: [at(5, -1.8), at(14, -1.8)], // power poles along the road beyond the ramp lane (the lane's own come from the plan)
       pads: [{ ...minimarket, hw: 4.8, hd: 5.6 }, { ...busStop, hw: 2.4, hd: 1.6 }],
+      // The heritage spots keep rustic ground (packed earth, dry stone, grass under the banyan): Wulan's stilt house on
+      // plot 5, the meeting hall, the well and the banyan. Everything else on the terraces is the modern town's.
+      heritage: [{ x: plots[5].x, z: plots[5].z, r: 6.5 }, { x: hall.x, z: hall.z, r: 8.5 }, { x: well.x, z: well.z, r: 2.8 }, { x: banyan.x, z: banyan.z, r: 7.5 }],
     };
   })();
   // Walks along the front of each terrace, from end to end (out to the ramp lane on the south).

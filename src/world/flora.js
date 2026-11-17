@@ -266,6 +266,7 @@ function grassCell(ix, iz) {
     if (Math.hypot(x, z) < 47.5 && g.locals < 0.5) continue;                 // the camp has its own grass
     if (g.forest < -1 && g.locals < 0.5 && wildness(x, z) > 0.25) continue;    // and so has the jungle
     if (g.rock > 0.3 || g.paddy > 0.02 || g.river < 1.8 || g.lake < 2 || g.stream < 1.8 || g.spring < 0.8 || g.face > 0.3) continue;
+    if (g.beach > 0.35 + 0.3 * r2 || g.market > 0.4) continue; // the fishing beach's sand and the market floor (a ragged fringe at the grass line)
     const edge = pathEdge(x, z);
     if (edge < 0.05) continue;
     if (PLOTS.some((p) => rectOut(p, x, z) < 0) || rectOut(HALL, x, z) < 0.3 || CIRCLES.some((c) => Math.hypot(x - c.x, z - c.z) < c.r - (c === CIRCLES[0] ? 0 : 1))) continue;

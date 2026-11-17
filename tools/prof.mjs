@@ -1,5 +1,5 @@
 // Measures the true cost of one frame (limiter off) and where the script time goes, at each check spot.
-// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle|bridge|village|farm|clifftop|dock|topterrace|clearing]
+// Usage, with the dev server running: node tools/prof.mjs [camp|summit|jungle|bridge|village|farm|clifftop|dock|topterrace|clearing|beach|campfire|sunset|market|boatbeach]
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -39,6 +39,9 @@ const SPOTS = {
   // Performance checks (2026-11-17): a few steps from the camp bonfire looking at it (pair with T=0.95), and
   // the camp looking west into the low sun (pair with T=0.84).
   campfire: 'x=14&z=15&yaw=0.52', sunset: 'x=22&z=10&yaw=1.23',
+  // The fishing waterfront (M2a): at the fish market's west entrance looking east down the aisle (pair with T=0.33
+  // for the busy morning, T=0.8 for the lanterns), and on the boat beach looking along the boats to the market.
+  market: 'x=113.5&z=-27.4&yaw=1.47', boatbeach: 'x=100&z=-17&yaw=1.2',
 };
 const only = process.argv[2];
 for (const [name, q] of Object.entries(SPOTS)) {

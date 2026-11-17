@@ -200,6 +200,10 @@ export const AREAS = (() => {
     // the market's west end; and from the market's east end up over the low country to the jetty path.
     beach: [ramp.path[0], waterfront.at(-27, -3), waterfront.at(-17, -6.6), waterfront.at(-6, -4.5), waterfront.at(3.5, -6.5)],
     market: [waterfront.at(26.5, -7.5), waterfront.at(31, -12), { x: 141, z: -37.5 }, { x: 145, z: -42 }],
+    // Down to the sand: from the beach path between the shelter and the net racks, and from the market's aisle through
+    // the gap between its second and third pairs of stalls.
+    beachDown: [waterfront.at(-6, -4.5), waterfront.at(-7.8, -0.5), waterfront.at(-7.4, 3.0)],
+    marketDown: [waterfront.at(16.7, -3.4), waterfront.at(16.7, -0.4), waterfront.at(16.6, 2.6)],
   };
   const A = {
     river,

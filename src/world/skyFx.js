@@ -1,7 +1,7 @@
-// The sky's big moving parts, called from src/world/sky.js: stylised cumulus, high cirrus, a few towering
+// The sky's big moving parts, called from src/world/sky.js: stylised cumulus, a few towering
 // clouds on the horizon, and the night's starfield with a faint Milky Way and the odd shooting star.
 //
-// Draw calls: cumulus and towers are ONE merged mesh, cirrus ONE, stars plus the shooting star ONE Points,
+// Draw calls: cumulus and towers are ONE merged mesh, stars plus the shooting star ONE Points,
 // the Milky Way ONE strip; the two night ones are hidden by day. Everything moves in the vertex shader:
 // per frame the CPU writes a handful of uniforms and allocates nothing.
 //
@@ -15,7 +15,6 @@ import { createRng } from '../logic/rng.js';
 import { SEED } from '../config.js';
 
 const BOX = 1500; // the cumulus field wraps in a BOX x BOX square round the player (metres)
-const CIRRUS_BOX = 2000;
 const STAR_R = 800, MILKY_R = 790;
 const STAR_N = 4200, SHOT_N = 28;
 
@@ -189,63 +188,6 @@ function buildCumulus() {
   return { mesh, uniforms };
 }
 
-// High wispy cirrus: long soft streaks far up, combed along the wind. One transparent mesh.
-function buildCirrus() {
-  const rng = createRng(SEED + 503);
-  const pos = [], uv = [], cloud = [], info = [], idx = [];
-  const N = 16, SEG = 10;
-  for (let s = 0; s < N; s++) {
-    const L = 280 + rng() * 240, Wd = 70 + rng() * 70, bow = (rng() - 0.5) * 0.5, first = pos.length / 3;
-    const place = [rng(), 380 + rng() * 90, rng(), (s + 0.5) / N];
-    for (let i = 0; i <= SEG; i++) {
-      const f = i / SEG, x = (f - 0.5) * L, zc = Math.sin(f * Math.PI) * bow * L * 0.25;
-      for (let k = 0; k < 2; k++) {
-        pos.push(x, 0, zc + (k - 0.5) * Wd * (0.6 + 0.4 * Math.sin(f * Math.PI)));
-        uv.push(f, k * 2 - 1); cloud.push(...place); info.push((rng() - 0.5) * 0.5, rng(), 0, 0);
-      }
-      if (i) { const o = first + (i - 1) * 2; idx.push(o, o + 2, o + 1, o + 1, o + 2, o + 3); }
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geo.setAttribute('aCloud', new THREE.Float32BufferAttribute(cloud, 4));
-  geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(info, 4));
-  geo.setIndex(idx);
-  const uniforms = { uCenter: { value: new THREE.Vector3() }, uOff: { value: new THREE.Vector2() }, uAng: { value: 0 }, uAmount: { value: 0.5 }, uColor: { value: new THREE.Color() }, uHaze: { value: new THREE.Color() } };
-  const mat = new THREE.ShaderMaterial({
-    uniforms, fog: false, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    vertexShader: /* glsl */`
-      attribute vec4 aCloud, aInfo; uniform vec3 uCenter; uniform vec2 uOff; uniform float uAng, uAmount;
-      varying vec2 vUv; varying float vA, vSeed; varying vec3 vWorld;
-      ${WRAP_GLSL}
-      void main() {
-        float edge; vec3 base = wrapAt(aCloud.xz, aCloud.y, uOff, uCenter, ${CIRRUS_BOX.toFixed(1)}, edge);
-        float a = uAng + aInfo.x, c = cos(a), s = sin(a);
-        vec3 world = base + vec3(position.x * c - position.z * s, 0.0, position.x * s + position.z * c);
-        vUv = uv; vSeed = aInfo.y; vWorld = world;
-        vA = edge * smoothstep(aCloud.w, aCloud.w + 0.12, uAmount);
-        gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 uColor, uHaze; varying vec2 vUv; varying float vA, vSeed; varying vec3 vWorld;
-      void main() {
-        float across = abs(vUv.y), along = vUv.x;
-        float body = (1.0 - smoothstep(0.0, 1.0, across)) * pow(sin(3.14159 * along), 1.2);
-        // soft combed wisps: a gentle variation across and along, no hard lines
-        float fib = 0.6 + 0.4 * sin(vUv.y * 4.0 + sin(along * 3.0 + vSeed * 20.0) * 0.8 + vSeed * 30.0);
-        float a = body * body * fib * vA * 0.32;
-        vec3 V = normalize(vWorld - cameraPosition);
-        vec3 col = mix(uColor, uHaze, (1.0 - smoothstep(0.05, 0.4, V.y)) * 0.6);
-        gl_FragColor = vec4(col, a);
-        #include <colorspace_fragment>
-      }`,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'cirrus'; mesh.renderOrder = -8.9; mesh.frustumCulled = false;
-  return { mesh, uniforms };
-}
-
 // ---- Stars ------------------------------------------------------------------------------------------
 // The Milky Way's plane: a great circle that rises to about 70 degrees, its seam hidden below the horizon.
 const BAND_N = new THREE.Vector3(0.78, 0.34, -0.52).normalize();
@@ -371,15 +313,15 @@ function buildMilkyWay() {
 
 // ---- The whole thing --------------------------------------------------------------------------------
 export function createSkyFx(scene, renderer) {
-  const cum = buildCumulus(), cir = buildCirrus(), stars = buildStars(), milky = buildMilkyWay();
-  scene.add(cum.mesh, cir.mesh, stars.points, milky.mesh);
+  const cum = buildCumulus(), stars = buildStars(), milky = buildMilkyWay();
+  scene.add(cum.mesh, stars.points, milky.mesh);
   const tmp = new THREE.Color(), tmp2 = new THREE.Color(), WHITE = new THREE.Color(1, 1, 1);
-  const off = new THREE.Vector2(), cirOff = new THREE.Vector2();
+  const off = new THREE.Vector2();
   let shot = null, shotIn = 6, clock = 0;
   const az = (a, e) => new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
 
   return {
-    cumulus: cum.mesh, cirrus: cir.mesh, stars: stars.points, milkyWay: milky.mesh,
+    cumulus: cum.mesh, stars: stars.points, milkyWay: milky.mesh,
     // o: { dt, elapsed, focus, sun (unit dir), night, c (skyColors hex), top, horizon, fog (THREE.Color, after weather), wx }
     update(o) {
       const { dt, sun, night, c, wx } = o;
@@ -391,7 +333,6 @@ export function createSkyFx(scene, renderer) {
       // Drift with the wind: slow on a calm day, brisk in a gale (wrapped so the numbers stay small).
       const v = (2.5 + wind * 13) * dt;
       off.x = (off.x + wX * v) % BOX; off.y = (off.y + wZ * v) % BOX;
-      cirOff.x = (cirOff.x + wX * v * 0.6) % CIRRUS_BOX; cirOff.y = (cirOff.y + wZ * v * 0.6) % CIRRUS_BOX;
 
       // How many: sunny = a few fair-weather clouds, windy = more, rain = all of them, wide, flat and grey.
       const U = cum.uniforms;
@@ -410,7 +351,7 @@ export function createSkyFx(scene, renderer) {
       belly.multiplyScalar(0.92 - gold * 0.08);
       const rim = U.uRim.value.setHex(c.sun).lerp(tmp.setRGB(1, 0.84, 0.6), 0.4).multiplyScalar(0.55 + gold * 0.6);
       // Night: dark shapes, moonlit tops a touch bluer, belly nearly the night sky.
-      lit.lerp(tmp.setRGB(0.045, 0.055, 0.1), night); belly.lerp(tmp.setRGB(0.012, 0.015, 0.032), night); rim.lerp(tmp.setRGB(0.03, 0.04, 0.085), night);
+      lit.lerp(tmp.setRGB(0.016, 0.02, 0.042), night); belly.lerp(tmp.setRGB(0.007, 0.009, 0.022), night); rim.lerp(tmp.setRGB(0.025, 0.034, 0.075), night);
       // Weather: grey and heavy in rain, pale and washed out in fog.
       const grey = Math.min(1, rain * 1.0 + fog * 0.6 + Math.max(0, cloud - 0.5) * 0.5);
       const dim = 1 - night * 0.55;
@@ -420,14 +361,6 @@ export function createSkyFx(scene, renderer) {
       U.uHaze.value.copy(o.horizon); U.uFogCol.value.copy(o.fog); U.uFogMix.value = Math.min(0.85, fog * 0.8);
       if (sunUp) U.uLightDir.value.set(sun.x, Math.max(sun.y, -0.05), sun.z).normalize();
       else U.uLightDir.value.set(-sun.x, -sun.y, sun.z).normalize();
-
-      // Cirrus: out on fair and windy days, gone under the rain deck.
-      const C = cir.uniforms;
-      C.uCenter.value.set(fx, 0, fz); C.uOff.value.copy(cirOff); C.uAng.value = Math.atan2(-wZ, wX);
-      C.uAmount.value = Math.max(0, 0.45 + wind * 0.35 - rain * 1.2 - fog * 0.8) * (1 - night * 0.85);
-      C.uColor.value.copy(lit).lerp(WHITE, 0.25 * (1 - night)).lerp(tmp.setHex(c.top), 0.12);
-      C.uHaze.value.copy(o.horizon);
-      cir.mesh.visible = C.uAmount.value > 0.01;
 
       // Stars: in at dusk, out at dawn; only on a clear night.
       const clear = THREE.MathUtils.clamp(1 - cloud * 1.15 - fog * 1.6 - rain * 2, 0, 1);

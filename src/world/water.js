@@ -173,7 +173,30 @@ const waterFragment = /* glsl */ `
     return sqrt(vec2(d1, d2));
   }
   // Bubbly lace: the bright film between neighbouring bubbles (the cell borders), with round holes in it.
-  float lace(vec2 p, float t) { vec2 c = cells(p, t); return (1.0 - smoothstep(0.02, 0.11, c.y - c.x)) * (0.6 + 0.4 * smoothstep(0.15, 0.45, c.x)); }
+  // Natural sea foam, the shared pattern: a domain-warped mix of broken patches (~45 cm), bubble clusters
+  // (~15 cm) and specks (~5 cm), plus torn holes of uneven size that open and close as bubbles pop.
+  // Every layer evolves on its own clock, so the foam dissolves and re-forms rather than sliding as a fixed print.
+  // x = the foam value 0..1, y = how much a hole is open here 0..1.
+  vec2 foamField(vec2 p, float t, float detail) {
+    vec2 w = vec2(noised(p * 0.9 + vec2(t * 0.11, -t * 0.07)).x, noised(p * 0.9 + vec2(4.7, 1.3) - t * 0.09).x);
+    vec2 q = p + (w - 0.5) * 0.9;
+    float n1 = noised(q * 2.2 + t * vec2(0.13, 0.05)).x;
+    float n2 = noised(q * 6.5 - t * vec2(0.31, 0.17)).x;
+    float n3 = detail > 0.3 ? noised(q * 19.0 + t * vec2(0.4, -0.55)).x : 0.5;
+    float holes = 0.0;
+    if (detail > 0.3) {
+      vec2 c = cells(q * 11.0 + n1 * 1.7, t * 1.9);
+      holes = (1.0 - smoothstep(0.1, 0.18 + 0.28 * n2, c.x)) * smoothstep(0.35, 0.7, n2 + 0.25 * n3) * detail;
+    }
+    return vec2(n1 * 0.52 + n2 * 0.3 + n3 * 0.18, holes);
+  }
+  // How much of the water the foam covers where it is dens thick (0 = a few specks .. 1 = solid white),
+  // with soft edges; far off the fine pattern fades to its average so no structure shows from any distance.
+  float foamCover(vec2 ff, float dens, float detail) {
+    float e = 1.0 - dens;
+    float c = smoothstep(e - 0.07, e + 0.13, ff.x) * (1.0 - ff.y * (0.5 + 0.45 * (1.0 - dens)));
+    return mix(dens * 0.85, c, detail);
+  }
   // Caustics: two drifting layers of soft bright cell borders, like sunlight focused by the ripples.
   float caustic(vec2 p, float t) {
     vec2 a = cells(p * 1.25, t * 0.8), b = cells(p * 2.1 + 3.1, -t * 0.65);
@@ -311,17 +334,21 @@ const waterFragment = /* glsl */ `
       waveShade = exp(-cu * cu) * smoothstep(0.7, 1.0, steep) * vis * (1.0 - broken);   // shadow under the curling lip
       // White water: a band that churns behind the broken crest as it rushes in, trailing lace seaward.
       float bw = 0.7 + 2.3 * clamp(1.0 - dc / max(bd, 0.1), 0.0, 1.0);
-      vec2 flowIn = -seaward * uTime * 1.6;
-      float churn = detail > 0.01 ? lace(p * 3.2 + flowIn, uTime * 2.4) : 0.5;
+      // One foam pattern for the whole surf zone, carried gently shoreward with the water.
+      vec2 ff = detail > 0.01 ? foamField(p + seaward * (dc * 0.35 + uTime * 0.12), uTime, detail) : vec2(0.5, 0.0);
       float bore = smoothstep(-0.4, 0.0, u) * (1.0 - smoothstep(bw * 0.55, bw, u)) * broken * vis;
-      float trail = smoothstep(bw * 0.55, bw, u) * (1.0 - smoothstep(bw, bw + 3.0, u)) * broken * vis;
-      seaFoam += bore * (0.8 + 0.2 * churn) + trail * churn * 0.5 * smoothstep(0.35, 0.75, rp.x + 0.1) + lip * (0.55 + 0.45 * rp.x);
-      // ---- the wash on the sand: a bright churning band rushing up, then a lacy bubbly film sliding back
-      float lc = detail > 0.01 ? lace(p * 4.4 + seaward * uTime * 0.35, uTime * 1.5) : 0.5;
+      float trail = smoothstep(bw * 0.55, bw, u) * (1.0 - smoothstep(bw, bw + 3.5, u)) * broken * vis;
+      // Densest and whitest right behind the front, thinning to patches and specks further back.
+      seaFoam += bore * foamCover(ff, mix(0.95, 0.75, smoothstep(0.0, bw, u)), detail);
+      seaFoam += trail * foamCover(ff, mix(0.55, 0.08, smoothstep(bw * 0.6, bw + 3.5, u)), detail) * 0.85;
+      seaFoam += lip * foamCover(ff, 0.7, detail);
+      // ---- the wash on the sand: a dense white band rushing up, then bubbly patches thinning to specks as it slides back
       float band = 0.35 + 1.6 * uprush;
       float edgeFoam = smoothstep(-0.03, 0.06, x) * (1.0 - smoothstep(band * 0.5, band, x));
-      edgeFoam *= mix(0.55 + 0.45 * lc, 1.0, uprush * 0.6);
-      float film = smoothstep(0.05, 0.4, x) * (1.0 - smoothstep(0.4, 0.8 + peak * reach, x)) * (1.0 - uprush) * lc * 0.75 * smoothstep(0.25, 0.65, rp.x + 0.1);
+      edgeFoam *= foamCover(ff, mix(0.6, 0.93, uprush), detail);
+      float back = smoothstep(0.26, 1.0, f); // how far into the backwash
+      float film = smoothstep(0.05, 0.4, x) * (1.0 - smoothstep(0.4, 0.8 + peak * reach, x)) * (1.0 - uprush);
+      film *= foamCover(ff, mix(0.55, 0.06, back) * (1.0 - 0.45 * smoothstep(0.3, 2.2, x)), detail) * 0.8;
       seaFoam += edgeFoam * 0.95 + film;
       seaFoam *= mix(1.0, 1.4, rocky);
     }
@@ -609,6 +636,7 @@ export function buildWater() {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 1;
   mesh.frustumCulled = false;
+  mesh.userData.surf = surf; mesh.userData.waveAt = waveAt; // (read by checks: timing a screenshot to a break)
   mesh.onBeforeRender = (renderer, scene, camera) => { pickObstacles(camera.position, mat.uniforms.uObs.value); updateSurf(camera.position, mat.uniforms.uTime.value); };
   const u = mat.uniforms, tmp = new THREE.Color(), dir = new THREE.Vector3();
   mesh.userData.update = (elapsed) => { u.uTime.value = elapsed; };

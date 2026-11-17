@@ -33,8 +33,9 @@ const dry = C(0xa9a25c), dryPale = C(0xb9b177), olive = C(0x8f9d50), green = C(0
 const dirt = C(0xd3a46c), clay = C(0xcc8a5c), clayDark = C(0xb87250), damp = C(0x97794f), mud = C(0x7d6246);
 const litter = C(0x8f8a52), forestGreen = C(0x7d9a4c), streamBed = C(0x8b7a5a);
 const STAMP = {
-  path: C(0xdcb07a), packed: C(0xe3c391), dirt, clay, damp, mud, grass: green, dry, sand: bankSand,
+  path: C(0xdcb07a), packed: C(0xe3c391), dirt, clay, damp, mud, grass: green, dry, sand: bankSand, gravel: C(0xcdb894),
 };
+const gravelDark = C(0xa8977a), gravelPale = C(0xe2d3b4);
 
 // Smooth value noise in [0, 1] (a different lattice from the terrain's, so the patches do not follow the hills).
 function hash(ix, iz) { let h = Math.imul(ix, 2246822519) ^ Math.imul(iz, 3266489917) ^ 0x5bd1e995; h = Math.imul(h ^ (h >>> 15), 2654435761); return ((h ^ (h >>> 13)) >>> 0) / 4294967296; }
@@ -102,6 +103,8 @@ function applyStamps(c, x, z) {
     t.copy(STAMP[s.kind]);
     // A little life in the stamp: worn paths are paler down the middle, packed earth is mottled.
     if (s.kind === 'path' || s.kind === 'packed') t.lerp(dryPale, (vnoise(x * 0.7, z * 0.7) - 0.5) * 0.35 + 0.1).lerp(dirt, smooth((vnoise(x * 1.9 + 9, z * 1.9) - 0.55) / 0.3) * 0.35);
+    // Gravel: grey-tan grit, darker where it is trodden and damp, paler chips here and there.
+    if (s.kind === 'gravel') t.lerp(gravelDark, smooth((vnoise(x * 0.8 + 4, z * 0.8 + 1) - 0.45) / 0.35) * 0.55).lerp(gravelPale, smooth((vnoise(x * 3.1, z * 3.1 + 5) - 0.6) / 0.25) * 0.5);
     c.lerp(t, k);
   }
 }
@@ -172,7 +175,8 @@ export function paintNewGround(c, x, z, h, slope) {
   if (!near) return false;
   if (slope === undefined) { const e = 0.6; slope = Math.hypot(heightAt(x + e, z) - heightAt(x - e, z), heightAt(x, z + e) - heightAt(x, z - e)) / (2 * e); }
   // The locals' side. The beaches stay beach: only the grass gets the hillside's colours.
-  if (g.locals > 0.01 && h > 0.15) c.lerp(hillside(x, z, h, slope, g), g.locals * smooth((h - 0.35) / 0.4));
+  // (The fishing beach is sand from its ragged grass line down, however high it lies.)
+  if (g.locals > 0.01 && h > 0.15) c.lerp(hillside(x, z, h, slope, g), g.locals * smooth((h - 0.35) / 0.4) * (1 - g.beach));
   // The camp's side of the river was its beach: grass now runs down to a narrow sandy bank.
   // Its edges wander (noise), so grass, sand and mud meet in soft, ragged, painterly bands.
   if (g.river < 22 && g.mouth < 0.5 && g.locals < 0.01 && h > 0.1) {

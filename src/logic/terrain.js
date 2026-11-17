@@ -84,9 +84,35 @@ function capsuleD(x, z, a, b) {
   const dx = b.x - a.x, dz = b.z - a.z, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz)));
   return Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
 }
+// The fishing beach (AREAS.waterfront): on the island's scale the measure runs from 48 (the grass line, which
+// wanders a little) to 60 (the waterline) over `depth` metres, so the sand is wide and falls gently to the sea and
+// on out into broad shallows. Past the beach's ends the measure climbs away, so the shore curves back in to the
+// old coast like the arms of a bay.
+const WF = AREAS.waterfront, WF_K = (ISLAND_RADIUS - GRASS_RADIUS) / WF.depth;
+export function beachFrame(x, z) {
+  const dx = x - WF.o.x, dz = z - WF.o.z;
+  return { s: dx * WF.ax + dz * WF.az, d: dx * WF.nx + dz * WF.nz };
+}
+// Where the grass gives way to sand: metres seaward of d = 0 (ragged, never a straight edge).
+const grassLine = (s) => 1.3 * noise(s / 6.5 + 3.1, 11.7) + 0.55 * noise(s / 2.2 + 9.4, 5.3);
+// 1 on the fishing beach's sand, 0 on the grass above it: a soft, ragged edge a metre or two wide.
+export function beachSand(x, z) {
+  const { s, d } = beachFrame(x, z);
+  if (s < WF.s0 - 30 || s > WF.s1 + 30 || d < -12 || d > 80) return 0;
+  const out = Math.max(0, WF.s0 - s, s - WF.s1);
+  return smooth((d - grassLine(s) + 0.5 + 0.45 * noise(x * 0.9 + 3, z * 0.9 + 8)) / 1.6) * (1 - smooth((out - 4) / 8));
+}
+function beachR(x, z) {
+  const { s, d } = beachFrame(x, z);
+  if (s < WF.s0 - 40 || s > WF.s1 + 40 || d < -25 || d > 80) return Infinity;
+  const out = Math.max(0, WF.s0 - s, s - WF.s1);
+  return GRASS_RADIUS + (d - grassLine(s)) * WF_K + out * (0.35 + out * 0.035);
+}
 function localsR(x, z, rv) {
   let round = ISLAND_RADIUS + Math.hypot(x - LOC.x, z - LOC.z) - LOC.r;
   for (const f of FILL) round = meltK(round, f.k0 + f.k1 * capsuleD(x, z, f.a, f.b), 10);
+  const br = beachR(x, z);
+  if (br < round + 4) round = meltK(round, br, 3);
   if (rv.d === Infinity || rv.side < 0) return round;
   const e = rv.d - rv.w; // metres past the far bank
   const band = ISLAND_RADIUS - 2 * Math.min(e, BAND - e) + 3 * Math.max(0, rv.s - MOUTH_AT);
@@ -125,6 +151,7 @@ const COAST_KEEP = [
   { a: { x: Math.cos(0.3142) * 50, z: Math.sin(0.3142) * 50 }, b: { x: Math.cos(0.3142) * 112, z: Math.sin(0.3142) * 112 }, near: 16, fade: 12 }, // layout.js DOCK (18 deg, radial), harbour.js ferry
   { a: { x: -32.63, z: 41.77 }, near: 10, fade: 8 },  // layout.js CAMPFIRE (128 deg, 53 m): the beach camp, its tents and props
   { a: { x: 36.6, z: 36.5 }, near: 5, fade: 8 },      // layout.js ZIPLINE.bottom: the flying fox landing
+  { a: AREAS.waterfront.at(AREAS.waterfront.s0, 12), b: AREAS.waterfront.at(AREAS.waterfront.s1, 12), near: 26, fade: 10 }, // the fishing beach (beachR below)
 ];
 const COAST_JETTY = { a: { x: 150, z: -62 }, b: { x: 196, z: -62 } };
 const COAST_NEAR = 14, COAST_FADE = 12;
@@ -270,7 +297,7 @@ const shore = (r) => {
   if (r <= ISLAND_RADIUS) { const t = (r - GRASS_RADIUS) / (ISLAND_RADIUS - GRASS_RADIUS); return GRASS_HEIGHT * (1 - t * t); }
   const s = Math.min(1, (r - ISLAND_RADIUS) / (SEA_FLOOR_RADIUS - ISLAND_RADIUS)); return SEA_FLOOR_DEPTH * (0.5 * s + 0.5 * s * s);
 };
-const inNew = (x, z) => x > 14 && x < 215 && z < 12 && z > -200;
+const inNew = (x, z) => x > 14 && x < 215 && z < (x > 80 ? 40 : 12) && z > -200; // east of x = 80 it reaches further south, under the fishing beach's shallows
 // The river's cross-section: a bed too deep to wade in the middle, shallow at the edges, banks rising beyond.
 const riverBed = (d, w) => (d < w ? -RIVER_DEPTH * (1 - (d / w) ** 2) ** 0.8 : (d - w) * 0.32);
 const lakeBed = (d) => (d < LAKE.r ? -LAKE.depth * (1 - (d / LAKE.r) ** 2) ** 0.6 : (d - LAKE.r) * 0.3);
@@ -395,7 +422,24 @@ function paddyAt(x, z) {
   return { w: best, f: which };
 }
 
-// The locals' land at (x, z). `beforePaddies` leaves out the paddy levelling (used to set their levels).
+// The fish market's floor: a level rectangle in the beach frame with a soft 2.5 m rim. Its level is the
+// ground's own average over it (worked out once), so it neither towers over nor sinks into the beach.
+let marketLevel = null;
+export function marketAt(x, z) {
+  const M = WF.market, { s, d } = beachFrame(x, z);
+  return smooth((M.hw + 2.5 - Math.abs(s - M.s)) / 2.5) * smooth((M.hd + 3.5 - Math.abs(d - M.d)) / 3.5);
+}
+function marketY() {
+  if (marketLevel !== null) return marketLevel;
+  const M = WF.market; let sum = 0, n = 0;
+  for (let i = -4; i <= 4; i++) for (let j = -2; j <= 2; j++) {
+    const p = WF.at(M.s + (i / 4) * M.hw, M.d + (j / 2) * M.hd), rv = riverAt(p.x, p.z);
+    sum += localsHeight(p.x, p.z, localsR(p.x, p.z, rv), rv, true); n++;
+  }
+  marketLevel = +(sum / n).toFixed(2); WF.market.y = marketLevel;
+  return marketLevel;
+}
+// The locals' land at (x, z). `beforePaddies` leaves out the paddy levelling (and the market's, used to set their levels).
 function localsHeight(x, z, lr, rv, beforePaddies = false) {
   // The land as it was before the hillside, kept exactly along the river so its banks do not move.
   let old = shore(lr);
@@ -426,6 +470,8 @@ function localsHeight(x, z, lr, rv, beforePaddies = false) {
     // The clearing on the ridge: a level lawn with a view.
     const C = AREAS.clearing, dc = Math.hypot(x - C.x, z - C.z);
     if (dc < C.r + 3.5) h += (C.y - h) * smooth((C.r + 3.5 - dc) / 3.5);
+    const mk = Math.abs(x - WF.market.x) < 22 && Math.abs(z - WF.market.z) < 22 ? marketAt(x, z) : 0;
+    if (mk > 0) h += (marketY() - h) * mk;
   }
   // The stream: a channel 2.8 m across, sunk into the valley floor, from the spring down to the river.
   const n = nearestOn(streamLine, x, z, 6);
@@ -569,6 +615,7 @@ export function groundKind(x, z) {
     stream: st.d, streamS: st.s, spring: Math.hypot(x - AREAS.spring.x, z - AREAS.spring.z) - AREAS.spring.r,
     paddy: paddyAt(x, z).w, forest: ridgeForest(x, z).depth, terrace, face, step,
     clearing: Math.hypot(x - AREAS.clearing.x, z - AREAS.clearing.z) - AREAS.clearing.r,
+    beach: beachSand(x, z), market: marketAt(x, z),
   };
 }
 

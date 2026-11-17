@@ -81,6 +81,7 @@ function siteFor(kind, x, z) {
   const K = KINDS[kind], small = !K.col && kind !== 'log';
   const g = groundKind(x, z);
   if (!g) return null;
+  if (g.market > 0.01 || g.beach > (kind === 'palm' ? 0.45 : 0.15)) return null; // the fish market and the fishing beach's sand
   if (g.rock > 0.25 || g.paddy > 0.01 || g.face > 0.05 || g.step > 0.05 || g.river < (kind === 'bamboo' ? 2.2 : 1.4) || g.lake < 2) return null;
   if (g.stream < (kind === 'bamboo' ? 2.8 : small ? 1.8 : 2.4) || g.spring < 1) return null;
   if (pathEdge(x, z) < K.clear) return null;

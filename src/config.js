@@ -163,6 +163,25 @@ export const AREAS = (() => {
       { x: 136, z: -112 }, { x: 122, z: -119 }, { x: 100, z: -122 }, { x: 80, z: -120 }, { x: 74, z: -106 }, { x: 62, z: -96 }, { x: 54, z: -84 }],
   };
   const spring = { x: 137.5, z: -106.8, r: 2.2 };
+  // ---- The fishing waterfront: the village's south shore, between the river mouth and the south-east rocks
+  // (below the cart ramp's bamboo fence). A wide, gently sloping sand beach where the boats are dragged up
+  // and launched, the fishermen's corner at its west end and a covered fish market on the level grass above
+  // its east end. Given in the beach's own frame: `s` metres along the coast (east positive) from `o` (on the
+  // grass line), `d` metres seaward from the grass line. The waterline (sea level 0) is `depth` m out; the
+  // sand falls about 0.12 m per metre at the water, so a tide of +-0.5 m moves the waterline 4 to 8 m.
+  const waterfront = (() => {
+    const l = Math.hypot(0.995, 0.1), ax = 0.995 / l, az = 0.1 / l, o = { x: 112, z: -22 };
+    const at = (s, d) => ({ x: +(o.x + ax * s - az * d).toFixed(2), z: +(o.z + az * s + ax * d).toFixed(2) });
+    const along = +Math.atan2(ax, az).toFixed(4), sea = +Math.atan2(-az, ax).toFixed(4); // headings: east along the coast, out to sea
+    return {
+      o, ax, az, nx: -az, nz: ax, at, along, sea, s0: -22, s1: 27, depth: 20,
+      // The market: a level rectangle (hw along the coast, hd up/down the beach) of packed gravel on the grass.
+      market: { ...at(15, -5.5), s: 15, d: -5.5, hw: 11.5, hd: 5.5, rot: sea }, // rot: a heading, hd along it (as in paintGround)
+      // The fishermen's corner (west) and where Old Darto's hut stands, at the grass line looking out to sea.
+      fishers: { ...at(-8, 2), s: -8, d: 2 },
+      hut: { ...at(-17.5, -3.2), s: -17.5, d: -3.2, rot: sea },
+    };
+  })();
   // The paths the village and farm are meant to have (polylines). The ground is painted along them.
   const paths = {
     // From the bridge straight up the stairs, across the square, to the hall.
@@ -177,6 +196,10 @@ export const AREAS = (() => {
     // From the top of the ramp lane east over the low country to the jetty.
     jetty: [vw(62, laneV(3)), { x: 145, z: -42 }, { x: 156, z: -44 }, { x: 165, z: -51 }, { x: 170, z: -57 }, { x: 172.5, z: -62 }],
     ridgeTrail,
+    // The waterfront: from the foot of the cart ramp along the top of the beach, past the fishermen's corner, into
+    // the market's west end; and from the market's east end up over the low country to the jetty path.
+    beach: [ramp.path[0], waterfront.at(-27, -3), waterfront.at(-17, -6.6), waterfront.at(-6, -4.5), waterfront.at(3.5, -6.5)],
+    market: [waterfront.at(26.5, -7.5), waterfront.at(31, -12), { x: 141, z: -37.5 }, { x: 145, z: -42 }],
   };
   const A = {
     river,
@@ -190,7 +213,7 @@ export const AREAS = (() => {
     jetty: { x: 177, z: -62, rot: Math.PI / 2 }, // the fishing jetty on the far shore, pointing out to sea (east)
     // The hillside (see the comments above for what each means).
     villageFrame: VF, terraces, steps, ramp, square, plots, hall, stalls, banyan, well,
-    valley, stream, spring, paddyFields, ridge, ridgeTrail, clearing, paths,
+    valley, stream, spring, paddyFields, ridge, ridgeTrail, clearing, paths, waterfront,
     // Where paths cross the stream (plank crossings go here): filled in below.
     streamCrossings: [],
     lake: { x: 63, z: -113, r: 12.5, depth: 1.8 },

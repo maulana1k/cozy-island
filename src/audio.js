@@ -373,6 +373,13 @@ export function createAudio(makeContext = () => new AudioContext()) {
       if (Math.random() < 0.3) tone(600, { type: 'triangle', dur: 0.25, gain: 0.04, delay: 0.45, to: 820, out });
       return 0.8;
     },
+    // A breaker crashing on the beach (variant 1: on the rocks, heavier): a soft low thump of water and a long hiss as it rushes up.
+    surf(out, v) {
+      hiss({ type: 'lowpass', freq: 420 + v * 160, q: 0.6, dur: 1.1 + v * 0.4, gain: 0.07 + v * 0.05, out });
+      hiss({ type: 'bandpass', freq: 1700, q: 0.4, dur: 1.9, gain: 0.03 + v * 0.015, delay: 0.12, out });
+      hiss({ type: 'highpass', freq: 3600, q: 0.5, dur: 2.4, gain: 0.014, delay: 0.35, out });
+      return 2.6;
+    },
     // A flock taking off: a burst of wingbeats and a couple of alarm chips.
     flutter(out) {
       for (let i = 0; i < 10; i++) hiss({ freq: 1300 + Math.random() * 800, q: 0.9, dur: 0.03, gain: 0.05 * (1 - i / 12), delay: i * 0.045 + Math.random() * 0.01, out });

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { landR, shoreR, coastShift, coastShallow, heightAt, riverAt } from '../logic/terrain.js';
 import { PALETTE, ISLAND_RADIUS, WILD, AREAS, POND } from '../config.js';
-import { BRIDGE, STONES } from '../logic/layout.js';
+import { BRIDGE, STONES, DOCK } from '../logic/layout.js';
+import { emitDrops, emitPuffs } from './particles.js';
+import { WIND } from './weather.js';
 
 // The sea, river, lake and pond surface: one big shaded plane at sea level (moved out of island.js).
 //
@@ -77,7 +79,7 @@ const waterVertex = /* glsl */ `
     // Over the beach the plane is lifted a little above the sand (linear in the shore measure, so the coarse
     // grid follows it), so the fragment shader can draw the wash running up and cut away the dry sand.
     float reach = runReach(s.y), sea = 1.0 - s.z;
-    float lift = clamp((uShore - s.x) * 0.32 + 0.16, 0.0, 0.16 + 0.32 * (1.25 * reach + 0.8));
+    float lift = clamp((uShore - s.x) * 0.32 + 0.16, 0.0, 0.16 + 0.32 * (1.7 * reach + 0.8));
     lift *= sea * smoothstep(uShore - reach - 8.0, uShore - reach - 3.0, s.x);
     // The swell dies away on the beach (the wash takes over there); the river keeps it, so floating things stay in step.
     w *= mix(smoothstep(uShore - 1.0, uShore + 8.0, s.x), 1.0, s.z);
@@ -107,6 +109,8 @@ const waterFragment = /* glsl */ `
   uniform vec3 uSunTrue;
   uniform float uPath;
   uniform float uRain;
+  uniform vec4 uWind;
+  uniform vec3 uAbyss;
   uniform vec4 uObs[OBS_N];
   uniform vec3 uFogColor;
   uniform float uFogDensity;
@@ -153,7 +157,28 @@ const waterFragment = /* glsl */ `
   float runUp(float f, float peak) {
     return f < 0.26 ? mix(-0.15, peak, 1.0 - (1.0 - f / 0.26) * (1.0 - f / 0.26)) : mix(peak, -0.15, smoothstep(0.0, 1.0, (f - 0.26) / 0.74));
   }
-  float wavePeak(float id, float sn2) { return mix(0.55, 1.0, hash2(vec2(id, 3.7))) * (0.8 + 0.4 * sn2); }
+  // Waves come in sets: every seventh or so is a good deal bigger than the rest.
+  float wavePeak(float id, float sn2) { float set = pow(0.5 + 0.5 * sin(id * 0.9 + 1.3), 6.0); return mix(0.55, 1.0, hash2(vec2(id, 3.7))) * (0.8 + 0.4 * sn2) * (1.0 + 0.6 * set); }
+  // Cellular noise: distances to the nearest two of a field of slowly wandering points (x = F1, y = F2).
+  vec2 cells(vec2 p, float t) {
+    vec2 i = floor(p), f = fract(p);
+    float d1 = 8.0, d2 = 8.0;
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(float(x), float(y));
+      vec2 o = 0.5 + 0.42 * sin(t + 6.2831 * vec2(hash2(i + g), hash2(i + g + 17.3)));
+      vec2 d = g + o - f;
+      float dd = dot(d, d);
+      if (dd < d1) { d2 = d1; d1 = dd; } else if (dd < d2) d2 = dd;
+    }
+    return sqrt(vec2(d1, d2));
+  }
+  // Bubbly lace: the bright film between neighbouring bubbles (the cell borders), with round holes in it.
+  float lace(vec2 p, float t) { vec2 c = cells(p, t); return (1.0 - smoothstep(0.02, 0.11, c.y - c.x)) * (0.6 + 0.4 * smoothstep(0.15, 0.45, c.x)); }
+  // Caustics: two drifting layers of soft bright cell borders, like sunlight focused by the ripples.
+  float caustic(vec2 p, float t) {
+    vec2 a = cells(p * 1.25, t * 0.8), b = cells(p * 2.1 + 3.1, -t * 0.65);
+    return smoothstep(0.22, 0.0, a.y - a.x) * 0.65 + smoothstep(0.16, 0.0, b.y - b.x) * 0.45;
+  }
 
   void main() {
     vec2 p = vWorld.xz;
@@ -235,6 +260,7 @@ const waterFragment = /* glsl */ `
     float depthT = smoothstep(uShore - 2.0, uShore + flats, r);
     vec3 seaCol = mix(uTurq, uShallow, smoothstep(uShore - 0.5, uShore + flats * 0.5, r));
     seaCol = mix(seaCol, uDeep, depthT);
+    seaCol = mix(seaCol, uAbyss, smoothstep(uShore + flats, uShore + flats + 70.0, r)); // deep teal-blue far out
     float seaAlpha = mix(0.62, 0.96, depthT);
     // River, lake, pond: clear and light over the shallows, dark mid-stream.
     float depth = vWave - s.w;
@@ -257,15 +283,56 @@ const waterFragment = /* glsl */ `
     float rEdge = uShore - run * reach + (rp.x - 0.5) * 0.3;
     float x = r - rEdge; // metres seaward of the water's edge (below 0: on the sand)
     float uprush = 1.0 - smoothstep(0.18, 0.34, f);
-    float edgeFoam = smoothstep(-0.03, 0.06, x) * (1.0 - smoothstep(0.12, 0.3 + 0.8 * uprush, x)) * mix(smoothstep(0.3, 0.65, rp.x + 0.12), 1.0, uprush);
-    float sheet = smoothstep(0.1, 0.5, x) * (1.0 - smoothstep(0.3, 0.6 + peak * reach, x)) * (1.0 - uprush) * smoothstep(0.55, 0.8, rp.x) * 0.55;
-    // The next breaker rolling in toward the beach, wider and whiter off the rocks.
     float rocky = 1.0 - smoothstep(0.1, 0.45, s.y);
-    float crestR = uShore + 0.15 * reach + (1.0 - f) * (9.0 + 4.0 * rocky);
-    float cw = (r - crestR) / (0.45 + 0.6 * rocky);
-    float crest = exp(-cw * cw) * smoothstep(0.55, 0.85, f) * smoothstep(0.25, 0.7, rp.x + 0.15);
-    float seaFoam = (edgeFoam * 0.9 + sheet + crest * (0.35 + 0.4 * rocky)) * mix(1.0, 1.5, rocky);
-
+    float wetBed0 = step(s.w, 3.0) * step(s.w, -0.02);
+    float ds = r - uShore; // metres seaward of the still waterline
+    float seaFoam = 0.0, waveLight = 0.0, waveShade = 0.0;
+    vec2 seaward = vec2(0.0);
+    if (sea > 0.3 && ds > -4.0 && ds < 24.0 && camD < 140.0 && (x > -0.05 || inland > 0.5 || wetBed0 > 0.5)) {
+      vec2 fl2;
+      seaward = vec2(shoreInfo(p + vec2(0.7, 0.0), fl2).x - r, shoreInfo(p + vec2(0.0, 0.7), fl2).x - r);
+      seaward /= max(length(seaward), 1e-4);
+      float detail = 1.0 - smoothstep(45.0, 110.0, camD);
+      // ---- the breaker: a swell rolls in, rises and steepens, its lip curls over and it breaks into a bore of white water
+      float D0 = mix(16.0, 11.0, rocky), bd = (1.6 + 2.2 * peak) * mix(1.0, 1.6, rocky);
+      float vis = smoothstep(0.45, 0.62, f);
+      float dc = (1.0 - clamp((f - 0.45) / 0.55, 0.0, 1.0)) * D0; // the crest's distance out
+      float u = ds - dc;                                        // + behind the crest (seaward), - in front of it
+      float steep = 1.0 - smoothstep(bd, D0, dc);
+      float broken = smoothstep(bd + 0.3, bd - 0.6, dc);
+      float amp = 0.45 * peak * (0.3 + 0.7 * steep) * vis * (1.0 - 0.75 * broken);
+      float wf = mix(1.7, 0.45, steep), w = u < 0.0 ? wf : 3.2;
+      float hgt = exp(-(u / w) * (u / w));
+      slope += seaward * amp * hgt * (-2.0 * u / (w * w)) * 0.9;
+      float front = (1.0 - step(0.0, u)) * hgt * vis * (1.0 - broken);
+      waveLight = front * (0.25 + 0.75 * steep);                       // the face, lit through like green glass
+      float lu = (u + 0.12) / 0.2, lip = exp(-lu * lu) * smoothstep(0.55, 1.0, steep) * vis * (1.0 - broken);
+      float cu = (u + wf * 0.9) / (wf * 0.45);
+      waveShade = exp(-cu * cu) * smoothstep(0.7, 1.0, steep) * vis * (1.0 - broken);   // shadow under the curling lip
+      // White water: a band that churns behind the broken crest as it rushes in, trailing lace seaward.
+      float bw = 0.7 + 2.3 * clamp(1.0 - dc / max(bd, 0.1), 0.0, 1.0);
+      vec2 flowIn = -seaward * uTime * 1.6;
+      float churn = detail > 0.01 ? lace(p * 3.2 + flowIn, uTime * 2.4) : 0.5;
+      float bore = smoothstep(-0.4, 0.0, u) * (1.0 - smoothstep(bw * 0.55, bw, u)) * broken * vis;
+      float trail = smoothstep(bw * 0.55, bw, u) * (1.0 - smoothstep(bw, bw + 3.0, u)) * broken * vis;
+      seaFoam += bore * (0.8 + 0.2 * churn) + trail * churn * 0.5 * smoothstep(0.35, 0.75, rp.x + 0.1) + lip * (0.55 + 0.45 * rp.x);
+      // ---- the wash on the sand: a bright churning band rushing up, then a lacy bubbly film sliding back
+      float lc = detail > 0.01 ? lace(p * 4.4 + seaward * uTime * 0.35, uTime * 1.5) : 0.5;
+      float band = 0.35 + 1.6 * uprush;
+      float edgeFoam = smoothstep(-0.03, 0.06, x) * (1.0 - smoothstep(band * 0.5, band, x));
+      edgeFoam *= mix(0.55 + 0.45 * lc, 1.0, uprush * 0.6);
+      float film = smoothstep(0.05, 0.4, x) * (1.0 - smoothstep(0.4, 0.8 + peak * reach, x)) * (1.0 - uprush) * lc * 0.75 * smoothstep(0.25, 0.65, rp.x + 0.1);
+      seaFoam += edgeFoam * 0.95 + film;
+      seaFoam *= mix(1.0, 1.4, rocky);
+    }
+    // Wind: gentle foam streaks along the swell's crests out at sea, more and whiter in a blow.
+    {
+      vec2 wd = normalize(uWind.xy + vec2(1e-4)), wq = vec2(dot(p, wd), dot(p, vec2(-wd.y, wd.x)));
+      float ws = uWind.z;
+      float cap = noised(wq * vec2(0.11, 0.42) - vec2(uTime * 0.45, 0.0)).x;
+      float caps = smoothstep(0.88 - 0.24 * ws, 0.98, cap) * (0.3 + 0.7 * ws) * smoothstep(-0.02, 0.1, vWave);
+      seaFoam += caps * smoothstep(0.3, 0.75, rp.x + 0.15) * depthT * sea * 0.8;
+    }
     // The dry and the wet sand: above the wash the plane is cut away, except a dark film where the water has just been.
     float wetBed = step(s.w, 3.0) * step(s.w, -0.02); // known river-mouth bed under the sea: always water
     float fog = 1.0 - exp(-uFogDensity * uFogDensity * camD * camD);
@@ -278,7 +345,7 @@ const waterFragment = /* glsl */ `
       if (wet < 0.03) discard;
       // A fresh wet film catches the sky for a moment.
       vec3 V = normalize(cameraPosition - vWorld);
-      float sheen = pow(1.0 - max(V.y, 0.0), 3.0) * exp(-max(since, 0.0) / 1.2) * 0.35;
+      float sheen = pow(1.0 - max(V.y, 0.0), 2.5) * exp(-max(since, 0.0) / 1.5) * 0.5;
       vec3 wc = mix(uWetSand * uLight, uSkyHorizon, sheen);
       gl_FragColor = vec4(mix(wc, uFogColor, fog), (0.34 * wet + sheen) * (1.0 - fog));
       #include <colorspace_fragment>
@@ -296,20 +363,38 @@ const waterFragment = /* glsl */ `
     float sd = max(dot(R, uSunDir), 0.0);
     float glint = (smoothstep(0.3, 0.9, pow(sd, 300.0)) * 1.3 + pow(sd, 48.0) * 0.1) * uGlint * (0.4 + 0.6 * near);
 
-    vec3 col = mix(body * uLight, sky, fres);
+    body = mix(body, uTurq * 1.2 + vec3(0.02, 0.06, 0.05), waveLight * 0.55 * sea) * (1.0 - 0.35 * waveShade);
+    vec3 col = mix(body * uLight, sky, fres * (1.0 - 0.5 * waveLight));
+    // Caustics on the sandy bottom of the shallows (sea, river and pond), only in sunlight and only close by.
+    float caus = 0.0;
+    if (camD < 45.0 && uGlint > 0.02) {
+      float shallowSea = sea * (1.0 - smoothstep(0.0, mix(3.0, 8.0, s.y), r - uShore)) * smoothstep(0.4, 2.0, x);
+      float shallowIn = inland * smoothstep(0.02, 0.12, depth) * (1.0 - smoothstep(0.25, 0.75, depth));
+      float k = max(shallowSea, shallowIn) * (1.0 - smoothstep(25.0, 45.0, camD));
+      if (k > 0.01) caus = caustic(p + slope * 3.0, uTime * 0.9) * k * min(1.0, uGlint * 1.5);
+    }
+    col += uSunColor * caus * 0.24;
     float foam = clamp(mix(seaFoam, rivFoam, inland) * mix(0.6, 1.0, near) + obsFoam + rainRing * 0.12, 0.0, 1.0);
     col = mix(col, uFoam * uLight * 1.1, foam * 0.85);
     // Low sun: a golden path of light on the sea toward the real sun (the light itself never sinks below 13 degrees).
     float sp = max(dot(R, uSunTrue), 0.0), path = (pow(sp, 40.0) * 1.2 + pow(sp, 10.0) * 0.2) * uPath * (1.0 - inland);
     col += uSunColor * vec3(1.0, 0.82, 0.55) * path * (1.0 - foam);
     glint = max(glint, path);
+    // Sparkle: tiny points that wink on and off where the ripples catch the sun.
+    if (uGlint > 0.02 && camD < 80.0) {
+      vec2 sp2 = p * 3.0 + rp.yz * 2.0, sc = floor(sp2), sf = fract(sp2) - 0.5;
+      float sh = hash2(sc + 0.7), tw = pow(max(0.0, sin(uTime * (2.5 + 4.0 * sh) + sh * 40.0)), 10.0);
+      float sparkle = step(0.8, sh) * tw * exp(-dot(sf, sf) * 70.0) * pow(sd, 5.0) * uGlint * (1.0 - smoothstep(40.0, 80.0, camD));
+      glint += sparkle * 2.2;
+    }
     col += uSunColor * glint * (1.0 - foam);
 
     float alpha = mix(seaAlpha, rivAlpha, inland);
     // The wash thins to a clear sheet at its edge.
     alpha *= mix(mix(0.4, 1.0, smoothstep(0.0, 2.0, x)), 1.0, max(inland, smoothstep(uShore + 1.0, uShore + 4.0, r)));
     alpha = max(alpha, max(fres * 1.1, glint));
-    alpha = max(alpha, foam * 0.9);
+    alpha = max(alpha, foam * 0.92);
+    alpha = max(alpha, min(caus * 0.3, 0.45));
 
     col = mix(col, uFogColor, fog);
     gl_FragColor = vec4(col, alpha);
@@ -393,6 +478,95 @@ function pickObstacles(cam, out) {
   }
 }
 
+// ---- breakers that throw spray: the shader's wave clock, copied here so the bursts land on its crests ----
+const fract = (v) => v - Math.floor(v);
+function hash2(x, y) { // as the GLSL hash2
+  let a = fract(x * 0.1031), b = fract(y * 0.1031), c = fract(x * 0.1031);
+  const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d;
+  return fract((a + b) * c);
+}
+function vnoise(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy), b = hash2(ix + 1, iy), c = hash2(ix, iy + 1), d = hash2(ix + 1, iy + 1);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+const wavePeak = (id, sn2) => (0.55 + 0.45 * hash2(id, 3.7)) * (0.8 + 0.4 * sn2) * (1 + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(id * 0.9 + 1.3), 6));
+const sstep = (e0, e1, v) => { const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+// Where a wave is at time t for a spot on the shore: its id, phase 0..1, peak, how far out it breaks, and its crest.
+function waveAt(pt, t) {
+  const ph = t / 7.5 + pt.sn * 0.8, id = Math.floor(ph), f = ph - id, peak = wavePeak(id, pt.sn2);
+  const D0 = 16 - 5 * pt.rocky, bd = (1.6 + 2.2 * peak) * (1 + 0.6 * pt.rocky);
+  return { id, f, peak, bd, D0, dc: (1 - Math.min(1, Math.max(0, (f - 0.45) / 0.55))) * D0 };
+}
+const SPRAY = 0xf3f9fb, surf = { pts: [], posts: [], sx: 1e9, sz: 1e9, sound: 0, queue: [] };
+function shorePoint(x, z) {
+  const r = shoreR(x, z), gx = shoreR(x + 0.7, z) - r, gz = shoreR(x, z + 0.7) - r, l = Math.hypot(gx, gz) || 1;
+  const sh = Math.abs(landR(x, z) - 60) < 45 ? coastShallow(x, z) : 0.5;
+  return { x, z, r, nx: gx / l, nz: gz / l, rocky: 1 - sstep(0.1, 0.45, sh), sn: vnoise(x * 0.045, z * 0.045), sn2: vnoise(x * 0.13 + 5, z * 0.13 + 5), id: null, f: 0 };
+}
+// The waterline round the camera, every 2.5 m (redone when the camera has moved on).
+function scanShore(cx, cz) {
+  surf.pts.length = 0; surf.sx = cx; surf.sz = cz;
+  for (let x = cx - 45; x <= cx + 45; x += 2.5) for (let z = cz - 45; z <= cz + 45; z += 2.5) {
+    if ((x - cx) ** 2 + (z - cz) ** 2 > 45 * 45) continue;
+    const r = shoreR(x, z);
+    if (r < 59.2 || r >= 60.8) continue;
+    const pt = shorePoint(x, z);
+    if (heightAt(x + pt.nx * 4, z + pt.nz * 4) < -0.1) surf.pts.push(pt); // real sea out in front (not a river bank)
+  }
+}
+// The harbour pier's posts (the deck runs out from DOCK along its heading): white water slaps them as each wave passes.
+{
+  const dx = Math.sin(DOCK.rot), dz = Math.cos(DOCK.rot);
+  for (let lz = 1.5; lz <= DOCK.length; lz += 3) for (const lx of [-1, 1]) {
+    const o = lx * (DOCK.width / 2 - 0.1), x = DOCK.x + dx * lz + dz * o, z = DOCK.z + dz * lz - dx * o, p = shorePoint(x, z);
+    if (p.r > 60.2) { surf.posts.push(p); statics.push({ x, z, r: 0.14, kind: 1 }); }
+  }
+}
+function burst(x, z, nx, nz, peak, rocky, near, t) {
+  const tx = -nz, tz = nx, n = Math.round((3 + 4 * peak) * (1 + 1.4 * rocky) * near);
+  for (let i = 0; i < n; i++) {
+    const o = (Math.random() - 0.5) * (2.4 + rocky * 1.5);
+    emitDrops(x + tx * o, 0.25 + rocky * 0.25, z + tz * o, 2, 0.8 + 0.5 * peak + rocky * 0.9, SPRAY);
+  }
+  emitPuffs(x, 0.3 + rocky * 0.3, z, Math.round((2 + 2 * peak) * (1 + rocky) * near), SPRAY, 0.6 + rocky * 0.5, 1.0 + rocky * 1.6, 0.75);
+  // On the rocks, white water then runs back off them a moment later.
+  if (rocky > 0.5) surf.queue.push({ t: t + 0.6, x: x - nx * 0.6, z: z - nz * 0.6, tx, tz });
+}
+function updateSurf(cam, t) {
+  if (Math.hypot(cam.x - surf.sx, cam.z - surf.sz) > 12) scanShore(cam.x, cam.z);
+  const audio = globalThis.__game?.audio; // optional: the soft crash of a breaker
+  for (const pt of surf.pts) {
+    const w = waveAt(pt, t), d = Math.hypot(pt.x - cam.x, pt.z - cam.z);
+    if (pt.id === w.id && d < 42) {
+      const fb = 0.45 + 0.55 * (1 - w.bd / w.D0);
+      if (pt.f < fb && w.f >= fb) { // the crest breaks
+        const near = 1 - sstep(20, 42, d);
+        burst(pt.x + pt.nx * w.bd, pt.z + pt.nz * w.bd, pt.nx, pt.nz, w.peak, pt.rocky, near, t);
+        if (audio && d < 32 && t - surf.sound > 0.45) { surf.sound = t; audio.call?.('surf', pt.x + pt.nx * w.bd, 0.3, pt.z + pt.nz * w.bd, pt.rocky > 0.5 ? 1 : 0); }
+      }
+    }
+    pt.id = w.id; pt.f = w.f;
+  }
+  for (const pt of surf.posts) {
+    const w = waveAt(pt, t), d = Math.hypot(pt.x - cam.x, pt.z - cam.z), ds = pt.r - 60;
+    const prev = pt.dc ?? w.dc;
+    if (d < 40 && prev > ds && w.dc <= ds && w.f > 0.45) {
+      const big = w.dc < w.bd ? 1 : 0.4;
+      emitDrops(pt.x, 0.2, pt.z, Math.round(3 + 4 * big), 0.6 + 0.6 * big, SPRAY);
+      emitPuffs(pt.x, 0.25, pt.z, 1 + Math.round(2 * big), SPRAY, 0.3, 0.8 + big, 0.6);
+    }
+    pt.dc = w.dc;
+  }
+  for (let i = surf.queue.length - 1; i >= 0; i--) {
+    const q = surf.queue[i];
+    if (t < q.t) continue;
+    for (let k = 0; k < 4; k++) { const o = (Math.random() - 0.5) * 2.4; emitDrops(q.x + q.tx * o, 0.45, q.z + q.tz * o, 2, 0.35, SPRAY); }
+    emitPuffs(q.x, 0.15, q.z, 2, SPRAY, 1.0, 0.25, 0.5);
+    surf.queue.splice(i, 1);
+  }
+}
+
 export function buildWater() {
   const geo = new THREE.PlaneGeometry(900, 900, 220, 220);
   geo.rotateX(-Math.PI / 2);
@@ -403,7 +577,7 @@ export function buildWater() {
     uniforms: {
       uTime: { value: 0 },
       uShallow: { value: new THREE.Color(PALETTE.water) },
-      uTurq: { value: new THREE.Color(0x86d9cc) },
+      uTurq: { value: new THREE.Color(0x7fdccb) },
       uDeep: { value: new THREE.Color(PALETTE.waterDeep) },
       uRiverShallow: { value: new THREE.Color(0x9cc6b4) },
       uRiverDeep: { value: new THREE.Color(0x2c5f66) },
@@ -418,6 +592,8 @@ export function buildWater() {
       uSunTrue: { value: new THREE.Vector3(0, 1, 0) },
       uPath: { value: 0 },
       uRain: { value: 0 },
+      uWind: WIND,
+      uAbyss: { value: new THREE.Color(0x1f6684) },
       uObs: { value: Array.from({ length: OBS_N }, () => new THREE.Vector4()) },
       uFogColor: { value: new THREE.Color(0xf6d9b8) },
       uFogDensity: { value: 0.004 },
@@ -433,7 +609,7 @@ export function buildWater() {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 1;
   mesh.frustumCulled = false;
-  mesh.onBeforeRender = (renderer, scene, camera) => pickObstacles(camera.position, mat.uniforms.uObs.value);
+  mesh.onBeforeRender = (renderer, scene, camera) => { pickObstacles(camera.position, mat.uniforms.uObs.value); updateSurf(camera.position, mat.uniforms.uTime.value); };
   const u = mat.uniforms, tmp = new THREE.Color(), dir = new THREE.Vector3();
   mesh.userData.update = (elapsed) => { u.uTime.value = elapsed; };
   // The sky tints the water so it follows the time of day: `light` lights the water body, `fog` is the horizon

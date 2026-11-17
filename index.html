@@ -231,18 +231,27 @@
     #hud .press { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 1.5px; animation: pulse 1.8s ease-in-out infinite; }
     @keyframes pulse { 50% { opacity: 0.45; } }
     #hud .menu { background: rgba(30, 36, 60, 0.38); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); gap: 4px; }
-    #hud .menu h2 { margin: 0 0 18px; font-size: 52px; font-weight: 800; transform: rotate(-2deg); }
-    #hud .word { font-size: 25px; font-weight: 800; letter-spacing: 1.2px; padding: 7px 18px; opacity: 0.88; transition: transform 0.15s ease, opacity 0.15s ease; }
-    #hud .word:hover { opacity: 1; transform: scale(1.1) rotate(-1.5deg); }
-    #hud .word.small { font-size: 16px; padding: 4px 9px; }
-    #hud .times { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; margin: 16px 0 18px; }
-    #hud .times.wx { margin-top: -10px; }
-    #hud .times.wx .word.on { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
-    #hud .times .label { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.8; margin-right: 10px; }
-    #hud .keys { display: grid; grid-template-columns: repeat(3, auto); gap: 8px 30px; text-align: left; font-size: 14px; }
+    #hud .menu h2 { margin: 0 0 22px; font-size: 52px; font-weight: 800; transform: rotate(-2deg); }
+    #hud .menu h3 { margin: 0 0 10px; font-size: 13px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; opacity: 0.75; }
+    #hud .mbody { display: flex; align-items: flex-start; justify-content: center; gap: 56px; max-width: 94vw; }
+    #hud .mcol { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+    #hud .panel { display: flex; flex-direction: column; align-items: stretch; text-align: left; min-width: 330px; padding: 16px 18px 12px; border-radius: 22px; background: rgba(255, 255, 255, 0.12); box-shadow: 0 2px 14px rgba(20, 20, 40, 0.18); }
+    #hud .panel.off { display: none; }
+    #hud .mhelp { margin: 22px 0 0; font-size: 13px; font-weight: 700; letter-spacing: 1px; opacity: 0.75; }
+    #hud .word { font-size: 25px; font-weight: 800; letter-spacing: 1.2px; padding: 7px 18px; opacity: 0.88; border-radius: 999px; transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease; }
+    #hud .word:hover, #hud .word.sel { opacity: 1; transform: scale(1.08) rotate(-1.5deg); }
+    #hud .word.sel, #hud .orow.sel { background: rgba(255, 255, 255, 0.24); }
+    #hud .word.tab { font-size: 19px; opacity: 0.7; }
+    #hud .word.tab.on { opacity: 1; text-decoration: underline; text-underline-offset: 5px; }
+    #hud .orow { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 6px 12px; border-radius: 12px; font-size: 17px; font-weight: 700; text-align: left; transition: background 0.15s ease; }
+    #hud .orow:hover { background: rgba(255, 255, 255, 0.16); }
+    #hud .orow b { font-weight: 800; white-space: nowrap; }
+    #hud .orow.sel b::before { content: '\2039  '; opacity: 0.8; }
+    #hud .orow.sel b::after { content: '  \203A'; opacity: 0.8; }
+    #hud .keys { display: grid; grid-template-columns: repeat(2, auto); gap: 9px 34px; text-align: left; font-size: 14px; }
     #hud .key { display: flex; align-items: center; gap: 9px; }
     @media (max-width: 1000px) { #hud .belt { bottom: 92px; } }
-    @media (max-width: 720px) { #hud .keys { grid-template-columns: repeat(2, auto); } #hud .hint span { display: none; } #hud .hint { min-width: 0; } }
+    @media (max-width: 720px) { #hud .mbody { flex-direction: column; align-items: center; gap: 16px; } #hud .panel { min-width: 0; } #hud .hint span { display: none; } #hud .hint { min-width: 0; } }
   </style>
 </head>
 <body>

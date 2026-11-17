@@ -407,10 +407,20 @@ function discover(id) {
   if (rank.index > before) { hud.rankUp(rank.name); audio.play('rank'); } else audio.play('discover');
 }
 function toggleSound() { hud.setSound(!audio.toggleMute()); }
+let tabMenu = false; // the menu was opened with Tab while the mouse was captured: keep the capture, drive it from the keyboard
 function toggleMenu() {
   if (!hud.started) return;
+  tabMenu = false;
   if (hud.menuOpen) hud.closeMenu(); else hud.openMenu();
   syncLook();
+}
+// Tab: open or close the menu without letting go of free look. Any other screen that is open just closes.
+function tabKey() {
+  if (hud.menuOpen) { tabMenu = false; hud.closeMenu(); audio.play('ui'); syncLook(); return; }
+  if (hud.bagOpen) return toggleBag();
+  if (hud.journalOpen) return toggleJournal();
+  if (hud.mapOpen) return toggleMap();
+  tabMenu = mouseHeld(); hud.openMenu(); audio.play('ui'); syncLook();
 }
 function toggleJournal() { if (hud.started) { hud.toggleJournal(); audio.play('ui'); syncLook(); } }
 function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syncLook(); } }
@@ -420,7 +430,7 @@ function toggleMap() { if (hud.started) { hud.toggleMap(); audio.play('ui'); syn
 // is open (you need the cursor there) and taken again when you go back to playing.
 let freeLook = false;
 const mouseHeld = () => document.pointerLockElement === canvas;
-const lookWanted = () => freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
+const lookWanted = () => freeLook && hud.started && (!hud.menuOpen || tabMenu) && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
 let lockRefused = false; // the browser said no to the last request: it wants a click first
 function updateLookHint() { hud.setLookHint(lookWanted() && !mouseHeld() && lockRefused); }
 function syncLook() {
@@ -438,6 +448,7 @@ let escActedAt = -1e9; // when an Esc keydown last closed a screen or the menu
 document.addEventListener('pointerlockchange', () => {
   input.setFreeLook(mouseHeld());
   if (mouseHeld()) { lockRefused = false; updateLookHint(); return; }
+  tabMenu = false; // the mouse is free again, so this is an ordinary menu
   updateLookHint();
   if (!hud.started) return;
   // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
@@ -462,7 +473,7 @@ const relockPress = (e) => {
 window.addEventListener('pointerdown', relockPress, true);
 window.addEventListener('click', (e) => { if (swallowClick) { swallowClick = false; e.preventDefault(); e.stopImmediatePropagation(); return; } syncLook(); }, true);
 const hud = createHUD({
-  onResume: () => { hud.closeMenu(); syncLook(); },
+  onResume: () => { tabMenu = false; hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
   onToggleMenu: toggleMenu,
   onToggleSound: toggleSound,
@@ -555,12 +566,15 @@ window.addEventListener('keydown', (e) => {
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }
   if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
+  if (e.code === 'Tab') e.preventDefault(); // focus never moves, even on a held key
   if (e.repeat) return;
   // During a film any of these keys skips it; nothing else works until it is over.
   if (director.active) { if (['Space', 'Enter', 'Escape', 'KeyE'].includes(e.code)) { director.skip(); input.consumeHop(); input.consumeInteract(); } return; }
   if (e.code === 'KeyG' && !hud.menuOpen) toggleGuide();
   if (e.code === 'KeyT') cycleDaySpeed();
-  if (e.code === 'KeyJ' || e.code === 'Tab') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
+  if (e.code === 'Tab') { e.preventDefault(); tabKey(); return; }
+  if (hud.menuOpen && hud.menuKey(e)) { e.preventDefault(); input.consumeHop(); input.consumeInteract(); return; }
+  if (e.code === 'KeyJ') { e.preventDefault(); if (!hud.menuOpen) toggleJournal(); }
   if (e.code === 'KeyM' && !hud.menuOpen) toggleMap();
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
   if (e.code === 'KeyB' && !hud.menuOpen) toggleBag();

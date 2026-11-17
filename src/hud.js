@@ -382,28 +382,47 @@ export function createHUD(handlers) {
   const barTop = el('div', 'bar-t'), barBottom = el('div', 'bar-b'); barBottom.append(cineTitle, cineSub); barTop.append(cineSkip);
   cine.append(barTop, barBottom);
 
-  // ---- Pause menu: white words on the dimmed picture
+  // ---- Pause menu: white words on the dimmed picture. Left: Menu (big words) and the two panels; right: Options (label: value rows) or Controls (the keys).
+  // Keyboard: W/S or arrows move the highlight, A/D or arrows change a value, Enter or E picks (see menuKey, used by main.js).
   const menu = el('div', 'overlay menu off');
-  const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map'), lookRow = el('button', 'word'), soundRow = el('button', 'word'), guideRow = el('button', 'word'), filmRow = el('button', 'word'), saverRow = el('button', 'word'), gfxRow = el('button', 'word'), speedRow = el('button', 'word');
-  const timeRow = el('div', 'times'); timeRow.append(el('span', 'label', 'Time of day'));
-  for (const [name, t] of TIMES) { const b = el('button', 'word small', name); b.addEventListener('click', () => handlers.onSetTime(t)); timeRow.append(b); }
-  // Weather: pick one to make it stay, or Auto for the random weather.
-  const weatherRow = el('div', 'times wx'); weatherRow.append(el('span', 'label', 'Weather'));
-  for (const [name, k] of WEATHERS) {
-    const b = el('button', 'word small' + (k === 'auto' ? ' on' : ''), name);
-    b.addEventListener('click', () => { for (const o of weatherRow.querySelectorAll('.word')) o.classList.toggle('on', o === b); handlers.onSetWeather && handlers.onSetWeather(k); });
-    weatherRow.append(b);
-  }
+  const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map');
+  const optsTab = el('button', 'word tab', 'Options'), keysTab = el('button', 'word tab', 'Controls');
+  // One option row: a label on the left, its value on the right. row.val is the value's text node holder.
+  const opt = (label) => { const row = el('button', 'orow'); row.val = el('b'); row.append(el('span', null, label), row.val); return row; };
+  const guideRow = opt('Journey guide'), filmRow = opt('Cutscenes'), saverRow = opt('Battery saver'), speedRow = opt('Day speed'), lookRow = opt('Camera'), soundRow = opt('Sound'), gfxRow = opt('Graphics'), timeRow = opt('Time of day'), weatherRow = opt('Weather');
+  // Time of day and Weather step through their choices (Auto for the random weather).
+  let timeAt = -1, wxAt = 0;
+  timeRow.val.textContent = 'Pick one'; weatherRow.val.textContent = WEATHERS[0][0];
+  const stepTime = (d) => { timeAt = (timeAt + d + TIMES.length) % TIMES.length; if (timeAt < 0) timeAt = 0; timeRow.val.textContent = TIMES[timeAt][0]; handlers.onSetTime(TIMES[timeAt][1]); };
+  const stepWeather = (d) => { wxAt = (wxAt + d + WEATHERS.length) % WEATHERS.length; weatherRow.val.textContent = WEATHERS[wxAt][0]; handlers.onSetWeather && handlers.onSetWeather(WEATHERS[wxAt][1]); };
+  timeRow.step = stepTime; weatherRow.step = stepWeather;
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal (Notes are inside)'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Tab', 'Menu'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  menu.append(el('h2', null, 'Paused'), resume, openJournal, openMap, guideRow, filmRow, saverRow, gfxRow, speedRow, lookRow, soundRow, timeRow, weatherRow, controls);
+  const optPanel = el('div', 'panel opts'); optPanel.append(el('h3', null, 'Options'), guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, gfxRow, timeRow, weatherRow);
+  const keyPanel = el('div', 'panel ctl off'); keyPanel.append(el('h3', null, 'Controls'), controls);
+  const mcol = el('div', 'mcol'); mcol.append(el('h3', null, 'Menu'), resume, openJournal, openMap, optsTab, keysTab);
+  const mbody = el('div', 'mbody'); mbody.append(mcol, optPanel, keyPanel);
+  menu.append(el('h2', null, 'Paused'), mbody, el('p', 'mhelp', 'W S move   A D change   Enter pick   Tab or Esc close'));
   guideRow.addEventListener('click', () => handlers.onToggleGuide());
   filmRow.addEventListener('click', () => handlers.onToggleFilms());
   saverRow.addEventListener('click', () => handlers.onToggleSaver());
   gfxRow.addEventListener('click', () => handlers.onToggleGraphics && handlers.onToggleGraphics());
   speedRow.addEventListener('click', () => handlers.onDaySpeed());
+  timeRow.addEventListener('click', () => stepTime(1));
+  weatherRow.addEventListener('click', () => stepWeather(1));
+  // Keyboard highlight over the entries that are showing.
+  let view = 'options', cursor = 0;
+  const optRows = [guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, gfxRow, timeRow, weatherRow];
+  const leftItems = [resume, openJournal, openMap, optsTab, keysTab];
+  const menuItems = () => leftItems.concat(view === 'options' ? optRows : []);
+  function paintCursor() { const items = menuItems(); cursor = Math.max(0, Math.min(items.length - 1, cursor)); for (const o of leftItems.concat(optRows)) o.classList.toggle('sel', o === items[cursor]); }
+  function showView(v) { view = v; optPanel.classList.toggle('off', v !== 'options'); keyPanel.classList.toggle('off', v !== 'controls'); optsTab.classList.toggle('on', v === 'options'); keysTab.classList.toggle('on', v === 'controls'); paintCursor(); }
+  optsTab.addEventListener('click', () => { showView('options'); cursor = leftItems.length; paintCursor(); });
+  keysTab.addEventListener('click', () => showView('controls'));
+  for (const o of leftItems.concat(optRows)) o.addEventListener('mouseenter', () => { const i = menuItems().indexOf(o); if (i >= 0) { cursor = i; paintCursor(); } });
+  showView('options');
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
   root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
@@ -430,7 +449,21 @@ export function createHUD(handlers) {
   const hud = {
     menuOpen: false, started: false, journalOpen: false, mapOpen: false, bagOpen: false,
     begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); },
-    openMenu() { hud.menuOpen = true; menu.classList.remove('off'); },
+    openMenu() { hud.menuOpen = true; menu.classList.remove('off'); cursor = 0; paintCursor(); },
+    // Keys for the open menu. Returns true when it used the key.
+    menuKey(e) {
+      const c = e.code, items = menuItems(), cur = items[cursor];
+      if (c === 'KeyW' || c === 'ArrowUp') { cursor = (cursor - 1 + items.length) % items.length; paintCursor(); return true; }
+      if (c === 'KeyS' || c === 'ArrowDown') { cursor = (cursor + 1) % items.length; paintCursor(); return true; }
+      if (c === 'KeyA' || c === 'ArrowLeft' || c === 'KeyD' || c === 'ArrowRight') {
+        const d = (c === 'KeyA' || c === 'ArrowLeft') ? -1 : 1;
+        if (optRows.includes(cur)) { if (cur.step) cur.step(d); else cur.click(); }
+        else if (cur === optsTab && d > 0) { cursor = leftItems.length; paintCursor(); }
+        return true;
+      }
+      if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') { if (cur) cur.click(); return true; }
+      return false;
+    },
     closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
     toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
@@ -475,15 +508,15 @@ export function createHUD(handlers) {
       setTimeout(() => t.remove(), 3200);
     },
     toggleMap() { hud.mapOpen = !hud.mapOpen; sheet.classList.toggle('off', !hud.mapOpen); if (hud.mapOpen && hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen && hud.bagOpen) hud.toggleBag(); },
-    setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.textContent = on ? 'Sound: on' : 'Sound: off'; },
+    setSound(on) { soundBtn.classList.toggle('muted', !on); soundRow.val.textContent = on ? 'On' : 'Off'; },
     setLookHint(on) { lookHint.classList.toggle('show', !!on); },
-    setLook(on) { lookBtn.classList.toggle('active', on); lookRow.textContent = on ? 'Camera: free look' : 'Camera: hold and drag'; },
+    setLook(on) { lookBtn.classList.toggle('active', on); lookRow.val.textContent = on ? 'Free look' : 'Hold and drag'; },
     // 0 = safe; toward 1 the edges of the picture turn red and the warning shows.
     setDanger(level) { danger.style.opacity = level; root.classList.toggle('danger-on', level > 0); },
     // The quest card top-right. card: { head, title, text } or null when there is nothing to follow.
     setQuest(card, shown) {
       quest.classList.toggle('off', !shown || !card);
-      guideRow.textContent = shown ? 'Quest guide: on' : 'Quest guide: off';
+      guideRow.val.textContent = shown ? 'On' : 'Off';
       if (!card) return;
       questHead.textContent = card.head; questTitle.textContent = card.title; questText.textContent = card.text;
     },
@@ -492,10 +525,10 @@ export function createHUD(handlers) {
     // The story pages call this when something changed; it redraws the open page.
     refreshJournal() { if (hud.journalOpen) renderJournal(); },
     openTab(id) { tab = id; renderJournal(); },
-    setFilms(on) { filmRow.textContent = on ? 'Cutscenes: on' : 'Cutscenes: off'; },
-    setDaySpeed(k) { speedRow.textContent = `Day speed: ${k}×`; },
-    setSaver(on) { saverRow.textContent = on ? 'Battery saver: on (30 a second)' : 'Battery saver: off (60 a second)'; },
-    setGraphics(g) { gfxRow.textContent = g === 'low' ? 'Graphics: Low (no glow, cooler)' : 'Graphics: High (sharp, glow)'; },
+    setFilms(on) { filmRow.val.textContent = on ? 'On' : 'Off'; },
+    setDaySpeed(k) { speedRow.val.textContent = `${k}×`; },
+    setSaver(on) { saverRow.val.textContent = on ? 'On (30 fps)' : 'Off (60 fps)'; },
+    setGraphics(g) { gfxRow.val.textContent = g === 'low' ? 'Low (cooler)' : 'High (glow)'; },
     // A marker on the picture pointing at the next place on the journey. x, y in pixels; null hides it.
     setWaypoint(x, y, metres, edge) {
       if (x === null) { way.style.opacity = 0; return; }

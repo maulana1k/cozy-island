@@ -87,6 +87,7 @@ export function createPhotoCamera(deps) {
   let root = null, zoomEl = null, zbarEl = null, spotEl = null, boxEl = null, flashEl = null, printEl = null, printImg = null, printCap = null, shotsEl = null;
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
+  let wasLocked = false, lockAt = -9;
   let subject = false; // something in the focus box: only then is the background thrown out of focus
   let shake = 0, lastSpot = '', pending = null, hidden = null, printTimer = null;
   const eye = new THREE.Vector3(), fwd = new THREE.Vector3(), to = new THREE.Vector3(), viewer = new THREE.Vector3(), ndc = new THREE.Vector3();
@@ -202,7 +203,8 @@ export function createPhotoCamera(deps) {
       if (frac < 0.025) continue;
       const c = Math.max(0, 1 - Math.hypot(ndc.x / BOX_X, ndc.y / BOX_Y) / 1.2);
       const b = Math.min(1, (frac - 0.025) / 0.14);
-      const f = Math.max(0, 1 - Math.abs(focus.dist - d) / Math.max(1, d * 0.25)) * (1 - Math.min(1, shake / 0.5));
+      const vd = Math.max(0.3, to.dot(fwd)); // its depth along the view, as the focus is measured
+      const f = Math.max(0, 1 - Math.abs(focus.dist - vd) / Math.max(0.5, vd * 0.25)) * (1 - Math.min(1, shake / 0.5));
       const score = 0.35 * c + 0.4 * b + 0.25 * f;
       if (!best || score > best.score) { if (blocked(s)) continue; best = { s, score, c, b, f, d }; }
     }
@@ -220,7 +222,8 @@ export function createPhotoCamera(deps) {
       active = true; keys.clear(); input.consumeLook(); input.consumeZoom(); input.consumeHop();
       camera.getWorldDirection(fwd);
       yaw = aimYaw = Math.atan2(fwd.x, fwd.z); pitch = aimPitch = Math.max(-0.8, Math.min(0.6, Math.asin(Math.max(-1, Math.min(1, fwd.y))) + 0.08));
-      zoom = wantZoom = MIN_ZOOM; lastSpot = ''; hold = 0; shake = 0;
+      zoom = wantZoom = MIN_ZOOM; lastSpot = ''; hold = 0; shake = 0; wasLocked = false;
+      if (deps.finish) deps.finish.probeFocus = true;
       enter = 0; from.copy(camera.position); fromQ.copy(camera.quaternion); fromFov = camera.fov;
       hideSelf(true);
       showZoom(); void root.offsetWidth; root.classList.add('on'); document.getElementById('hud').classList.add('snapping'); play('scopeIn');
@@ -228,6 +231,7 @@ export function createPhotoCamera(deps) {
     close() {
       if (!active) return;
       active = false; pending = null;
+      if (deps.finish) deps.finish.probeFocus = false;
       hideSelf(false);
       root.classList.remove('on'); document.getElementById('hud').classList.remove('snapping'); spotEl.classList.remove('on'); printEl.classList.remove('on');
       camera.fov = fromFov; camera.updateProjectionMatrix();
@@ -301,17 +305,34 @@ export function createPhotoCamera(deps) {
       camera.position.lerpVectors(from, eye, e);
       camera.quaternion.slerpQuaternions(fromQ, aimQ, e);
       camera.fov = fromFov + (fovNow() - fromFov) * e; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-      // Autofocus: on the best thing in the focus box, else on the ground straight ahead.
+      // Autofocus on whatever is under the brackets: an animal in the focus box if there is one, else the depth the
+      // GPU measured at the centre (src/finish.js probeFocus: a frame or two old), else the ground ahead.
       let hit = 120;
       for (let d = 1; d < 120; d *= 1.08) { const x = eye.x + fwd.x * d, y = eye.y + fwd.y * d, zz = eye.z + fwd.z * d; if (y < groundAt(x, zz)) { hit = d; break; } }
       const j = enter >= 1 ? judge() : null;
-      const want = j ? j.d : hit;
-      focus.dist += (want - focus.dist) * (1 - Math.exp(-dt * 5));
+      const fin = deps.finish, fresh = fin && fin.probeFocus && performance.now() - fin.focusAt < 300;
+      let want = hit;
+      if (j) want = Math.max(0.3, to.set(j.s.x - eye.x, j.s.y - eye.y, j.s.z - eye.z).dot(fwd)); // its depth along the view
+      else if (fresh) {
+        // The centre, unless something thin just beside it is clearly nearer (a stem, a butterfly).
+        const c = fin.focusSamples; let m = c[0];
+        for (let i = 1; i < c.length; i++) if (c[i] < m * 0.7) m = c[i];
+        want = Math.min(m, 400);
+      }
+      // A lens pulls focus in about a third of a second, smoothly, in distance ratios (as a focus ring turns).
+      if (!(focus.dist > 0)) focus.dist = want;
+      focus.dist = Math.exp(Math.log(focus.dist) + (Math.log(want) - Math.log(focus.dist)) * (1 - Math.exp(-dt * 11)));
+      // Blur strength: strong and creamy close up (macro under ~3 m), gentle for far things; more zoom, shallower.
+      const close = Math.min(6, Math.max(0.5, (4 / focus.dist) ** 0.9));
+      focus.far = Math.min(24, 3 * zoom ** 0.7 * close); focus.near = focus.far * 0.6; focus.max = Math.min(26, focus.far * 1.3 + 2);
+      focus.taps = focus.max > 8 ? 'big' : 'film';
       focus.aperture = 1.1 + zoom * 0.25;
       viewer.copy(eye).addScaledVector(fwd, hit * (1 - 1 / zoom));
-      subject = !!j;
-      const locked = !!j && Math.abs(focus.dist - j.d) < Math.max(0.4, j.d * 0.12);
-      boxEl.classList.toggle('lock', locked);
+      subject = true;
+      const locked = enter >= 1 && (j || fresh) && Math.abs(Math.log(focus.dist / want)) < 0.05;
+      if (locked && !wasLocked && clock - lockAt > 0.6) { play('ui'); lockAt = clock; } // the half-press beep
+      wasLocked = locked;
+      boxEl.classList.toggle('lock', !!locked);
       const label = j ? (deps.label ? deps.label(j.s) : j.s.name || j.s.guide) : '';
       const text = j ? `${label} · ${j.d < 10 ? j.d.toFixed(1) : Math.round(j.d)} m` : '';
       if (text !== lastSpot) { lastSpot = text; spotEl.textContent = text; spotEl.classList.toggle('on', !!j); }

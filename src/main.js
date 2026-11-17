@@ -335,7 +335,7 @@ contact.addStatic([...allStatic, ...areaColliders()]);
 const interactables = [...litter.interactables, ...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 // ---- The digital camera (src/photo.js): a photo of an animal in the focus box fills its field-guide entry.
 const photo = createPhotoCamera({
-  camera, input, canvas, groundAt, audio, player, interactables, scene, particles,
+  camera, input, canvas, groundAt, audio, player, interactables, scene, particles, finish,
   light: () => (1 - nightFactor(timeOfDay)) * (1 - 0.4 * (weather.cloud || 0)),
   label: (s) => (s.guide && FIELD_GUIDE[s.guide] ? FIELD_GUIDE[s.guide].name : s.name || ''),
   onPhoto: (shot) => onPhoto(shot),
@@ -349,7 +349,7 @@ function openCamera() {
   if (!hud.started || hud.menuOpen || player.riding || player.asleep || director.active || storyRt.talking || scope.active || photo.active) return;
   if (hud.bagOpen) hud.toggleBag(); if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap();
   if (player.sitting) player.stand();
-  if (graphics === 'high') finish.useDepth(true);
+  finish.useDepth(true); // the camera's depth of field and autofocus probe, on High and Low
   photo.open(); syncLook(); progress('camera');
   tip('camera', 'Put an animal in the focus box and press Space or click. Scroll to zoom. E puts the camera away.');
 }
@@ -974,8 +974,9 @@ function step() {
   renderer.shadowMap.needsUpdate = true;
   contact.update(camera);
   renderer.info.reset();
-  finish.dof = graphics !== 'high' ? null : director.active ? director.focus : photo.active ? photo.dof : null; // depth of field in films and through the camera
-  if (graphics === 'high') finish.render(scene, camera); else renderer.render(scene, camera);
+  finish.dof = director.active ? (graphics === 'high' ? director.focus : null) : photo.active ? photo.dof : null; // depth of field in films (High) and through the camera (High and Low)
+  finish.lite = graphics !== 'high'; // Low still draws through the finishing pass while the camera is up: no glow, a cheaper blur
+  if (graphics === 'high' || photo.active) finish.render(scene, camera); else renderer.render(scene, camera);
   photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
   // Counted over two pictures, since only every other one redraws the shadows.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;

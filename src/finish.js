@@ -15,6 +15,10 @@
 // from the multisampled depth every frame while on). With `finish.dof = { dist, aperture }` set, the
 // picture is blurred by distance from the focus at half size (two small passes: blur size per pixel, then
 // a bokeh gather) and mixed in by the output pass. The scene is not drawn again for it.
+// The digital camera (src/photo.js) uses it too, on High and on Low (`finish.lite`: no glow, a 14-tap gather):
+// its `dof` may carry its own strength ({ far, near, max } in half-size pixels per 1000 of picture height) for a
+// macro look close up, and `probeFocus` measures the distance under the focus brackets on the GPU (five depth
+// samples packed into a 5x1 picture, read back without stalling), for its autofocus: `focusSamples`.
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
@@ -114,8 +118,7 @@ const COC = new THREE.ShaderMaterial({
 // Pass 2, half size: a round bokeh gather (golden-angle disc). A sample counts if its own blur reaches this
 // pixel; things behind a sharper pixel may not spread over it (no halo of blurred background around a sharp
 // leaf), things in front may (a blurred branch in the foreground spills over the subject, as a lens does).
-const TAPS = 28;
-const GATHER = new THREE.ShaderMaterial({
+const gather = (TAPS) => new THREE.ShaderMaterial({
   uniforms: { tCoc: { value: null }, uTexel: { value: new THREE.Vector2() }, uMax: { value: 8 } },
   vertexShader: QUAD_VS,
   fragmentShader: /* glsl */`
@@ -137,7 +140,24 @@ const GATHER = new THREE.ShaderMaterial({
     }`,
   depthTest: false, depthWrite: false,
 });
-
+// 28 taps for films; 48 for the camera's wide macro blur (no gaps between taps); 14 on Low.
+const GATHERS = { film: gather(28), big: gather(48), lite: gather(14) };
+// The autofocus probe: the view distance at five points round the centre, log-packed into two bytes
+// (0.05 m .. 1200 m), one pixel each.
+const FOCUS_PTS = [[0.5, 0.5], [0.47, 0.5], [0.53, 0.5], [0.5, 0.46], [0.5, 0.54]];
+const FOCUS = new THREE.ShaderMaterial({
+  uniforms: { ...dofUniforms() },
+  vertexShader: QUAD_VS,
+  fragmentShader: COC_GLSL + /* glsl */`
+    void main() {
+      int i = int(gl_FragCoord.x);
+      vec2 p = i == 0 ? vec2(${FOCUS_PTS[0]}) : i == 1 ? vec2(${FOCUS_PTS[1]}) : i == 2 ? vec2(${FOCUS_PTS[2]}) : i == 3 ? vec2(${FOCUS_PTS[3]}) : vec2(${FOCUS_PTS[4]});
+      float z = clamp(-viewZ(p), 0.05, 1200.0), t = log(z / 0.05) / log(24000.0) * 65535.0;
+      float hi = floor(t / 256.0), lo = t - hi * 256.0;
+      gl_FragColor = vec4(hi / 255.0, lo / 255.0, 0.0, 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
 export function createFinish(renderer) {
   const size = new THREE.Vector2(-1, -1), now = new THREE.Vector2();
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, depthBuffer: true, stencilBuffer: false, resolveDepthBuffer: false });
@@ -175,14 +195,22 @@ export function createFinish(renderer) {
   const fsScene = new THREE.Scene(); fsScene.add(fsQuad);
   const pass = (material, to) => { fsQuad.material = material; renderer.setRenderTarget(to); renderer.render(fsScene, quadCam); };
   function setDof(u, camera, dof, h) {
-    const k = h / 1000 * dof.aperture * (10 / Math.max(3, dof.dist)) ** 0.35; // close-ups blur the background a little more
     u.tDepth.value = target.depthTexture; u.uNear.value = camera.near; u.uFar.value = camera.far; u.uFocus.value = dof.dist;
+    if (dof.far !== undefined) { const k = h / 1000; u.uFarK.value = dof.far * k; u.uNearK.value = dof.near * k; u.uMax.value = dof.max * k; return; } // the camera's own strength
+    const k = h / 1000 * dof.aperture * (10 / Math.max(3, dof.dist)) ** 0.35; // close-ups blur the background a little more
     u.uFarK.value = DOF.far * k; u.uNearK.value = DOF.near * k * 0.35; u.uMax.value = DOF.max * h / 1000;
   }
+  const focusTarget = new THREE.WebGLRenderTarget(FOCUS_PTS.length, 1, { type: THREE.UnsignedByteType, depthBuffer: false, stencilBuffer: false });
+  const focusBytes = new Uint8Array(FOCUS_PTS.length * 4);
+  let focusReading = false;
 
   const finish = {
     bloom: true,          // the slow-frame ladder's last step switches it off
-    dof: null,            // { dist, aperture } during a film on High (needs useDepth(true)); null = off
+    dof: null,            // { dist, aperture } during a film on High, or the camera's { dist, far, near, max, taps } (needs useDepth(true)); null = off
+    lite: false,          // Graphics Low drawing through here for the camera: no glow, a cheaper gather
+    probeFocus: false,    // measure the distances under the camera's focus brackets (needs useDepth(true))
+    focusSamples: new Float32Array(FOCUS_PTS.length), // metres: centre, left, right, up, down (a frame or two old)
+    focusAt: 0,           // performance.now() of the last reading
     target,
     get depthTexture() { return target.depthTexture; },
     useDepth(on) {
@@ -197,7 +225,7 @@ export function createFinish(renderer) {
         size.copy(now); target.setSize(size.x, size.y); glow.setSize(size.x, size.y); KEY.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
         const hw = Math.max(1, size.x >> 1), hh = Math.max(1, size.y >> 1);
         cocTarget.setSize(hw, hh); blurTarget.setSize(hw, hh);
-        COC.uniforms.uTexel.value.set(1 / size.x, 1 / size.y); GATHER.uniforms.uTexel.value.set(1 / hw, 1 / hh);
+        COC.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
       }
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
@@ -207,10 +235,21 @@ export function createFinish(renderer) {
         const hh = Math.max(1, size.y >> 1);
         setDof(COC.uniforms, camera, dof, hh); setDof(out.uniforms, camera, dof, hh);
         COC.uniforms.tScene.value = target.texture; pass(COC, cocTarget);
-        GATHER.uniforms.tCoc.value = cocTarget.texture; GATHER.uniforms.uMax.value = COC.uniforms.uMax.value; pass(GATHER, blurTarget);
+        const G = finish.lite ? GATHERS.lite : dof.taps === 'big' ? GATHERS.big : GATHERS.film;
+        G.uniforms.tCoc.value = cocTarget.texture; G.uniforms.uTexel.value.set(1 / Math.max(1, size.x >> 1), 1 / hh); G.uniforms.uMax.value = COC.uniforms.uMax.value; pass(G, blurTarget);
       }
-      if (finish.bloom) glow.run(renderer, target.texture);
-      out.uniforms.uBloom.value = finish.bloom ? 1 : 0;
+      if (finish.probeFocus && target.depthTexture && !focusReading && renderer.readRenderTargetPixelsAsync) {
+        const u = FOCUS.uniforms; u.tDepth.value = target.depthTexture; u.uNear.value = camera.near; u.uFar.value = camera.far;
+        pass(FOCUS, focusTarget);
+        focusReading = true;
+        renderer.readRenderTargetPixelsAsync(focusTarget, 0, 0, FOCUS_PTS.length, 1, focusBytes).then(() => {
+          for (let i = 0; i < FOCUS_PTS.length; i++) finish.focusSamples[i] = 0.05 * Math.exp((focusBytes[i * 4] * 256 + focusBytes[i * 4 + 1]) / 65535 * Math.log(24000));
+          finish.focusAt = performance.now();
+        }).catch(() => { finish.probeFocus = false; }).finally(() => { focusReading = false; });
+      }
+      const bloom = finish.bloom && !finish.lite;
+      if (bloom) glow.run(renderer, target.texture);
+      out.uniforms.uBloom.value = bloom ? 1 : 0;
       out.uniforms.tBloom.value = glow.texture;
       renderer.setRenderTarget(null);
       renderer.render(quadScene, quadCam);

@@ -13,8 +13,11 @@
 import * as THREE from 'three';
 import { FIGURES } from './actors/figure.js';
 import { createViewfinder } from './photoHud.js';
+import { surfaceAt } from './logic/surface.js';
+import { CAMPFIRES } from './logic/layout.js';
+const FIREFLY_GROUND = new Set(['meadow', 'grass', 'mud', 'forest']);
 
-const MIN_ZOOM = 1, MAX_ZOOM = 4, BOX_X = 0.3, BOX_Y = 0.36; // the focus box: half size in screen units (-1..1)
+const MIN_ZOOM = 1, MAX_ZOOM = 4, BOX_X = 0.2, BOX_Y = 0.26; // the focus box: half size in screen units (-1..1)
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 // What each kind of thing is in the field guide, and how big it is (m), for "big enough on screen".
 const KINDS = { cat: ['cat', 0.45], chickens: ['chicken', 0.45], sheep: ['sheep', 1.0], goat: ['goat', 0.9], buffalo: ['buffalo', 1.6], ducks: ['duck', 0.45], monkey: ['monkey', 0.6] };
@@ -24,7 +27,7 @@ const PEOPLE = { villager: 'Scout', local: 'Villager' };
 // shot: { thumb, best: { guide, name, d } | null, grade 1..3 }
 export function createPhotoCamera(deps) {
   const { camera, input, groundAt, player } = deps;
-  let vf = null, gridOn = false, roll = 0, lastInput = 0, openedAt = 0, histoN = 0; // the overlay (src/photoHud.js)
+  let vf = null, gridOn = false, lastInput = 0, openedAt = 0; // the overlay (src/photoHud.js)
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
   let wasLocked = false, lockAt = -9, wasLockedShown = false;
@@ -53,7 +56,7 @@ export function createPhotoCamera(deps) {
   });
 
   const fovNow = () => BASE_FOV / zoom;
-  function showZoom() { vf.zoom(wantZoom, MIN_ZOOM, MAX_ZOOM); vf.shots(shots); vf.light(deps.light ? deps.light() : 1); }
+  function showZoom() { vf.zoom(wantZoom); vf.shots(shots); }
   // The scout's own body would fill the bottom of the picture: hidden while the camera is up.
   function hideSelf(on) {
     if (on) {
@@ -88,8 +91,12 @@ export function createPhotoCamera(deps) {
     if (birdsMesh) for (const f of birdsMesh.userData.flocks || []) if (f.state !== 'gone') for (const b of f.members) out.push({ guide: 'sparrow', x: b.p.x, y: b.p.y + 0.08, z: b.p.z, size: 0.2 });
     if (deps.particles) for (const b of deps.particles.butterflies()) out.push({ guide: 'butterfly', ...b, size: 0.14 });
     // Fireflies: a cloud of them over the grass ahead, on a good night.
-    if (deps.particles && deps.particles.fireflies > 0.3) {
-      for (let d = 2; d < 16; d += 0.5) { const x = eye.x + fwd.x * d, y = eye.y + fwd.y * d, z = eye.z + fwd.z * d, gy = groundAt(x, z); if (y < gy + 1.4) { if (gy > 0) out.push({ guide: 'firefly', x, y: Math.max(y, gy + 0.6), z, size: 0.9 }); break; } }
+    // Only where they really show: a good night, firefly grass (not sand, paths or decks) and away from fires.
+    if (deps.particles && deps.particles.fireflies > 0.5) {
+      for (let d = 3; d < 14; d += 0.5) {
+        const x = eye.x + fwd.x * d, y = eye.y + fwd.y * d, z = eye.z + fwd.z * d, gy = groundAt(x, z);
+        if (y < gy + 1.4) { if (gy > 0 && FIREFLY_GROUND.has(surfaceAt(x, z)) && !CAMPFIRES.some((f) => Math.hypot(f.x - x, f.z - z) < 12)) out.push({ guide: 'firefly', x, y: Math.max(y, gy + 0.6), z, size: 0.5 }); break; }
+      }
     }
     return out;
   }
@@ -163,7 +170,6 @@ export function createPhotoCamera(deps) {
     },
     // Called by main.js right after the frame is drawn: the drawn frame becomes the thumbnail.
     afterRender() {
-      if (active && vf && ++histoN % 12 === 0) vf.histogram(deps.canvas); // the live histogram, five times a second
       if (!pending) return;
       const shot = pending; pending = null;
       try {
@@ -240,21 +246,12 @@ export function createPhotoCamera(deps) {
       if (locked && !wasLocked && clock - lockAt > 0.6) { play('ui'); lockAt = clock; } // the half-press beep
       wasLocked = locked;
       vf.lock(!!locked, locked && !wasLockedShown); wasLockedShown = !!locked;
-      // The level line: the hands roll a little as they swing and breathe.
-      roll += ((-dy / Math.max(dt, 1e-3)) * 0.02 + Math.sin(clock * 0.7) * 0.006 - roll) * (1 - Math.exp(-dt * 6));
-      vf.level(roll);
       // Button labels: shown at first and whenever you pause; faint while you are busy.
       if (Math.abs(dy) + Math.abs(dp) > 1e-4 || look.dx || look.dy) lastInput = clock;
       vf.hints(clock - openedAt > 4 && clock - lastInput < 3);
       const label = j ? (deps.label ? deps.label(j.s) : j.s.name || j.s.guide) : '';
-      const text = j ? `${label} · ${j.d < 10 ? j.d.toFixed(1) : Math.round(j.d)} m` : '';
-      // Subject detect: an outline round the animal, its name above.
-      if (j) {
-        ndc.set(j.s.x, j.s.y, j.s.z).project(camera);
-        const H = deps.canvas.clientHeight, W = deps.canvas.clientWidth, half = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-        const h = Math.max(24, Math.min(H * 0.8, (j.s.size / (2 * j.d * half)) * H * 1.15));
-        vf.subject({ x: (ndc.x * 0.5 + 0.5) * W - 18, y: (-ndc.y * 0.5 + 0.5) * H - 18, w: h * 1.25, h }, text);
-      } else vf.subject(null);
+            // The animal in the focus box, by name: how far in plain words.
+      vf.subject(j ? `${label} · ${j.d < 4 ? 'close' : j.d < 15 ? 'near' : 'far'}` : null);
       return true;
     },
   };

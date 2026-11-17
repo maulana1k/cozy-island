@@ -85,6 +85,8 @@ export function createAnimals(scene, deps) {
   cat.g.rotation.y = 0.6;
   scene.add(cat.g);
   let petted = 10, curl = 0, wash = 0;
+  // Petted, the cat turns to you and pads after you for a few steps, then strolls back to its sunny spot.
+  const catAt = { x: CAT_SPOT.x, z: CAT_SPOT.z }; let follow = 0, home = 0, catStep = 0;
 
   const interactables = [
     {
@@ -93,9 +95,9 @@ export function createAnimals(scene, deps) {
       interact() { scatterChickens(deps.player.position); },
     },
     {
-      id: 'cat', kind: 'cat', position: { x: CAT_SPOT.x, z: CAT_SPOT.z }, markerY: catY + 1.05,
+      id: 'cat', kind: 'cat', position: catAt, get markerY() { return heightAt(catAt.x, catAt.z) + 1.05; },
       prompt: () => 'E — pet cat',
-      interact() { petted = 0; audio.play('purr'); ui.emote(new THREE.Vector3(CAT_SPOT.x, catY + 1.0, CAT_SPOT.z), 'heart'); },
+      interact() { petted = 0; follow = 5.5; home = 0; audio.play('purr'); ui.emote(new THREE.Vector3(catAt.x, heightAt(catAt.x, catAt.z) + 1.0, catAt.z), 'heart'); },
     },
   ];
 
@@ -156,8 +158,24 @@ export function createAnimals(scene, deps) {
 
       // The cat watches the player and leans in when petted.
       petted += dt;
-      const dx = player.position.x - CAT_SPOT.x, dz = player.position.z - CAT_SPOT.z;
+      const dx = player.position.x - catAt.x, dz = player.position.z - catAt.z;
       const near = Math.hypot(dx, dz) < 7; cat.g.visible = dx * dx + dz * dz < 65 * 65;
+      { // turned to you once petted; then a few steps after you (little hops); then back home
+        let goX = null, goZ = null, gap = 0;
+        if (petted > 0.9 && follow > 0) { follow -= dt; goX = player.position.x; goZ = player.position.z; gap = 1.0; if (follow <= 0) home = 3; }
+        else if (home > 0) { home -= dt; if (home <= 0) home = -1; }
+        else if (home < 0) { goX = CAT_SPOT.x; goZ = CAT_SPOT.z; }
+        const turnTo = (a, k) => { let d = a - cat.g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); cat.g.rotation.y += d * Math.min(1, dt * k); };
+        let moving = false;
+        if (goX !== null) {
+          const ex = goX - catAt.x, ez = goZ - catAt.z, ed = Math.hypot(ex, ez);
+          if (ed > gap + 0.05) { const st = Math.min(ed - gap, 1.3 * dt); catAt.x += (ex / ed) * st; catAt.z += (ez / ed) * st; turnTo(Math.atan2(ex, ez), 8); moving = true; catStep += st * 9; }
+          else if (home < 0) { home = 0; }
+        }
+        if (petted < 0.9 && near) turnTo(Math.atan2(dx, dz), 6); // turns to face you as you stroke it
+        else if (!moving && home === 0 && follow <= 0 && Math.hypot(catAt.x - CAT_SPOT.x, catAt.z - CAT_SPOT.z) < 0.1) turnTo(0.6, 2);
+        cat.g.position.set(catAt.x, heightAt(catAt.x, catAt.z) + (moving ? Math.abs(Math.sin(catStep)) * 0.05 : 0), catAt.z);
+      }
       let look = near ? Math.atan2(dx, dz) - cat.g.rotation.y : 0;
       look = THREE.MathUtils.clamp(Math.atan2(Math.sin(look), Math.cos(look)), -1.1, 1.1);
       cat.head.rotation.y += (look - cat.head.rotation.y) * Math.min(1, dt * 5);

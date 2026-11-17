@@ -345,7 +345,7 @@ export function create(scene, deps) {
     id: `farm-goat-${i}`, kind: 'goat', position: g.position,
     get markerY() { return groundAt(g.wx, g.wz) + 1.0; },
     prompt: () => 'E — pet goat',
-    interact() { g.wig = 1.6; g.mode = 'stand'; g.timer = 2.8; g.target = null; g.partner = null; audio.play('baa'); ui.emote(new THREE.Vector3(g.wx, groundAt(g.wx, g.wz) + 1.1, g.wz), 'heart'); },
+    interact() { g.wig = 1.6; g.happy = 1.1; g.mode = 'stand'; g.timer = 2.8; g.target = null; g.partner = null; audio.play('baa'); ui.emote(new THREE.Vector3(g.wx, groundAt(g.wx, g.wz) + 1.1, g.wz), 'heart'); },
   }));
   function updateGoats(dt, elapsed) {
     buttAt -= dt;
@@ -383,7 +383,14 @@ export function create(scene, deps) {
       const moved = Math.hypot(g.x - prevX, g.z - prevZ), sp = dt > 0 ? moved / dt : 0; g.speed += (sp - g.speed) * Math.min(1, dt * 8);
       const w = penWorld(g.x, g.z); g.wx = w.x; g.wz = w.z; g.position.x = w.x; g.position.z = w.z;
       const wig = g.wig > 0 ? Math.min(1, g.wig) : 0;
-      g.group.position.set(w.x, groundAt(w.x, w.z) + Math.abs(Math.sin(elapsed * 11 + g.id)) * 0.07 * wig, w.z);
+      // Petted: it turns to look at you and gives two happy hops (the heading is in the pen's frame).
+      let hop = 0;
+      if (g.happy > 0) {
+        g.happy = Math.max(0, g.happy - dt);
+        const pp = deps.player && deps.player.position; if (pp) g.heading = turnToward(g.heading, Math.atan2(pp.x - w.x, pp.z - w.z) - PEN.rot, dt * 7);
+        hop = Math.abs(Math.sin((1.1 - g.happy) / 1.1 * Math.PI * 2)) * 0.2;
+      }
+      g.group.position.set(w.x, groundAt(w.x, w.z) + Math.abs(Math.sin(elapsed * 11 + g.id)) * 0.07 * wig * (g.happy > 0 ? 0 : 1) + hop, w.z);
       g.group.rotation.set(0, g.heading + PEN.rot, Math.sin(elapsed * 16 + g.id) * 0.09 * wig);
       g.animate(elapsed, { mode: g.mode === 'meet' ? (walk > 0 ? 'walk' : 'stand') : g.mode, speed: g.speed });
     }

@@ -215,7 +215,13 @@ export const AREAS = (() => {
       [{ x: 17.2, z: -2.0 }, { x: 22.5, z: -3.6 }, { x: 26.2, z: -6.6 }, { x: 31, z: -11 }, { x: 36.5, z: -15.6 }, { x: 42.5, z: -19 }],
       // From the dock path (by the canoes) up the open beach side of the meadow to the bridge landing.
       [{ x: 52, z: 17.1 }, { x: 54.6, z: 14.6 }, { x: 55.4, z: 9.5 }, { x: 55, z: 3.5 }, { x: 54.2, z: -3 }, { x: 52.8, z: -9.5 }, { x: 51.2, z: -15 }, { x: 51.8, z: -19 }, { x: 53.4, z: -21.2 }],
+      // Down to the fishing dock (fishingDock below): off the lake trail, to the dock's landing.
+      [{ x: 39.5, z: -31 }, { x: 41, z: -35.5 }, { x: 40.3, z: -39.6 }],
+      // Along the camp bank from the dock's landing down to the bridge.
+      [{ x: 40.3, z: -39.6 }, { x: 43.2, z: -35 }, { x: 45.6, z: -31.2 }, { x: 48.2, z: -27.6 }, { x: 50.9, z: -24 }, { x: 53.4, z: -21.2 }],
     ],
+    // The scouts' fishing dock on the camp bank above the bridge: its landward end and heading (out over the river).
+    fishingDock: { x: 40.28, z: -40.8, rot: 2.273, length: 6.2, width: 1.8 },
     // The village plan as code: a point of the plan (ue, v) in the world.
     villagePoint: vw,
   };

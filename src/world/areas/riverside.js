@@ -14,6 +14,7 @@ import { buildReedClump, buildRiverRock, buildLilyPatch, waterWave, rngFrom, mat
 import { buildDuck } from '../../kit/critters.js';
 import { cyl, box, stick, mergeStatic } from '../build.js';
 import { waterObstacles } from '../water.js';
+import { create as createFishing } from './fishing.js';
 
 // ---- the river as a polyline with half widths -------------------------------------------------
 const R = AREAS.river, SEG = [];
@@ -48,8 +49,10 @@ function blocked(x, z, margin = 0) {
   // The stepping stones, their line and a landing at each end.
   for (const s of ACROSS) if (Math.hypot(x - s.x, z - s.z) < s.r + 1.3 + margin) return true;
   if (distToLine(x, z, [{ x: ACROSS[0].x - 2.6, z: ACROSS[0].z - 1.3 }, { x: ACROSS[10].x + 2.6, z: ACROSS[10].z + 1.3 }]) < 1.8 + margin) return true;
-  // The riverside trails.
+  // The riverside trails, and the fishing dock (its line out over the water).
   for (const t of AREAS.trails) if (distToLine(x, z, t) < 2.8 + margin) return true;
+  const F = AREAS.fishingDock;
+  if (distToLine(x, z, [F, { x: F.x + Math.sin(F.rot) * (F.length + 1.2), z: F.z + Math.cos(F.rot) * (F.length + 1.2) }]) < 1.6 + margin) return true;
   return false;
 }
 
@@ -57,6 +60,9 @@ export function create(scene, deps) {
   const rnd = rngFrom(4242);
   const group = new THREE.Group(); scene.add(group);
   const colliders = [];
+  // The scouts' fishing dock on the camp bank, with its fishers (src/world/areas/fishing.js).
+  const fishing = createFishing(scene, deps);
+  const DOCK_S = 76; // where it stands, metres along the river: ducks keep out past its end
 
   // Nothing streamed (palms, bushes) grows in the approaches.
   const a = B.a, b = B.b;
@@ -245,6 +251,7 @@ export function create(scene, deps) {
       d.s += (dx / dd) * st; d.e += (de / dd) * st; moving = true;
       const w = at(d.s).w;
       if (d.state === 'swim' || d.state === 'flee') d.e = clamp(d.e, -0.8 * w, 0.8 * w); // never out of the deep water
+      if (Math.abs(d.s - DOCK_S) < 2.6 && d.e < -1.9) d.e = -1.9; // round the end of the fishing dock
       d.s = clamp(d.s, LO, HI);
       return false;
     };
@@ -291,10 +298,12 @@ export function create(scene, deps) {
   }
 
   return {
-    colliders,
-    interactables,
+    colliders: () => colliders.concat(fishing.colliders()),
+    interactables: [...interactables, ...fishing.interactables],
     ducks, // (read by checks)
+    fishing, // (read by checks)
     update(dt, elapsed, player, night = 0) {
+      fishing.update(dt, elapsed, player, night);
       const px = player.position.x, pz = player.position.z;
       for (const z of zones) {
         z.g.visible = Math.hypot(px - z.cx, pz - z.cz) - z.rad < 110;

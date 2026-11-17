@@ -231,6 +231,22 @@ export function layOut() {
       : (r < 0.35 ? ['bush', 'flowers'] : r < 0.55 ? ['small', 'bush', 'flowers'] : r < 0.7 ? ['pink', 'flowers'] : r < 0.8 ? ['red', 'flowers'] : ['flowers']);
     for (const kind of order) if (put(kind, x, z, 0.75 + rng() * 0.4)) break;
   }
+
+  // 4. The camp's bank of the river, from the bend above the fishing dock down to the bridge: lush and varied,
+  // ferns and flowers at the water, bushes and flowering shrubs up the bank, and a few shade trees. Last, with its
+  // own random numbers for where, so nothing laid out above moves.
+  const rb = rngOf(SEED + 913);
+  for (const [x, z, kind, s] of [[37.6, -45.2, 'broad', 1.15], [45.8, -35.6, 'broad', 1.0], [37.0, -38.6, 'small', 1.1], [49.6, -30.4, 'small', 1.0], [34.5, -47.5, 'broad', 1.05]]) put(kind, x, z, s);
+  for (let n = 0; n < 520; n++) {
+    const x = 30 + rb() * 28, z = -58 + rb() * 38, g = groundKind(x, z);
+    if (!g || g.locals > 0.05 || g.river < 1.4 || g.river > 13) continue;
+    const r = rb(), patch = wave(x, z, 6.5, 3.1); // patches: some stretches bushy, some open and flowery
+    let kind;
+    if (g.river < 4) kind = r < 0.5 ? 'fern' : r < 0.85 ? 'flowers' : 'bush';
+    else if (patch > 0.2) kind = r < 0.45 ? 'bush' : r < 0.6 ? 'pink' : r < 0.72 ? 'red' : r < 0.86 ? 'fern' : r < 0.95 ? 'banana' : 'small';
+    else kind = r < 0.55 ? 'flowers' : r < 0.75 ? 'fern' : r < 0.9 ? 'bush' : 'log';
+    put(kind, x, z, 0.75 + rb() * 0.5);
+  }
   return plants;
 }
 

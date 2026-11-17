@@ -129,7 +129,18 @@ export function createCrowd() {
       else if (id === 'campfire') spot = m.role === 'chief' ? { ...storyteller, pose: 'explain', lead: true } : { ...fireSpots[fire++ % fireSpots.length], pose: 'clap', sitGround: true };
       else if (id === 'sleep') spot = bedSpot(m.adult ? staffBeds[staffBed++ % staffBeds.length] : scoutBeds[bed++ % scoutBeds.length]);
       m.spot = spot; m.arrived = false; m.travel = 0; m.stuck = 0; m.pastDoor = false;
+      // Someone whose home is at the end of a trail walks back along it before heading for the spot.
+      m.legs = null; m.legsHome = false;
+      if (spot && m.home && m.home.route && Math.hypot(m.x - m.home.x, m.z - m.home.z) < 30) setLegs(m, m.home.route.slice().reverse());
     }
+  }
+
+  // Waypoints to walk through first (a trail): from the one nearest to where they stand on.
+  function setLegs(m, pts) {
+    let k = 0, best = Infinity;
+    pts.forEach((p, i) => { const d = Math.hypot(p.x - m.x, p.z - m.z); if (d < best) { best = d; k = i; } });
+    m.legs = pts.slice(k); m.legsLen = 0;
+    for (let i = 0; i < m.legs.length; i++) { const a = i ? m.legs[i - 1] : m; m.legsLen += Math.hypot(m.legs[i].x - a.x, m.legs[i].z - a.z); }
   }
 
   // What someone standing in the formation is doing right now.
@@ -141,12 +152,15 @@ export function createCrowd() {
 
   function walk(m, goal, dt, hurry) {
     // Into a tent: go to the flap first, then straight in to the bed.
-    const viaDoor = goal.via && !m.pastDoor, target = viaDoor ? goal.via : goal;
+    // Along a trail first (m.legs), then into a tent by its flap, then to the spot.
+    const leg = m.legs && m.legs.length ? m.legs[0] : null;
+    const viaDoor = !leg && goal.via && !m.pastDoor, target = leg || (viaDoor ? goal.via : goal);
     const dx = target.x - m.x, dz = target.z - m.z, d = Math.hypot(dx, dz);
+    if (leg && d < 0.8) { m.legs.shift(); return false; }
     if (d < 0.18 || (viaDoor && d < 0.5)) { if (viaDoor) { m.pastDoor = true; return false; } m.go = 0; return true; }
     m.travel += dt;
-    // A long way to go, or badly stuck: just get there rather than wander forever.
-    if (m.travel > 20 || m.stuck > 4) { m.x = goal.x; m.z = goal.z; m.pastDoor = true; return true; } // straight to the spot itself (a bed, not the tent flap outside it)
+    // A long way to go, or badly stuck: just get there rather than wander forever (a trail walk gets its length's worth of time).
+    if (m.travel > 20 + (m.legs ? m.legsLen / 0.85 : 0) || m.stuck > 4) { m.x = goal.x; m.z = goal.z; m.pastDoor = true; m.legs = null; return true; } // straight to the spot itself (a bed, not the tent flap outside it)
     // Everyone has their own pace, gets going gradually and slows as they arrive.
     const pace = 0.88 + ((m.index * 37) % 25) / 100;
     m.go = (m.go || 0) + (1 - (m.go || 0)) * (1 - Math.exp(-dt * 2.5));
@@ -156,7 +170,7 @@ export function createCrowd() {
     if (m.stuck > 0.6) { const side = m.index % 2 ? 1 : -1; const ox = -nz * side, oz = nx * side; nx = nx * 0.3 + ox; nz = nz * 0.3 + oz; const l = Math.hypot(nx, nz); nx /= l; nz /= l; }
     const want = { x: m.x + nx * speed * dt, z: m.z + nz * speed * dt };
     // Near the end, walk straight in; a spot may sit close to a wall or inside a tent.
-    const next = d < 1.4 || (goal.via && m.pastDoor) ? want : resolveCollisions(want, 0.3, colliders);
+    const next = (!leg && d < 1.4) || (goal.via && m.pastDoor) ? want : resolveCollisions(want, 0.3, colliders);
     const moved = Math.hypot(next.x - m.x, next.z - m.z);
     m.stuck = moved < speed * dt * 0.35 ? m.stuck + dt : Math.max(0, m.stuck - dt * 2);
     m.rot = Math.atan2(next.x - m.x, next.z - m.z) || m.rot;
@@ -168,6 +182,7 @@ export function createCrowd() {
     get block() { return block; },
     get members() { return members; },
     // home: where the member's own activity happens ({x, z, rot}), or null for someone who roams.
+    // home.route (optional): waypoints from the camp out to home (a trail), walked both ways.
     join({ home = null, role = 'scout', adult = false }) {
       const m = { pastDoor: false, index: members.length, home, role, adult, x: home ? home.x : 0, z: home ? home.z : 0, rot: home ? home.rot : 0, speed: 0, opts: {}, hidden: false, controlled: false, spot: null, arrived: false, travel: 0, stuck: 0 };
       members.push(m);
@@ -206,10 +221,11 @@ export function createCrowd() {
       m.hidden = false;
       // Back to their own activity: walk home first, then hand over.
       if (m.controlled && m.home) {
+        if (m.home.route && !m.legsHome) { m.legsHome = true; setLegs(m, m.home.route); }
         if (!walk(m, m.home, dt, false)) return true;
         m.rot = m.home.rot;
       }
-      m.controlled = false; m.travel = 0; m.stuck = 0;
+      m.controlled = false; m.travel = 0; m.stuck = 0; m.legs = null; m.legsHome = false;
       return false;
     },
   };

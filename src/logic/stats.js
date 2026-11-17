@@ -20,8 +20,8 @@ export function createStats() {
     // state: { running, moving, sitting, cosy } where cosy is sitting by a lit fire or joining in.
     tick(dt, state) {
       const effort = state.running ? 2.1 : state.moving ? 1.15 : 1;
-      s.food = clamp(s.food - (100 / 720) * effort * dt);
-      s.water = clamp(s.water - (100 / 540) * effort * dt);
+      s.food = clamp(s.food - (100 / 2208) * effort * dt);
+      s.water = clamp(s.water - (100 / 1656) * effort * dt);
       const wellFed = s.food < LOW || s.water < LOW ? 0.4 : 1;
       // Cold weather (fog, a little in rain; src/world/weather.js) wears you down: energy drains a bit faster and
       // comes back more slowly, unless you are cosy by a fire.

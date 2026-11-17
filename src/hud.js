@@ -394,7 +394,7 @@ export function createHUD(handlers) {
   const wxEl = el('span', 'wx'); // the weather: a small icon and word next to the clock
   clockLine.append(clockIco, time, phase, wxEl);
   const nowLine = el('div', 'line now');
-  // How you are feeling: Food, Water, Energy, Cheer as a compact row just above the quick bar (always there, dimmed when calm)
+  // How you are feeling: a small stack above the bottom-left toolbar; a stat shows only when low or just changed
   const statBox = el('div', 'stats'); const statRows = {};
   for (const k of STAT_KEYS) { const row = el('div', 'stat'); row.title = STAT_LABEL[k]; const fill = el('i'); const meter = el('div', 'meter'); meter.append(fill); const num = el('b', 'sn'); row.append(icon(k), meter, num); statBox.append(row); statRows[k] = { row, fill, num, shown: null, timer: null }; }
   // Rank, clock and weather fade away when idle (see "calm" below); the stat icons have their own rule.
@@ -591,9 +591,8 @@ export function createHUD(handlers) {
   function paintCalm() {
     const now = performance.now();
     for (const n of ['top', 'bar', 'belt']) calm[n].node.classList.toggle('away', hud.started && !calm.alt && now > calm[n].until);
-    // The stat row moves with the belt: full strength when any stat is low or just changed, or the belt is awake; else dimmed.
-    const rows = STAT_KEYS.map((k) => statRows[k].row);
-    statBox.classList.toggle('awake', calm.alt || now <= calm.belt.until || rows.some((r) => r.classList.contains('low') || r.classList.contains('seen')));
+    // Stats show only when they matter (low / just changed, via CSS); Alt or the backpack shows all four.
+    statBox.classList.toggle('all', calm.alt || hud.bagOpen);
   }
   setInterval(paintCalm, 500);
   const ZONES = { top: (x, y) => x < 400 && y < 170, bar: (x, y) => x < 460 && y > innerHeight - 130, belt: (x, y) => Math.abs(x - innerWidth / 2) < 260 && y > innerHeight - 120 };
@@ -661,7 +660,7 @@ export function createHUD(handlers) {
     },
     closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
-    toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
+    toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); paintCalm(); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
     // The bars top-left and the numbers in the backpack.
     setStats(s) {
       for (const k of STAT_KEYS) {

@@ -150,6 +150,12 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 // A wide, soft-edged beam that spreads and fades the further it lands, and a faint glow round the scout.
 // A forward beam only: a cone from the hand, soft at its rim but lighting nothing beside or behind the scout.
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
+// Real shadows: one 2D map (cheap next to a cube), redrawn every picture while the torch is lit, from the near casters
+// and welded proxies round the player (src/world/props.js, layer 9; the player's own body is left out).
+torch.castShadow = true; torch.shadow.mapSize.set(1024, 1024); torch.shadow.camera.near = 0.2; // far = the torch's reach (34)
+torch.shadow.bias = -0.0004; torch.shadow.normalBias = 0.03; torch.shadow.radius = 2.5;
+torch.shadow.camera.layers.set(9); torch.shadow.autoUpdate = false; torch.shadow.needsUpdate = false;
+let torchFrame = 0;
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
 // ---- Helping the island heal (src/logic/restore.js, src/world/litter.js): litter to pick up, a birdhouse to mend.
@@ -702,6 +708,7 @@ if (params.has('map')) hud.toggleMap();
 if (params.has('pause')) hud.openMenu();
 if (params.has('kit')) { for (const id of ['apple', 'stew', 'mushroom', 'marshmallow', 'shell', 'stick', 'stone', 'egg']) bag.add(id, 2); vitals.set('food', 18); vitals.set('energy', 40); refreshBag(); }
 if (params.has('bag')) hud.toggleBag();
+if (params.has('torch')) { torchOn = true; player.setTorch(true); } // debug: torch on from the start
 if (params.has('ride')) zipline.interactables[0].interact();
 // Story debug aids: ?picker opens the name and look picker; ?talk=buddy (leader, younger, board) opens that conversation.
 if (params.has('picker')) storyRt.openPicker('journey');
@@ -901,6 +908,9 @@ function step() {
   torch.target.position.lerp(torchAim, 1 - Math.exp(-clampDt(raw) * 9));
   const torchLit = torchOn && !player.asleep ? 1 : 0;
   torch.intensity += (torchLit * (2.2 + night * 7.5) - torch.intensity) * 0.25;
+  const torchShade = torch.intensity > 0.05 && (torchLit > 0 || torch.intensity > 0.3);
+  props.setTorchZone(torchShade, player.position.x, player.position.z);
+  if (torchShade && (!saver || (++torchFrame & 1))) torch.shadow.needsUpdate = true; // saver: every other picture
 
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;

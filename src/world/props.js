@@ -22,6 +22,7 @@ const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
 const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
 const FIXTURE_LAYERS = [7, 8]; // layers: each shadowing lamp's own post/arm/lantern (one per lamp slot). Fires' cubes and the other lamp's cube draw it; that lamp's own cube does not
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
+const TORCH_CASTERS = 9; // a layer: what the torch's spotlight shadow draws (everything near the player except the player's own figure)
 export const SUN_PROXIES = 6; // a layer: welded still casters (src/world/shadowProxy.js) the sun's shadow camera also draws
 
 export function createProps(scene, deps) {
@@ -368,9 +369,13 @@ export function createProps(scene, deps) {
   // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.
   // Still casters near the player are welded into a few shadow-only meshes (src/world/shadowProxy.js,
   // already on this layer), so the cubes draw those plus the people, and can be redrawn every picture.
-  const _c = new THREE.Vector3(); let casterScan = 0, lastL0 = null, lastL1 = null;
-  const proxies = createShadowProxies(scene, { cubeLayer: NEAR_CASTERS, sunLayer: SUN_PROXIES });
-  proxies.onFree = (o) => o.layers.enable(NEAR_CASTERS); // drawn live at once; the next scan sorts near from far
+  const _c = new THREE.Vector3(); let wasTorch = false, casterScan = 0, lastL0 = null, lastL1 = null;
+  // The torch's shadow zone: a cell of the 8 m grid round the player, wide enough for the whole beam. Snapped so
+  // the static tree/bush/rock proxies built for it (cached by position) are reused as the player walks.
+  let torchZone = null; const torchCentre = { x: 0, z: 0, r: 28, torch: true };
+  const inPlayer = (o) => { const pg = player.group; for (let p = o; p; p = p.parent) if (p === pg) return true; return false; };
+  const proxies = createShadowProxies(scene, { cubeLayer: NEAR_CASTERS, sunLayer: SUN_PROXIES, torchLayer: TORCH_CASTERS });
+  proxies.onFree = (o) => { o.layers.enable(NEAR_CASTERS); if (torchZone) o.layers.enable(TORCH_CASTERS); }; // drawn live at once; the next scan sorts near from far
   function markNearCasters(centres) {
     scene.traverse((o) => {
       if (!o.isMesh || !o.castShadow || o.isInstancedMesh || o.userData.shadowProxy) return;
@@ -378,8 +383,9 @@ export function createProps(scene, deps) {
       const bs = o.boundingSphere || g.boundingSphere;
       _c.copy(bs.center).applyMatrix4(o.matrixWorld);
       const r = bs.radius * o.matrixWorld.getMaxScaleOnAxis();
-      let near = false;
-      if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) { near = true; break; }
+      let near = false, tNear = false;
+      if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) { if (c.torch) tNear = true; else near = true; }
+      if (tNear && !inPlayer(o)) o.layers.enable(TORCH_CASTERS); else o.layers.disable(TORCH_CASTERS); // the torch's own shadow never sees the player's body (the light is in the hand)
       const slot = near ? ownFixture(o, _c.x, _c.y, _c.z, r, centres) : -1;
       for (let k = 0; k < 2; k++) if (k === slot) o.layers.enable(FIXTURE_LAYERS[k]); else o.layers.disable(FIXTURE_LAYERS[k]);
       if (near && slot < 0) o.layers.enable(NEAR_CASTERS); else o.layers.disable(NEAR_CASTERS); // a lamp's cube never sees its own fixture
@@ -398,6 +404,16 @@ export function createProps(scene, deps) {
     onBell(cb) { bellListeners.push(cb); },
     // Lamps placed by other areas: [{ x, y, z }] in world space. They light up after dusk on their own.
     addLamps(points) { for (const p of points) outside.push({ pos: new THREE.Vector3(p.x, p.y, p.z), glow: 0, flicker: 1 }); },
+    // The torch's shadow is drawn while it is on: tell the props where the player is (null: off).
+    setTorchZone(on, x, z) {
+      const was = !!torchZone;
+      if (!on) { torchZone = null; torchCentre.x = NaN; } else {
+        const gx = Math.round(x / 8) * 8, gz = Math.round(z / 8) * 8;
+        if (!torchZone || gx !== torchCentre.x || gz !== torchCentre.z) casterScan = 0;
+        torchCentre.x = gx; torchCentre.z = gz; torchZone = torchCentre;
+      }
+      if (was !== !!torchZone) casterScan = 0;
+    },
     setFlag(up) { if (flagState) flagState.up = up; },
     // The nearest burning fire within reach, for cooking on or feeding.
     fireNear(x, z, lit = true) { let best = null, bd = Infinity; for (const f of fires) { const d = Math.hypot(x - f.x, z - f.z); if (d < (f.big ? 4.6 : 3) && d < bd && (!lit || f.fire.lit)) { best = f; bd = d; } } return best; },
@@ -440,10 +456,12 @@ export function createProps(scene, deps) {
         if (casterScan <= 0) {
           casterScan = 0.25; casterCentres.length = 0;
           for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14 });
+          if (torchZone) casterCentres.push(torchZone);
           if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9, light: l0.pos, slot: 0 });
           if (l1) casterCentres.push({ x: l1.pos.x, z: l1.pos.z, r: 9, light: l1.pos, slot: 1 });
           proxies.scan(pp.x, pp.z, casterCentres); // first: it may hand casters back onto the cube layer
-          if (casterCentres.length) markNearCasters(casterCentres);
+          if (casterCentres.length || wasTorch) markNearCasters(casterCentres);
+          wasTorch = !!torchZone;
           proxies.syncStatic(casterCentres); // trees, bushes and rocks round each shading light (built once per light)
         }
         proxies.check(); // a welded caster that moved or hid casts live again from this picture

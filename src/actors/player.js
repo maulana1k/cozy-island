@@ -32,6 +32,7 @@ export function createPlayer(scene, opts = {}) {
 
   const player = {
     position, facing, radius: PLAYER_RADIUS,
+    get group() { return figure.group; }, // the body, for lights that must not shade it (the torch)
     sitting: false, speed: 0, moving: false, pushing: false, airborne: false, surface: 'grass',
     get heading() { return heading; },
     onStep: null, // (surface, running) => void

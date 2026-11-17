@@ -39,7 +39,7 @@ export function ownFixture(o, cx, cy, cz, r, centres) {
   return -1;
 }
 
-export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
+export function createShadowProxies(scene, { cubeLayer, sunLayer, torchLayer = -1 }) {
   const root = new THREE.Group();
   root.name = 'shadowProxies'; root.matrixAutoUpdate = false; root.userData.shadowProxy = true;
   scene.add(root);
@@ -69,7 +69,8 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, matFor(side));
     mesh.matrixAutoUpdate = false; mesh.castShadow = true; mesh.receiveShadow = false;
-    mesh.layers.set(layer); mesh.userData.shadowProxy = true;
+    mesh.layers.set(layer); if (layer === cubeLayer && torchLayer >= 0) mesh.layers.enable(torchLayer); // the torch's shadow camera draws these too
+    mesh.userData.shadowProxy = true;
     root.add(mesh);
     return mesh;
   }

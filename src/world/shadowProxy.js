@@ -5,8 +5,9 @@
 // into one position-only mesh per 10 m cell that is drawn only into shadow maps; while welded, the
 // originals cast nothing themselves. People (skinned, or hung on bones), cutouts, and anything seen
 // moving, reshaping or hiding stay live casters. Nothing here is drawn to the screen.
-//   layers: proxies sit on `sunLayer` (added to the sun shadow camera, next to layer 0) or `cubeLayer`
-//   (the night cubes' caster layer), never on layer 0, so the main camera and raycasts never see them.
+//   layers: proxies sit on `sunLayer` (added to the sun shadow camera, next to layer 0) or on the caster
+//   layers of the night lights they stand near (each light's shadow camera has its own layer, given as
+//   `layer` in the centres passed to scan), never on layer 0, so the main camera and raycasts never see them.
 import * as THREE from 'three';
 
 const CELL = 10; // m: a cube face or the sun's box skips the cells outside it
@@ -39,7 +40,7 @@ export function ownFixture(o, cx, cy, cz, r, centres) {
   return -1;
 }
 
-export function createShadowProxies(scene, { cubeLayer, sunLayer, torchLayer = -1 }) {
+export function createShadowProxies(scene, { sunLayer }) {
   const root = new THREE.Group();
   root.name = 'shadowProxies'; root.matrixAutoUpdate = false; root.userData.shadowProxy = true;
   scene.add(root);
@@ -51,7 +52,7 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer, torchLayer = -
   const _v = new THREE.Vector3();
   let onFree = null;
 
-  function merged(list, side, layer) {
+  function merged(list, side, mask) {
     let nv = 0, ni = 0;
     for (const o of list) { const g = o.geometry, n = g.attributes.position.count; nv += n; ni += g.index ? g.index.count : n; }
     const pos = new Float32Array(nv * 3), idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
@@ -69,33 +70,36 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer, torchLayer = -
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, matFor(side));
     mesh.matrixAutoUpdate = false; mesh.castShadow = true; mesh.receiveShadow = false;
-    mesh.layers.set(layer); if (layer === cubeLayer && torchLayer >= 0) mesh.layers.enable(torchLayer); // the torch's shadow camera draws these too
+    mesh.layers.mask = mask; // the sun's layer, or the caster layers of the lights it stands near
     mesh.userData.shadowProxy = true;
     root.add(mesh);
     return mesh;
   }
 
-  // Per cell and face side: one mesh of everything for the sun, one of only what stands near a lit fire
-  // or the shadowing lamp for their cubes (the cubes would otherwise draw the whole camp six times).
+  // Per cell and face side: one mesh of everything for the sun, and per set of night lights, one of only what
+  // stands near exactly those lights (a lamp's cube then draws what is near that lamp, not near the fire too).
   function build(cell) {
     for (const m of cell.meshes) { root.remove(m); m.geometry.dispose(); }
     cell.meshes.length = 0;
     const bySide = new Map();
     for (const [o, st] of cell.members) {
       const side = o.material.shadowSide ?? FLIP[o.material.side];
-      if (!bySide.has(side)) bySide.set(side, { all: [], near: [] });
-      const b = bySide.get(side); b.all.push(o); if (st.near) b.near.push(o);
+      if (!bySide.has(side)) bySide.set(side, { all: [], byMask: new Map() });
+      const b = bySide.get(side); b.all.push(o);
+      if (st.near) { if (!b.byMask.has(st.near)) b.byMask.set(st.near, []); b.byMask.get(st.near).push(o); }
     }
     for (const [side, b] of bySide) {
-      cell.meshes.push(merged(b.all, side, sunLayer));
-      if (b.near.length) cell.meshes.push(merged(b.near, side, cubeLayer));
+      cell.meshes.push(merged(b.all, side, 1 << sunLayer));
+      for (const [mask, list] of b.byMask) cell.meshes.push(merged(list, side, mask));
     }
     cell.dirty = false;
   }
 
-  function isNear(r, centres) { // _v: the caster's world centre
-    for (const c of centres) if ((_v.x - c.x) ** 2 + (_v.z - c.z) ** 2 < (c.r + r) ** 2) return true;
-    return false;
+  // The caster layers (a bit mask) of the lights this caster stands near. _v: the caster's world centre.
+  function isNear(r, centres) {
+    let mask = 0;
+    for (const c of centres) if ((_v.x - c.x) ** 2 + (_v.z - c.z) ** 2 < (c.r + r) ** 2) mask |= 1 << c.layer;
+    return mask;
   }
   function weld(o, near) {
     const g = o.geometry;
@@ -137,24 +141,25 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer, torchLayer = -
         if ((_v.x - c.x) ** 2 + (_v.z - c.z) ** 2 < reach * reach) list.push({ geometry: g, matrixWorld: m.clone() });
       }
     });
-    return list.length ? merged(list, THREE.DoubleSide, cubeLayer) : null;
+    return list.length ? merged(list, THREE.DoubleSide, 1 << c.layer) : null;
   }
   function syncStatic(centres) {
     const live = new Set();
     for (const c of centres) {
       const key = `${c.x.toFixed(1)},${c.z.toFixed(1)}`; live.add(key);
       let e = stat.get(key); if (!e) { e = { mesh: buildStatic(c) }; stat.set(key, e); }
-      if (e.mesh) e.mesh.visible = true;
+      if (e.mesh) { e.mesh.visible = true; e.mesh.layers.mask = 1 << c.layer; } // a lamp slot may now hold another lamp
     }
     for (const [key, e] of stat) if (!live.has(key) && e.mesh) e.mesh.visible = false;
   }
 
   return {
     root, syncStatic,
-    // Called with each caster handed back (e.g. to put it on the cube layer at once).
+    // Called with each caster handed back (e.g. to put it on the lights' caster layers at once).
     set onFree(fn) { onFree = fn; },
     // A few times a second: weld still casters near the player, let go of those far behind.
-    // centres: [{ x, z, r }] round the lights whose cubes are drawn; a caster within r (plus its size) is near.
+    // centres: [{ x, z, r, layer }] round the lights whose shadows are drawn; a caster within r (plus its size)
+    // is near that light and goes on its caster layer.
     scan(px, pz, centres = []) {
       scene.traverse((o) => {
         if (!o.isMesh || o.userData.shadowProxy) return;

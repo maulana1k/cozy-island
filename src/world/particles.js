@@ -103,9 +103,9 @@ function buildBursts() {
   const mesh = new THREE.InstancedMesh(geo, mat, BURST_N);
   mesh.frustumCulled = false; mesh.castShadow = mesh.receiveShadow = false; mesh.renderOrder = 6; mesh.name = 'bursts';
   const attrs = names.map((n) => geo.getAttribute(n));
-  let next = 0, lo = Infinity, hi = -1, time = 0;
+  let next = 0, lo = Infinity, hi = -1, time = 0, cap = BURST_N;
   function put(x, y, z, vx, vy, vz, life, r, g, b, size, kind, grav, drag, grow, delay = 0) {
-    const i = next, o = i * 4; next = (next + 1) % BURST_N;
+    const i = next, o = i * 4; next = (next + 1) % cap;
     A[o] = x; A[o + 1] = y; A[o + 2] = z; A[o + 3] = time + delay;
     B[o] = vx; B[o + 1] = vy; B[o + 2] = vz; B[o + 3] = life;
     C[o] = r; C[o + 1] = g; C[o + 2] = b; C[o + 3] = size;
@@ -117,7 +117,9 @@ function buildBursts() {
     for (const at of attrs) { at.clearUpdateRanges(); at.addUpdateRange(lo * 4, (hi - lo + 1) * 4); at.needsUpdate = true; }
     lo = Infinity; hi = -1;
   }
-  return { mesh, uniforms, put, flush, setTime(t) { time = t; uniforms.uTime.value = t; } };
+  // Graphics Low: a smaller ring (older bursts are reused sooner) and fewer quads drawn.
+  function setCap(n) { if (n === cap) return; cap = n; mesh.count = n; next = 0; }
+  return { mesh, uniforms, put, flush, setCap, setTime(t) { time = t; uniforms.uTime.value = t; } };
 }
 
 // Soft round puffs (dust, sand, spray): the same arguments as effects.puff. False if there is no pool yet.
@@ -571,6 +573,8 @@ export function createParticles(scene, deps) {
     },
     // How many fireflies are out round the player (0..1).
     get fireflies() { return off ? 0 : fireNow; },
+    // Graphics Low (main.js setGraphics): half the burst pool (dust, spray, sparks, smoke).
+    setQuality(low) { bursts.setCap(low ? BURST_N / 2 : BURST_N); },
     // dt game seconds (0 while paused); night 0..1.
     update(dt, night = 0) {
       if (off) return;

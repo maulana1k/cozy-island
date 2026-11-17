@@ -347,6 +347,10 @@ export function createFinish(renderer) {
 
     render(scene, camera) {
       renderer.getDrawingBufferSize(now);
+      // 4x multisampling, or 2x on a dense screen (ratio 1.75 and up), where the extra samples were about 2 ms a
+      // frame of fill for edges too fine to see (2026-11-17 measure, ratio 2).
+      const samples = renderer.getPixelRatio() >= 1.75 ? 2 : 4;
+      if (target.samples !== samples) { target.samples = samples; target.dispose(); }
       if (!now.equals(size)) {
         size.copy(now); target.setSize(size.x, size.y); glow.setSize(size.x, size.y); KEY.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
         const hw = Math.max(1, size.x >> 1), hh = Math.max(1, size.y >> 1);

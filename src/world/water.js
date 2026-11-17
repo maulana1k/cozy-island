@@ -109,6 +109,7 @@ const waterFragment = /* glsl */ `
   uniform vec3 uSunTrue;
   uniform float uPath;
   uniform float uRain;
+  uniform float uDetail; // 1 on Graphics High; Low draws the fine detail (wakes, rain rings, surf, glints) half as far out
   uniform vec4 uWind;
   uniform vec3 uAbyss;
   uniform vec4 uObs[OBS_N];
@@ -218,7 +219,7 @@ const waterFragment = /* glsl */ `
 
     // ---- rocks, posts, pads and ducks
     float obsFoam = 0.0, rough = 0.0;
-    if (camD < 70.0) {
+    if (camD < 70.0 * uDetail) {
       vec2 prp = vec2(-dir.y, dir.x);
       for (int i = 0; i < OBS_N; i++) {
         vec4 o = uObs[i];
@@ -261,7 +262,7 @@ const waterFragment = /* glsl */ `
 
     // ---- rain: rings opening up all over the water near the camera
     float rainRing = 0.0;
-    if (uRain > 0.01 && camD < 45.0) {
+    if (uRain > 0.01 && camD < 45.0 * uDetail) {
       float fade = uRain * (1.0 - smoothstep(20.0, 45.0, camD));
       for (int k = 0; k < 2; k++) {
         vec2 q = p * 1.7 + float(k) * vec2(0.43, 0.71);
@@ -311,7 +312,7 @@ const waterFragment = /* glsl */ `
     float ds = r - uShore; // metres seaward of the still waterline
     float seaFoam = 0.0, waveLight = 0.0, waveShade = 0.0;
     vec2 seaward = vec2(0.0);
-    if (sea > 0.3 && ds > -4.0 && ds < 24.0 && camD < 140.0 && (x > -0.05 || inland > 0.5 || wetBed0 > 0.5)) {
+    if (sea > 0.3 && ds > -4.0 && ds < 24.0 && camD < 140.0 * uDetail && (x > -0.05 || inland > 0.5 || wetBed0 > 0.5)) {
       vec2 fl2;
       seaward = vec2(shoreInfo(p + vec2(0.7, 0.0), fl2).x - r, shoreInfo(p + vec2(0.0, 0.7), fl2).x - r);
       seaward /= max(length(seaward), 1e-4);
@@ -394,7 +395,7 @@ const waterFragment = /* glsl */ `
     vec3 col = mix(body * uLight, sky, fres * (1.0 - 0.5 * waveLight));
     // Caustics on the sandy bottom of the shallows (sea, river and pond), only in sunlight and only close by.
     float caus = 0.0;
-    if (camD < 45.0 && uGlint > 0.02) {
+    if (camD < 45.0 * uDetail && uGlint > 0.02) {
       float shallowSea = sea * (1.0 - smoothstep(0.0, mix(3.0, 8.0, s.y), r - uShore)) * smoothstep(0.4, 2.0, x);
       float shallowIn = inland * smoothstep(0.02, 0.12, depth) * (1.0 - smoothstep(0.25, 0.75, depth));
       float k = max(shallowSea, shallowIn) * (1.0 - smoothstep(25.0, 45.0, camD));
@@ -408,7 +409,7 @@ const waterFragment = /* glsl */ `
     col += uSunColor * vec3(1.0, 0.82, 0.55) * path * (1.0 - foam);
     glint = max(glint, path);
     // Sparkle: tiny points that wink on and off where the ripples catch the sun.
-    if (uGlint > 0.02 && camD < 80.0) {
+    if (uGlint > 0.02 && camD < 80.0 * uDetail) {
       vec2 sp2 = p * 3.0 + rp.yz * 2.0, sc = floor(sp2), sf = fract(sp2) - 0.5;
       float sh = hash2(sc + 0.7), tw = pow(max(0.0, sin(uTime * (2.5 + 4.0 * sh) + sh * 40.0)), 10.0);
       float sparkle = step(0.8, sh) * tw * exp(-dot(sf, sf) * 70.0) * pow(sd, 5.0) * uGlint * (1.0 - smoothstep(40.0, 80.0, camD));
@@ -624,6 +625,7 @@ export function buildWater() {
       uObs: { value: Array.from({ length: OBS_N }, () => new THREE.Vector4()) },
       uFogColor: { value: new THREE.Color(0xf6d9b8) },
       uFogDensity: { value: 0.004 },
+      uDetail: { value: 1 },
       uShore: { value: ISLAND_RADIUS },
       uWild: { value: new THREE.Vector3(WILD.x, WILD.z, WILD.radius) },
       uBlend: { value: WILD.blend },
@@ -640,6 +642,7 @@ export function buildWater() {
   mesh.onBeforeRender = (renderer, scene, camera) => { pickObstacles(camera.position, mat.uniforms.uObs.value); updateSurf(camera.position, mat.uniforms.uTime.value); };
   const u = mat.uniforms, tmp = new THREE.Color(), dir = new THREE.Vector3();
   mesh.userData.update = (elapsed) => { u.uTime.value = elapsed; };
+  mesh.userData.setDetail = (k) => { u.uDetail.value = k; }; // Graphics Low: 0.5
   // The sky tints the water so it follows the time of day: `light` lights the water body, `fog` is the horizon
   // (it is what the sky looks like low down), `sun` the sky's sun/moon light for glints, `rain` 0..1 for rings.
   mesh.userData.setLight = (light, fog, density, sun, rain = 0, sunDir = null, gold = 0) => {

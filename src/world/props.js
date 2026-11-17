@@ -19,10 +19,18 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 }
 
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
-const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
-const FIXTURE_LAYERS = [7, 8]; // layers: each shadowing lamp's own post/arm/lantern (one per lamp slot). Fires' cubes and the other lamp's cube draw it; that lamp's own cube does not
+// Each night light that casts shadows draws only its own caster layer: what stands near it (2026-11-17: one shared
+// layer made every cube draw everything near any of them, so a lamp beside the bonfire drew the whole ring of people).
+const NEAR_CASTERS = 5; // a layer: the people and things close enough to the bonfire to be drawn into its shadow cube
+const LAMP_CASTERS = [7, 8]; // layers: the same for each shadowing lamp slot. A lamp's own post/arm/lantern is left off its own layer
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
 const TORCH_CASTERS = 9; // a layer: what the torch's spotlight shadow draws (everything near the player except the player's own figure)
+// Resize a shadow map; three builds the new one on its next shadow pass.
+export function setShadowSize(shadow, n) {
+  if (shadow.mapSize.x === n) return;
+  shadow.mapSize.set(n, n);
+  if (shadow.map) { if (shadow.map.depthTexture) shadow.map.depthTexture.dispose(); shadow.map.dispose(); shadow.map = null; }
+}
 export const SUN_PROXIES = 6; // a layer: welded still casters (src/world/shadowProxy.js) the sun's shadow camera also draws
 
 export function createProps(scene, deps) {
@@ -296,7 +304,7 @@ export function createProps(scene, deps) {
       light.shadow.camera.near = 0.6;
       light.shadow.autoUpdate = false; light.shadow.needsUpdate = false;
       light.shadow.intensity = 1;
-      light.shadow.camera.layers.set(NEAR_CASTERS); FIXTURE_LAYERS.forEach((L) => light.shadow.camera.layers.enable(L)); // only what stands close to the fire is drawn into its cube (a lamp's own fixture too: it must shade from the fire)
+      light.shadow.camera.layers.set(NEAR_CASTERS); // only what stands close to the fire is drawn into its cube (a lamp's own fixture too: it must shade from the fire)
       shadowFires.push({ light, x: f.x, y, z: f.z });
     }
     g.position.set(f.x, y - 0.02, f.z);
@@ -359,11 +367,11 @@ export function createProps(scene, deps) {
   // A few real lights follow the lamps nearest you, so the ground and walls round them are lit; every
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
   const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
-  // The two nearest lit lamps cast cube shadows, each redrawn every picture while lit. Slot k's cube also draws
-  // the other slot's fixture (layer FIXTURE_LAYERS[1-k]) but never its own (FIXTURE_LAYERS[k]).
+  // The two nearest lit lamps cast cube shadows, each redrawn every picture while lit. Slot k's cube draws
+  // layer LAMP_CASTERS[k]: what stands near that lamp, the other lamp's fixture included, never its own.
   for (let k = 0; k < 2; k++) {
     const l = lampLights[k], sh = l.shadow; l.castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.0008; sh.normalBias = 0.02; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1;
-    sh.camera.layers.set(NEAR_CASTERS); sh.camera.layers.enable(FIXTURE_LAYERS[1 - k]);
+    sh.camera.layers.set(LAMP_CASTERS[k]);
   }
   // A few times a second, mark which shadow casters stand near a lit fire or the shadowing lamp, so the
   // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.
@@ -372,10 +380,11 @@ export function createProps(scene, deps) {
   const _c = new THREE.Vector3(); let wasTorch = false, casterScan = 0, lastL0 = null, lastL1 = null;
   // The torch's shadow zone: a cell of the 8 m grid round the player, wide enough for the whole beam. Snapped so
   // the static tree/bush/rock proxies built for it (cached by position) are reused as the player walks.
-  let torchZone = null; const torchCentre = { x: 0, z: 0, r: 28, torch: true };
+  let torchZone = null; const torchCentre = { x: 0, z: 0, r: 28, torch: true, layer: TORCH_CASTERS };
   const inPlayer = (o) => { const pg = player.group; for (let p = o; p; p = p.parent) if (p === pg) return true; return false; };
-  const proxies = createShadowProxies(scene, { cubeLayer: NEAR_CASTERS, sunLayer: SUN_PROXIES, torchLayer: TORCH_CASTERS });
-  proxies.onFree = (o) => { o.layers.enable(NEAR_CASTERS); if (torchZone) o.layers.enable(TORCH_CASTERS); }; // drawn live at once; the next scan sorts near from far
+  const proxies = createShadowProxies(scene, { sunLayer: SUN_PROXIES });
+  const CASTER_MASK = (1 << NEAR_CASTERS) | (1 << LAMP_CASTERS[0]) | (1 << LAMP_CASTERS[1]) | (1 << TORCH_CASTERS);
+  proxies.onFree = (o) => { o.layers.mask |= CASTER_MASK & ~(torchZone ? 0 : 1 << TORCH_CASTERS); }; // drawn live at once; the next scan sorts near from far
   function markNearCasters(centres) {
     scene.traverse((o) => {
       if (!o.isMesh || !o.castShadow || o.isInstancedMesh || o.userData.shadowProxy) return;
@@ -383,14 +392,21 @@ export function createProps(scene, deps) {
       const bs = o.boundingSphere || g.boundingSphere;
       _c.copy(bs.center).applyMatrix4(o.matrixWorld);
       const r = bs.radius * o.matrixWorld.getMaxScaleOnAxis();
-      let near = false, tNear = false;
-      if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) { if (c.torch) tNear = true; else near = true; }
-      if (tNear && !inPlayer(o)) o.layers.enable(TORCH_CASTERS); else o.layers.disable(TORCH_CASTERS); // the torch's own shadow never sees the player's body (the light is in the hand)
-      const slot = near ? ownFixture(o, _c.x, _c.y, _c.z, r, centres) : -1;
-      for (let k = 0; k < 2; k++) if (k === slot) o.layers.enable(FIXTURE_LAYERS[k]); else o.layers.disable(FIXTURE_LAYERS[k]);
-      if (near && slot < 0) o.layers.enable(NEAR_CASTERS); else o.layers.disable(NEAR_CASTERS); // a lamp's cube never sees its own fixture
+      let mask = 0;
+      if (r < 12) for (const c of centres) if ((_c.x - c.x) ** 2 + (_c.z - c.z) ** 2 < (c.r + r) ** 2) mask |= 1 << c.layer;
+      if (mask & (1 << TORCH_CASTERS) && inPlayer(o)) mask &= ~(1 << TORCH_CASTERS); // the torch's own shadow never sees the player's body (the light is in the hand)
+      const slot = mask & ((1 << LAMP_CASTERS[0]) | (1 << LAMP_CASTERS[1])) ? ownFixture(o, _c.x, _c.y, _c.z, r, centres) : -1;
+      if (slot >= 0) { mask &= ~(1 << LAMP_CASTERS[slot]); if (centres.some((c) => c.layer === NEAR_CASTERS)) mask |= 1 << NEAR_CASTERS; } // a lamp's cube never sees its own fixture; the bonfire's always does
+      o.layers.mask = (o.layers.mask & ~CASTER_MASK) | mask;
     });
   }
+  let shadowsOff = new Set(), lowQuality = false;
+  function applyQuality() {
+    for (const sf of shadowFires) { sf.light.castShadow = !shadowsOff.has('fire'); setShadowSize(sf.light.shadow, lowQuality ? SHADOW_FIRE / 2 : SHADOW_FIRE); }
+    for (let k = 0; k < 2; k++) lampLights[k].castShadow = !lowQuality && !shadowsOff.has('lamps');
+  }
+  const FIRE_SWAMP = 10; // m: a lamp this close to a burning bonfire stands in its light (and its shadows)
+  const inFireLight = (l) => { for (const sf of shadowFires) if (sf.light.intensity > 0.5 && sf.light.castShadow && (l.pos.x - sf.x) ** 2 + (l.pos.z - sf.z) ** 2 < FIRE_SWAMP * FIRE_SWAMP) return true; return false; };
   const casterCentres = [];
   const outside = [];
   const byDistance = [];
@@ -414,6 +430,10 @@ export function createProps(scene, deps) {
       }
       if (was !== !!torchZone) casterScan = 0;
     },
+    // Measuring (?noshadow=fire,lamps in main.js): those lights stop casting shadows.
+    setShadowsOff(off) { shadowsOff = off; applyQuality(); },
+    // Graphics Low: the bonfire's cube at a quarter of the texels, no lamp cubes (main.js setGraphics).
+    setQuality(low) { lowQuality = !!low; applyQuality(); },
     setFlag(up) { if (flagState) flagState.up = up; },
     // The nearest burning fire within reach, for cooking on or feeding.
     fireNear(x, z, lit = true) { let best = null, bd = Infinity; for (const f of fires) { const d = Math.hypot(x - f.x, z - f.z); if (d < (f.big ? 4.6 : 3) && d < bd && (!lit || f.fire.lit)) { best = f; bd = d; } } return best; },
@@ -443,22 +463,26 @@ export function createProps(scene, deps) {
       const gloom = 0.7 * dimness(); // lamps glow in dark weather too
       for (const l of outside) { l.glow = Math.max(dusk, gloom); if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
+      // The four nearest get real lights; of those, lamps standing in a burning bonfire's light go last, so the two
+      // shadow cubes go to lamps elsewhere. Beside the fire its own cube already shades and its light is several times
+      // a lamp's, so a lamp's cube there added little and cost a lot (the whole ring of people, six faces over).
+      for (let i = 0, j = 0, n = Math.min(4, byDistance.length); i < n; i++) if (!inFireLight(byDistance[i])) { const l = byDistance[i]; byDistance.splice(i, 1); byDistance.splice(j++, 0, l); }
       const dark = lampDark = Math.min(1, Math.max(0, (nightF - 0.1) / 0.5)); // in daylight a lamp casts no light on its surroundings, whether or not it is switched on
       { // the two nearest lamp lights' shadows: redrawn every picture, so they keep step with the people
-        const l0 = dark > 0.3 ? byDistance[0] : null, l1 = dark > 0.3 ? byDistance[1] || null : null;
+        const shadable = (l) => (l && !inFireLight(l) ? l : null);
+        const l0 = dark > 0.3 ? shadable(byDistance[0]) : null, l1 = dark > 0.3 && l0 ? shadable(byDistance[1]) : null;
         if (l0) lampLights[0].shadow.needsUpdate = true;
-        if (l1) lampLights[1].shadow.needsUpdate = true;
         // The second lamp's shadow fades in as it pulls clearly ahead of the third (and out as it falls back),
         // so the hand-over to another lamp happens while its shadow is at zero: no pop.
-        if (l1) { const d1 = l1.pos.distanceTo(pp), d2 = byDistance[2] ? byDistance[2].pos.distanceTo(pp) : Infinity, t = Math.min(1, Math.max(0, (d2 - d1) / 2.5)); lampLights[1].shadow.intensity = t * t * (3 - 2 * t); }
+        if (l1) { const next = byDistance.find((l, i) => i > 1 && !inFireLight(l)), d1 = l1.pos.distanceTo(pp), d2 = next ? next.pos.distanceTo(pp) : Infinity, t = Math.min(1, Math.max(0, (d2 - d1) / 2.5)); lampLights[1].shadow.intensity = t * t * (3 - 2 * t); if (t > 0) lampLights[1].shadow.needsUpdate = true; } // faded out: nothing to redraw
         if (l0 !== lastL0 || l1 !== lastL1) { lastL0 = l0; lastL1 = l1; casterScan = 0; } // another lamp took a slot: re-sort its fixture at once
         casterScan -= dt;
         if (casterScan <= 0) {
           casterScan = 0.25; casterCentres.length = 0;
-          for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14 });
+          for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14, layer: NEAR_CASTERS });
           if (torchZone) casterCentres.push(torchZone);
-          if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9, light: l0.pos, slot: 0 });
-          if (l1) casterCentres.push({ x: l1.pos.x, z: l1.pos.z, r: 9, light: l1.pos, slot: 1 });
+          if (l0 && lampLights[0].castShadow) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9, light: l0.pos, slot: 0, layer: LAMP_CASTERS[0] });
+          if (l1 && lampLights[1].castShadow) casterCentres.push({ x: l1.pos.x, z: l1.pos.z, r: 9, light: l1.pos, slot: 1, layer: LAMP_CASTERS[1] });
           proxies.scan(pp.x, pp.z, casterCentres); // first: it may hand casters back onto the cube layer
           if (casterCentres.length || wasTorch) markNearCasters(casterCentres);
           wasTorch = !!torchZone;

@@ -36,6 +36,9 @@ const SPOTS = {
   topterrace: 'x=118.5&z=-57&yaw=2.2', clearing: 'x=147&z=-79&yaw=1.99',
   // The camp's open sandy beach, looking out to sea over the surf.
   beach: 'x=18&z=46&yaw=-2.77',
+  // Performance checks (2026-11-17): a few steps from the camp bonfire looking at it (pair with T=0.95), and
+  // the camp looking west into the low sun (pair with T=0.84).
+  campfire: 'x=14&z=15&yaw=0.52', sunset: 'x=22&z=10&yaw=1.23',
 };
 const only = process.argv[2];
 for (const [name, q] of Object.entries(SPOTS)) {

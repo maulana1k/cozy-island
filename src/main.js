@@ -8,7 +8,7 @@ import { createCampProps } from './world/campProps.js';
 import { createScatter } from './world/scatter.js';
 import { createPond } from './world/pond.js';
 import { createZipline } from './world/zipline.js';
-import { createProps, SUN_PROXIES } from './world/props.js';
+import { createProps, SUN_PROXIES, setShadowSize } from './world/props.js';
 import { createInput } from './input.js';
 import { createPlayer } from './actors/player.js';
 import { createVillagers } from './actors/villagers.js';
@@ -34,6 +34,7 @@ import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector, placeFor } from './cutscene.js';
 import { createFinish } from './finish.js';
+import { readPerfFlags, applyOffSwitches, createFrameTimer, createAutoGraphics } from './perf.js';
 import { createSunFx, goldenHour } from './sunfx.js';
 import { createParticles } from './world/particles.js';
 import { createReact } from './world/react.js';
@@ -77,16 +78,19 @@ import { heightAt } from './logic/terrain.js';
 const canvas = document.getElementById('game');
 // Graphics (pause menu, remembered): High draws up to the screen's own density (2 on a Retina screen)
 // through the finishing pass (src/finish.js: multisampled, glow on bright things); Low draws straight to
-// the screen as before, at most 1.5, which heats the machine less. ?graphics=low|high forces one.
-const RATIO_CAP = { high: 2, low: 1.5 };
+// the screen at ratio 1 with lighter shadows, particles and water (applyQuality below), for weak laptops.
+// ?graphics=low|high forces one.
+const RATIO_CAP = { high: 2, low: 1 };
 let graphics = 'high'; try { if (localStorage.getItem('graphics') === 'low') graphics = 'low'; } catch { /* private window */ }
 { const g = new URLSearchParams(location.search).get('graphics'); if (g === 'low' || g === 'high') graphics = g; }
+const perfFlags = readPerfFlags(new URLSearchParams(location.search)); // measuring switches (src/perf.js)
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, RATIO_CAP[graphics]));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true; // lets a tent be sliced open while you are inside it
 renderer.info.autoReset = false; // counted per picture below, the finishing pass's own draws included
 const finish = createFinish(renderer);
+const frameTimer = createFrameTimer(); // script time per frame (update, render call), for ?dbg
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6d9b8);
@@ -158,6 +162,11 @@ torch.shadow.camera.layers.set(9); torch.shadow.autoUpdate = false; torch.shadow
 let torchFrame = 0;
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
+// Measuring switches (?noshadow=sun,fire,lamps,torch, ?nosky, ?nowater: src/perf.js).
+applyOffSwitches(perfFlags, { scene, sky, island });
+if (perfFlags.noShadow.has('sun')) sky.sunLight.castShadow = false;
+if (perfFlags.noShadow.has('torch')) torch.castShadow = false;
+props.setShadowsOff(perfFlags.noShadow);
 // ---- Helping the island heal (src/logic/restore.js, src/world/litter.js): litter to pick up, a birdhouse to mend.
 const litter = createLitter(scene, { groundAt, onClean: (thing, r) => onClean(thing, r) });
 function onClean(thing, r) {
@@ -740,20 +749,41 @@ let lastBlock = null;
 let ladder = [], rung = 0, ratio = 1, slow = 0, quick = 0;
 const failed = new Map(); // rung -> how many times it was too slow
 function buildLadder() {
-  const cap = Math.min(window.devicePixelRatio, RATIO_CAP[graphics]), high = graphics === 'high';
+  const cap = perfFlags.dpr || Math.min(window.devicePixelRatio, RATIO_CAP[graphics]), high = graphics === 'high';
   ladder = [{ ratio: cap, bloom: high }];
   for (let r = Math.floor((cap - 0.001) * 4) / 4; r >= 1; r -= 0.25) ladder.push({ ratio: r, bloom: high });
   if (high) ladder.push({ ratio: ladder[ladder.length - 1].ratio, bloom: false });
   rung = 0; failed.clear();
 }
 function applyRung() {
-  const r = ladder[rung]; finish.bloom = r.bloom; slow = 0; quick = 0;
+  const r = ladder[rung]; finish.bloom = r.bloom && !perfFlags.noBloom; slow = 0; quick = 0;
   if (r.ratio !== ratio) { ratio = r.ratio; renderer.setPixelRatio(ratio); }
 }
 buildLadder(); applyRung();
-function setGraphics(g) { graphics = g; buildLadder(); applyRung(); }
+function setGraphics(g) { graphics = g; buildLadder(); applyRung(); applyQuality(); }
+// Graphics Low, light enough for an integrated GPU: a 2048 sun map (4096 on High), the bonfire's cube at 512,
+// no lamp or torch shadows, half the burst particles, water detail drawn half as far out. (High: unchanged.)
+function applyQuality() {
+  const low = graphics === 'low';
+  setShadowSize(sky.sunLight.shadow, low ? 2048 : 4096); sky.sunLight.shadow.normalBias = low ? 0.03 : 0.018; // about one texel either way
+  torch.castShadow = !low && !perfFlags.noShadow.has('torch');
+  props.setQuality(low); particles.setQuality(low);
+  if (island.water.userData.setDetail) island.water.userData.setDetail(low ? 0.5 : 1);
+}
+applyQuality();
+// First visit only (no saved Graphics choice, none forced by the URL, not measuring): time the first seconds of
+// play, and on a slow machine (median under about 45 fps) switch to Graphics Low once and say so (src/perf.js).
+const autoGraphics = createAutoGraphics({
+  enabled: !params.has('graphics') && !perfFlags.noLadder,
+  onSlow: () => {
+    if (graphics === 'low') return;
+    setGraphics('low'); hud.setGraphics('low');
+    try { localStorage.setItem('graphics', 'low'); } catch { /* private window */ }
+    hud.tip('Switched to Graphics Low for smoother play. Change it in Settings (Tab).');
+  },
+});
 function tuneResolution(raw) {
-  if (raw > 0.25) return; // a hitch from switching tabs, not a slow machine
+  if (raw > 0.25 || perfFlags.noLadder) return; // a hitch from switching tabs, not a slow machine (or measuring: ?dpr, ?nolimit)
   const want = 1 / frameRate(); // judged against the rate we are aiming for, not a fixed 60
   slow = raw > want * 1.25 ? slow + raw : Math.max(0, slow - raw * 2);
   quick = raw < want * 1.04 ? quick + raw : 0;
@@ -766,8 +796,9 @@ function step() {
   const now = performance.now();
   const raw = (now - last) / 1000;
   last = now;
+  frameTimer.beginFrame();
   stats.frames++; stats.total += raw; stats.worst = Math.max(stats.worst, raw);
-  if (hud.started && !hud.menuOpen) tuneResolution(raw);
+  if (hud.started && !hud.menuOpen) { tuneResolution(raw); autoGraphics.tick(raw, !director.active && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen); }
   const previewing = !hud.started && storyRt.previewing; // the name and look picker: the world carries on behind it
   const paused = (!hud.started && !previewing) || hud.menuOpen;
   // While paused the world stands still; only the picture keeps refreshing.
@@ -1007,7 +1038,10 @@ function step() {
   finish.lite = graphics !== 'high'; // Low still draws through the finishing pass while the camera is up: no glow, a cheaper blur
   finish.keepDepth(graphics === 'high'); // the sun's shafts and glare read the scene's depth
   finish.sun = sunFx.update(clampDt(raw), camera, timeOfDay, weather, graphics === 'high', photo.active ? 1.5 : 1);
+  if (perfFlags.noSunFx) finish.sun = null;
+  frameTimer.beginRender();
   if (graphics === 'high' || photo.active) finish.render(scene, camera); else renderer.render(scene, camera);
+  frameTimer.endRender();
   photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
   // Averaged over two pictures, to steady the readout.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;
@@ -1051,4 +1085,4 @@ window.__game = {
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather, finish, contact,
   get graphics() { return graphics; }, set graphics(g) { setGraphics(g); }, get rung() { return ladder[rung]; },
 };
-if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ loadMs, calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio, graphics, bloom: graphics === 'high' && finish.bloom }); }, 300);
+if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ loadMs, calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio, graphics, bloom: graphics === 'high' && finish.bloom, upd: +frameTimer.out.upd.toFixed(2), rend: +frameTimer.out.rend.toFixed(2) }); }, 300);

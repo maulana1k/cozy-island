@@ -53,7 +53,7 @@ C.lights_physical_pars_fragment = swap(C.lights_physical_pars_fragment, DOTNL, T
   let dir = C.lights_fragment_begin.slice(start, end);
   dir = swap(dir, 'directLight.color *= ( directLight.visible && receiveShadow ) ?', 'toonShadow = ( directLight.visible && receiveShadow ) ?');
   dir = swap(dir, '\t\t#endif\n\t\tRE_Direct( directLight,', `\t\t{ float I = max( directionalLightShadow.shadowIntensity, 1e-3 );
-		  toonShadow = mix( 1.0 - I, 1.0, smoothstep( 0.3, 0.7, ( toonShadow - ( 1.0 - I ) ) / I ) ); }
+		  toonShadow = mix( 1.0 - I, 1.0, smoothstep( 0.12, 0.88, ( toonShadow - ( 1.0 - I ) ) / I ) ); }
 		#endif
 		toonIsSun = true;
 		RE_Direct( directLight,`);

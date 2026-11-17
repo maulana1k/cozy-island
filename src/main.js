@@ -410,12 +410,14 @@ function toggleSound() { hud.setSound(!audio.toggleMute()); }
 let tabMenu = false; // the menu was opened with Tab while the mouse was captured: keep the capture, drive it from the keyboard
 function toggleMenu() {
   if (!hud.started) return;
+  if (hud.menuOpen && hud.menuBack()) return; // Esc leaves the key list first
   tabMenu = false;
   if (hud.menuOpen) hud.closeMenu(); else hud.openMenu();
   syncLook();
 }
 // Tab: open or close the menu without letting go of free look. Any other screen that is open just closes.
 function tabKey() {
+  if (hud.menuOpen && hud.menuBack()) return;
   if (hud.menuOpen) { tabMenu = false; hud.closeMenu(); audio.play('ui'); syncLook(); return; }
   if (hud.bagOpen) return toggleBag();
   if (hud.journalOpen) return toggleJournal();
@@ -475,6 +477,7 @@ window.addEventListener('click', (e) => { if (swallowClick) { swallowClick = fal
 const hud = createHUD({
   onResume: () => { tabMenu = false; hud.closeMenu(); syncLook(); },
   onToggleLook: () => toggleLook(),
+  getTime: () => timeOfDay,
   onToggleMenu: toggleMenu,
   onToggleSound: toggleSound,
   onToggleJournal: toggleJournal,

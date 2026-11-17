@@ -382,29 +382,34 @@ export function createHUD(handlers) {
   const barTop = el('div', 'bar-t'), barBottom = el('div', 'bar-b'); barBottom.append(cineTitle, cineSub); barTop.append(cineSkip);
   cine.append(barTop, barBottom);
 
-  // ---- Pause menu: white words on the dimmed picture. Left: Menu (big words) and the two panels; right: Options (label: value rows) or Controls (the keys).
-  // Keyboard: W/S or arrows move the highlight, A/D or arrows change a value, Enter or E picks (see menuKey, used by main.js).
+  // ---- Pause menu: white words on the dimmed picture. Two panels: Game (left) and Settings (right); Controls opens the key list.
+  // Keyboard: W/S move in a panel, left/right arrows jump to the other panel, A/D change a value, Enter or E picks (see menuKey, used by main.js).
   const menu = el('div', 'overlay menu off');
-  const resume = el('button', 'word', 'Resume'), openJournal = el('button', 'word', 'Journal'), openMap = el('button', 'word', 'Map');
-  const optsTab = el('button', 'word tab', 'Options'), keysTab = el('button', 'word tab', 'Controls');
-  // One option row: a label on the left, its value on the right. row.val is the value's text node holder.
+  const resume = el('button', 'word', 'Resume');
+  // One option row: a label on the left, its value on the right. row.val holds the value's text.
   const opt = (label) => { const row = el('button', 'orow'); row.val = el('b'); row.append(el('span', null, label), row.val); return row; };
-  const guideRow = opt('Journey guide'), filmRow = opt('Cutscenes'), saverRow = opt('Battery saver'), speedRow = opt('Day speed'), lookRow = opt('Camera'), soundRow = opt('Sound'), gfxRow = opt('Graphics'), timeRow = opt('Time of day'), weatherRow = opt('Weather');
-  // Time of day and Weather step through their choices (Auto for the random weather).
-  let timeAt = -1, wxAt = 0;
-  timeRow.val.textContent = 'Pick one'; weatherRow.val.textContent = WEATHERS[0][0];
-  const stepTime = (d) => { timeAt = (timeAt + d + TIMES.length) % TIMES.length; if (timeAt < 0) timeAt = 0; timeRow.val.textContent = TIMES[timeAt][0]; handlers.onSetTime(TIMES[timeAt][1]); };
+  const guideRow = opt('Journey guide'), filmRow = opt('Cutscenes'), saverRow = opt('Battery saver'), speedRow = opt('Day speed'), lookRow = opt('Camera'), soundRow = opt('Sound'), gfxRow = opt('Graphics'), timeRow = opt('Time of day'), weatherRow = opt('Weather'), keysRow = opt('Controls');
+  keysRow.val.textContent = '›';
+  // Time of day and Weather step through their choices (Auto for the random weather). Time shows the nearest preset when the menu opens.
+  let timeAt = 1, wxAt = 0;
+  weatherRow.val.textContent = WEATHERS[0][0];
+  const showTime = () => { timeRow.val.textContent = TIMES[timeAt][0]; };
+  const nearestTime = (t) => { let best = 0, bd = 9; TIMES.forEach(([, v], i) => { const d = Math.abs(v - t), c = Math.min(d, 1 - d); if (c < bd) { bd = c; best = i; } }); return best; };
+  const stepTime = (d) => { timeAt = (timeAt + d + TIMES.length) % TIMES.length; showTime(); handlers.onSetTime(TIMES[timeAt][1]); };
   const stepWeather = (d) => { wxAt = (wxAt + d + WEATHERS.length) % WEATHERS.length; weatherRow.val.textContent = WEATHERS[wxAt][0]; handlers.onSetWeather && handlers.onSetWeather(WEATHERS[wxAt][1]); };
   timeRow.step = stepTime; weatherRow.step = stepWeather;
   const controls = el('div', 'keys');
   for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal (Notes are inside)'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Tab', 'Menu'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  const optPanel = el('div', 'panel opts'); optPanel.append(el('h3', null, 'Options'), guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, gfxRow, timeRow, weatherRow);
-  const keyPanel = el('div', 'panel ctl off'); keyPanel.append(el('h3', null, 'Controls'), controls);
-  const mcol = el('div', 'mcol'); mcol.append(el('h3', null, 'Menu'), resume, openJournal, openMap, optsTab, keysTab);
-  const mbody = el('div', 'mbody'); mbody.append(mcol, optPanel, keyPanel);
-  menu.append(el('h2', null, 'Paused'), mbody, el('p', 'mhelp', 'W S move   A D change   Enter pick   Tab or Esc close'));
+  const gamePanel = el('div', 'panel'); gamePanel.append(el('h3', null, 'Game'), resume, speedRow, timeRow, weatherRow, keysRow);
+  const setPanel = el('div', 'panel'); setPanel.append(el('h3', null, 'Settings'), guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow);
+  const mbody = el('div', 'mbody'); mbody.append(gamePanel, setPanel);
+  const backRow = el('button', 'word', 'Back');
+  const keyPanel = el('div', 'panel ctl'); keyPanel.append(el('h3', null, 'Controls'), controls, backRow);
+  const mhelp = el('p', 'mhelp', '↑↓ move · ←→ switch panel · A D change · Enter pick · Tab/Esc close');
+  menu.append(el('h2', null, 'Paused'), mbody, keyPanel, mhelp);
+  keyPanel.style.display = 'none';
   guideRow.addEventListener('click', () => handlers.onToggleGuide());
   filmRow.addEventListener('click', () => handlers.onToggleFilms());
   saverRow.addEventListener('click', () => handlers.onToggleSaver());
@@ -412,17 +417,16 @@ export function createHUD(handlers) {
   speedRow.addEventListener('click', () => handlers.onDaySpeed());
   timeRow.addEventListener('click', () => stepTime(1));
   weatherRow.addEventListener('click', () => stepWeather(1));
-  // Keyboard highlight over the entries that are showing.
-  let view = 'options', cursor = 0;
-  const optRows = [guideRow, filmRow, saverRow, speedRow, lookRow, soundRow, gfxRow, timeRow, weatherRow];
-  const leftItems = [resume, openJournal, openMap, optsTab, keysTab];
-  const menuItems = () => leftItems.concat(view === 'options' ? optRows : []);
-  function paintCursor() { const items = menuItems(); cursor = Math.max(0, Math.min(items.length - 1, cursor)); for (const o of leftItems.concat(optRows)) o.classList.toggle('sel', o === items[cursor]); }
-  function showView(v) { view = v; optPanel.classList.toggle('off', v !== 'options'); keyPanel.classList.toggle('off', v !== 'controls'); optsTab.classList.toggle('on', v === 'options'); keysTab.classList.toggle('on', v === 'controls'); paintCursor(); }
-  optsTab.addEventListener('click', () => { showView('options'); cursor = leftItems.length; paintCursor(); });
-  keysTab.addEventListener('click', () => showView('controls'));
-  for (const o of leftItems.concat(optRows)) o.addEventListener('mouseenter', () => { const i = menuItems().indexOf(o); if (i >= 0) { cursor = i; paintCursor(); } });
-  showView('options');
+  // Keyboard highlight: cols[0] is the Game panel, cols[1] the Settings panel; the key list has only Back.
+  const cols = [[resume, speedRow, timeRow, weatherRow, keysRow], [guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow]];
+  let col = 0, row = 0, inKeys = false;
+  const allItems = cols[0].concat(cols[1], [backRow]);
+  function paintCursor() { const cur = inKeys ? backRow : cols[col][row]; for (const o of allItems) o.classList.toggle('sel', o === cur); }
+  function showKeys(on) { inKeys = on; mbody.style.display = on ? 'none' : ''; keyPanel.style.display = on ? '' : 'none'; paintCursor(); }
+  keysRow.addEventListener('click', () => showKeys(true));
+  backRow.addEventListener('click', () => showKeys(false));
+  cols.forEach((list, c) => list.forEach((o, r) => o.addEventListener('mouseenter', () => { col = c; row = r; paintCursor(); })));
+  paintCursor();
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
   root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, banner, bubble, book, sheet, packSheet, start, menu);
@@ -435,8 +439,6 @@ export function createHUD(handlers) {
   mapBtn.addEventListener('click', () => handlers.onToggleMap());
   lookBtn.addEventListener('click', () => handlers.onToggleLook());
   lookRow.addEventListener('click', () => handlers.onToggleLook());
-  openJournal.addEventListener('click', () => { handlers.onResume(); if (!hud.journalOpen) handlers.onToggleJournal(); });
-  openMap.addEventListener('click', () => { handlers.onResume(); if (!hud.mapOpen) handlers.onToggleMap(); });
   book.addEventListener('click', (e) => { if (e.target === book) handlers.onToggleJournal(); });
   bagBtn.addEventListener('click', () => handlers.onToggleBag());
   packSheet.addEventListener('click', (e) => { if (e.target === packSheet) handlers.onToggleBag(); });
@@ -449,22 +451,25 @@ export function createHUD(handlers) {
   const hud = {
     menuOpen: false, started: false, journalOpen: false, mapOpen: false, bagOpen: false,
     begin() { hud.started = true; start.classList.add('off'); root.classList.add('playing'); },
-    openMenu() { hud.menuOpen = true; menu.classList.remove('off'); cursor = 0; paintCursor(); },
+    openMenu() { hud.menuOpen = true; menu.classList.remove('off'); showKeys(false); col = 0; row = 0; if (handlers.getTime) { timeAt = nearestTime(handlers.getTime()); showTime(); } paintCursor(); },
+    // Leaves the key list for the menu. Returns true when it did (so Esc or Tab only step back).
+    menuBack() { if (!inKeys) return false; showKeys(false); return true; },
     // Keys for the open menu. Returns true when it used the key.
     menuKey(e) {
-      const c = e.code, items = menuItems(), cur = items[cursor];
-      if (c === 'KeyW' || c === 'ArrowUp') { cursor = (cursor - 1 + items.length) % items.length; paintCursor(); return true; }
-      if (c === 'KeyS' || c === 'ArrowDown') { cursor = (cursor + 1) % items.length; paintCursor(); return true; }
-      if (c === 'KeyA' || c === 'ArrowLeft' || c === 'KeyD' || c === 'ArrowRight') {
-        const d = (c === 'KeyA' || c === 'ArrowLeft') ? -1 : 1;
-        if (optRows.includes(cur)) { if (cur.step) cur.step(d); else cur.click(); }
-        else if (cur === optsTab && d > 0) { cursor = leftItems.length; paintCursor(); }
+      const c = e.code;
+      if (inKeys) { if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') showKeys(false); return ['Enter', 'NumpadEnter', 'KeyE', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(c); }
+      const list = cols[col], cur = list[row];
+      if (c === 'KeyW' || c === 'ArrowUp') { row = Math.max(0, row - 1); paintCursor(); return true; }
+      if (c === 'KeyS' || c === 'ArrowDown') { row = Math.min(list.length - 1, row + 1); paintCursor(); return true; }
+      if (c === 'ArrowLeft' || c === 'ArrowRight') {
+        const to = c === 'ArrowLeft' ? 0 : 1;
+        if (to !== col) { const y = cur.getBoundingClientRect().top, other = cols[to]; let best = 0; other.forEach((o, i) => { if (Math.abs(o.getBoundingClientRect().top - y) < Math.abs(other[best].getBoundingClientRect().top - y)) best = i; }); col = to; row = best; paintCursor(); }
         return true;
       }
-      if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') { if (cur) cur.click(); return true; }
+      if (c === 'KeyA' || c === 'KeyD') { if (cur !== resume && cur !== keysRow) { const d = c === 'KeyA' ? -1 : 1; if (cur.step) cur.step(d); else cur.click(); } return true; }
+      if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') { cur.click(); return true; }
       return false;
     },
-    closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
     toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
     // The bars top-left and the numbers in the backpack.

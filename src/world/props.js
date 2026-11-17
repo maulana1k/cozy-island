@@ -6,7 +6,7 @@ import { PALETTE } from '../config.js';
 import { mergeStatic } from './build.js';
 import { WIND } from './weather.js';
 import { createFlames } from './flames.js';
-import { emitSparks } from './particles.js';
+import { emitSparks, emitSmoke } from './particles.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -49,8 +49,6 @@ export function createProps(scene, deps) {
   }
   const leafMat = new THREE.MeshStandardMaterial({ color: PALETTE.leafB, side: THREE.DoubleSide, roughness: 1 });
   const fruitMat = flat(0xff8a5c);
-  const smokeGeo = new THREE.IcosahedronGeometry(0.32, 1);
-  const smokeMat = new THREE.MeshLambertMaterial({ color: 0xd9d6d0, depthWrite: false });
   const fires = [];
 
   // ---- Lanterns ------------------------------------------------------------
@@ -335,8 +333,7 @@ export function createProps(scene, deps) {
         fire.sparkTimer = (0.12 + Math.random() * 0.3) * (big ? 0.45 : 1) * (1 + fire.damp * 1.5); // fewer sparks when damp
         if (big) {
           // Smoke billows up and drifts off on the breeze, thinning as it goes.
-          spawn(smokeGeo, smokeMat, new THREE.Vector3(f.x + (Math.random() - 0.5) * 0.6, y + 2.3, f.z + (Math.random() - 0.5) * 0.6),
-            new THREE.Vector3(0.35 + Math.random() * 0.3, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3), 4.5 + fire.damp * 1.5, { gravity: -0.12 + fire.damp * 0.05, spin: 0.6, grow: 3.2 + fire.damp * 2.4, alpha: 0.42 + fire.damp * 0.2, steam: fire.damp });
+          emitSmoke(f.x, y + 2.3, f.z, fire.damp);
         }
         // Sparks: a pair or so from the bonfire, one from a small fire; fresh wood throws many more for a while.
         if (near) emitSparks(f.x, y + (big ? 1.5 : 0.7), f.z, (big ? 2 : 1) + Math.round(fire.boost * 3 * (1 - fire.damp)), big ? 1.35 : 0.9, big ? 0.9 : 0.4);

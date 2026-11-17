@@ -62,6 +62,11 @@ function buildBursts() {
           p += uWindV * age * 0.5;
           c = aC.rgb * uDark;
           a = smoothstep(0.0, 0.12, k) * pow(1.0 - k, 1.5) * 0.8 * -aD.x; // a puff's kind is minus its strength
+        } else if (aD.x > 2.5) { // campfire smoke (kind = 3 + strength): billows up, drifts on the wind, thins out; grey by day, glows faintly from the fire below at night
+          p += uWindV * age * 0.9;
+          float fade = k < 0.7 ? 1.0 : max(0.0, 1.0 - (k - 0.7) / 0.3);
+          c = aC.rgb * uDark + vec3(1.0, 0.5, 0.18) * 0.55 * (1.0 - uDark) * pow(1.0 - k, 3.0);
+          a = min(1.0, k * 6.0) * fade * (aD.x - 3.0) * 0.85;
         } else if (aD.x < 1.5) { // a spark: wobbles up, cools from yellow to red, flickers
           float ph = aA.x * 13.1 + aA.z * 7.7 + aA.w * 3.0;
           p.x += sin(age * 5.0 + ph) * 0.14 * age; p.z += cos(age * 4.3 + ph) * 0.14 * age;
@@ -84,7 +89,7 @@ function buildBursts() {
         float r = length(vUv);
         if (r > 1.0) discard;
         vec3 c = vCol.rgb; float a;
-        if (vKind < 0.5) { a = 1.0 - smoothstep(0.3, 1.0, r); c *= 0.9 + 0.18 * vUv.y; } // soft, lighter on top
+        if (vKind < 0.5 || vKind > 2.5) { a = 1.0 - smoothstep(0.3, 1.0, r); c *= 0.9 + 0.18 * vUv.y; } // soft, lighter on top
         else if (vKind < 1.5) a = exp(-r * r * 5.0);
         else a = 1.0 - smoothstep(0.55, 1.0, r);
         a *= vCol.a;
@@ -123,6 +128,16 @@ export function emitPuffs(x, y, z, count = 1, color = 0xead9b0, spread = 0.2, li
       Math.cos(a) * v * spread * 3, lift * (0.5 + Math.random() * 0.6), Math.sin(a) * v * spread * 3,
       0.5 + Math.random() * 0.35, _c.r, _c.g, _c.b, 0.16 + Math.random() * 0.16, -Math.min(1, Math.max(0.02, alpha)), 0.9, 2.5, 1.6);
   }
+  return true;
+}
+// A puff of campfire smoke: drift is the wind's job in the shader; strength 0..1 is its opacity, steam 0..1 greys it.
+const SMOKE = new THREE.Color(0xd9d6d0), STEAM = new THREE.Color(0x9aa3a8);
+export function emitSmoke(x, y, z, damp = 0) {
+  if (!pool) return false;
+  _c.copy(SMOKE).lerp(STEAM, damp);
+  pool.put(x + (Math.random() - 0.5) * 0.6, y, z + (Math.random() - 0.5) * 0.6,
+    0.1 + Math.random() * 0.15, 1.1 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3,
+    4.5 + damp * 1.5, _c.r, _c.g, _c.b, 0.64, 3 + Math.min(0.95, 0.42 + damp * 0.2), -0.12 + damp * 0.05, 0, 3.2 + damp * 2.4);
   return true;
 }
 // Water drops thrown up from a splash (they fall back under gravity).

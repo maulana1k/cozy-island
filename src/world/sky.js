@@ -116,6 +116,7 @@ export function createSky(scene, renderer) {
   const dome = buildDome();
   const ridges = buildRidges(createRng(SEED + 12));
   const sunDisc = buildDisc(0xfff2c8, 34);
+  sunDisc.name = 'sunDisc'; // src/sunfx.js reshapes it by the sun's height on Graphics: High (after update())
   markGlow(sunDisc.material, 0); // glows low in the sky (Graphics: High, src/finish.js)
   const moonDisc = buildDisc(0xeef2ff, 20);
 

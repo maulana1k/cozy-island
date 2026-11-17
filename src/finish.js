@@ -215,7 +215,7 @@ const SHAFTS = [shaftBlur(28), shaftBlur(10)];
 // The output pass's sun part: grade, shafts, halo, streak, ghosts, veil.
 const SUN_GLSL = /* glsl */`
   uniform float uSunOn; uniform vec2 uSunUv; uniform float uSunAspect; uniform vec3 uSunTint; uniform sampler2D tVis; uniform sampler2D tShaft;
-  uniform float uGlare; uniform float uShaft; uniform float uGhost; uniform float uStreak; uniform float uVeil; uniform float uGrade;
+  uniform float uGlare; uniform float uShaft; uniform float uGhost; uniform float uStreak; uniform float uVeil; uniform float uGrade; uniform float uCore; uniform float uStar;
   float hexd(vec2 q) { q = abs(q); return max(q.x * 0.866 + q.y * 0.5, q.y); }
   vec3 sunFx(vec3 c) {
     // Golden hour: warmer, a touch of pink in the shade, the lightest tones a little creamier.
@@ -231,7 +231,10 @@ const SUN_GLSL = /* glsl */`
     float vis = texture2D(tVis, vec2(0.5)).r;
     vec2 d = (vUv - uSunUv) * vec2(uSunAspect, 1.0); float r = length(d);
     vec3 add = uSunTint * texture2D(tShaft, vUv).r * uShaft;
-    add += uSunTint * vis * uGlare * (exp(-r * r * 90.0) * 0.55 + exp(-r * 6.5) * 0.3 + exp(-r * 1.8) * 0.1 + exp(-r * r * 1500.0) * 0.6);
+    add += uSunTint * vis * uGlare * (exp(-r * r * 90.0) * 0.55 + exp(-r * 6.5) * 0.3 + exp(-r * 1.8) * 0.1);
+    // the high sun: white-hot core (no edge) and a faint six-point starburst
+    add += mix(vec3(1.0), uSunTint, 0.2) * vis * uCore * (exp(-r * r * 260.0) + exp(-r * r * 40.0) * 0.3);
+    if (uStar > 0.0) { float a = atan(d.y, d.x); add += uSunTint * vis * uStar * (pow(abs(cos(a * 3.0)), 60.0) + 0.5 * pow(abs(cos(a * 3.0 + 0.5236)), 90.0)) * exp(-r * 3.5); }
     add += uSunTint * vis * uStreak * exp(-(vUv.y - uSunUv.y) * (vUv.y - uSunUv.y) * 9000.0) * exp(-abs(d.x) * 2.2);
     if (uGhost > 0.0) {
       vec2 axis = vec2(0.5) - uSunUv;
@@ -247,7 +250,7 @@ const SUN_GLSL = /* glsl */`
     c = 1.0 - (1.0 - c) * (1.0 - min(add, 1.0)); // screen: never past white
     return c + (1.0 - c) * uSunTint * uVeil * vis;
   }`;
-const sunUniforms = () => ({ uSunOn: { value: 0 }, uSunUv: { value: new THREE.Vector2() }, uSunAspect: { value: 1 }, uSunTint: { value: new THREE.Color() }, tVis: { value: null }, tShaft: { value: null }, uGlare: { value: 0 }, uShaft: { value: 0 }, uGhost: { value: 0 }, uStreak: { value: 0 }, uVeil: { value: 0 }, uGrade: { value: 0 } });
+const sunUniforms = () => ({ uSunOn: { value: 0 }, uSunUv: { value: new THREE.Vector2() }, uSunAspect: { value: 1 }, uSunTint: { value: new THREE.Color() }, tVis: { value: null }, tShaft: { value: null }, uGlare: { value: 0 }, uShaft: { value: 0 }, uGhost: { value: 0 }, uStreak: { value: 0 }, uVeil: { value: 0 }, uGrade: { value: 0 }, uCore: { value: 0 }, uStar: { value: 0 } });
 
 export function createFinish(renderer) {
   const size = new THREE.Vector2(-1, -1), now = new THREE.Vector2();
@@ -326,7 +329,7 @@ export function createFinish(renderer) {
     }
     sunU.tShaft.value = shaftA.texture; sunU.tDepth.value = target.depthTexture; sunU.uNear.value = camera.near; sunU.uFar.value = camera.far;
     sunU.uSunUv.value.copy(sun.uv); sunU.uSunAspect.value = aspect; sunU.uSunTint.value.copy(sun.tint);
-    sunU.uGlare.value = sun.glare; sunU.uShaft.value = sun.shaft > 0.002 ? sun.shaft : 0; sunU.uGhost.value = sun.ghost; sunU.uStreak.value = sun.streak; sunU.uVeil.value = sun.veil; sunU.uGrade.value = sun.grade;
+    sunU.uGlare.value = sun.glare; sunU.uShaft.value = sun.shaft > 0.002 ? sun.shaft : 0; sunU.uGhost.value = sun.ghost; sunU.uStreak.value = sun.streak; sunU.uVeil.value = sun.veil; sunU.uGrade.value = sun.grade; sunU.uCore.value = sun.core; sunU.uStar.value = sun.star;
   }
 
   const finish = {

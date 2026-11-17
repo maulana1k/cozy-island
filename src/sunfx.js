@@ -26,9 +26,10 @@ function haloTexture() {
 }
 
 export function createSunFx(scene) {
+  let disc = null; // the sky's sun disc (src/world/sky.js), found by name on first use
   const sunPos = new THREE.Vector3(), moonPos = new THREE.Vector3(), trueDir = new THREE.Vector3();
   const v = new THREE.Vector3(), fwd = new THREE.Vector3(), to = new THREE.Vector3(), tmp = new THREE.Color();
-  const pack = { on: false, uv: new THREE.Vector2(), radius: 0.02, tint: new THREE.Color(), glare: 0, shaft: 0, ghost: 0, streak: 0, veil: 0, grade: 0, dt: 0, fresh: true };
+  const pack = { core: 0, star: 0, on: false, uv: new THREE.Vector2(), radius: 0.02, tint: new THREE.Color(), glare: 0, shaft: 0, ghost: 0, streak: 0, veil: 0, grade: 0, dt: 0, fresh: true };
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
   sprite.renderOrder = -8.9; sprite.scale.setScalar(300); sprite.visible = false; sprite.frustumCulled = false;
   scene.add(sprite);
@@ -54,6 +55,17 @@ export function createSunFx(scene) {
       const e = Math.max(Math.abs(v.x), Math.abs(v.y)); // 1 = the picture's edge
       const near = ok ? smooth(-e, -1.7, -0.95) : 0, inView = ok ? smooth(-e, -1.12, -0.8) : 0;
       const c = skyColors(t);
+      const low = 1 - smooth(s.y, 0.1, 0.26); // 1 from about 15 degrees down to the horizon
+      // The sky's disc (High): fades out as the sun climbs (the core takes over), deepens to orange and flattens a
+      // little as it sets. Graphics: Low keeps sky.js's own disc.
+      if (!disc) disc = scene.getObjectByName('sunDisc') || null;
+      if (disc && high && !moon) {
+        const set = 1 - smooth(s.y, 0.0, 0.08);
+        disc.material.opacity *= Math.sqrt(low);
+        disc.material.blendAlpha *= 1 - 0.75 * low; // less bloom, so the low disc keeps a readable edge
+        disc.material.color.setHex(c.sun).lerp(tmp.setRGB(1, 0.62, 0.26), 0.85 * low).lerp(tmp.setRGB(1, 0.4, 0.12), 0.7 * set);
+        disc.scale.set(1, 1 - 0.14 * set, 1);
+      } else if (disc) disc.scale.set(1, 1, 1);
 
       // Graphics: Low: the sprite halo only.
       sprite.visible = !high && up * clear > 0.02;
@@ -71,18 +83,23 @@ export function createSunFx(scene) {
       if (moon) {
         const k = moonUp * Math.max(0, 1 - (wx ? wx.cloud : 0)) * near;
         pack.tint.setRGB(0.55, 0.65, 0.95);
+        pack.core = 0; pack.star = 0;
         pack.glare = 0.14 * k; pack.shaft = 0; pack.ghost = 0; pack.streak = 0; pack.veil = 0; pack.grade = 0;
       } else {
         const k = up * clear;
         pack.tint.setHex(c.sun).lerp(tmp.setRGB(1, 0.62, 0.32), 0.55 * gold).lerp(tmp.setRGB(1, 0.97, 0.9), 0.4 * (1 - gold));
         const look = smooth(facing, 0.55, 1);
-        pack.glare = k * (0.4 + 0.75 * gold) * look * Math.min(lens, 1.15);
+        // High sun: no readable disc, a white-hot core, a big soft glare and a faint starburst. Low sun (under about
+        // 15 degrees): the atmosphere dims it to a defined orange-gold disc with a smaller warm halo.
+        pack.core = k * (1 - low) ** 3 * 1.6; // gone well before the disc shows, so no white blob over it
+        pack.star = k * (1 - low) * look * 0.12 * lens;
+        pack.glare = k * look * (1.1 - 0.92 * low) * Math.min(lens, 1.15);
         pack.shaft = k * (0.3 + 0.9 * gold) * near * smooth(facing, 0.2, 0.9);
         pack.ghost = k * gold * inView * look * 0.05 * lens * lens;
         pack.streak = k * (0.15 + 0.35 * gold) * inView * look * 0.35 * lens * lens;
-        pack.veil = k * smooth(facing, 0.9, 1) * (0.03 + 0.04 * gold) * Math.min(lens, 1.2);
+        pack.veil = k * smooth(facing, 0.85, 1) * (0.07 - 0.045 * low) * Math.min(lens, 1.2);
       }
-      pack.on = high && (pack.glare > 0.003 || pack.shaft > 0.003 || pack.grade > 0.003);
+      pack.on = high && (pack.core > 0.003 || pack.glare > 0.003 || pack.shaft > 0.003 || pack.grade > 0.003);
       wasOn = pack.on;
       return pack;
     },

@@ -1,14 +1,20 @@
 // INTERNAL. The locals' village on its terraced hillside (docs/superpowers/specs/2026-11-16-living-village-design.md,
-// sections 1, 4 and 5). Everything stands on the plan in AREAS (src/config.js): eight stilt houses on their plots
-// looking downhill, each with a yard in front; the meeting hall on the top terrace; the square on the middle terrace
-// with the well, three market stalls and the big banyan; dry-stone retaining walls along every terrace face, stone
-// steps up every flight, bamboo fences along the cart ramp's open sides, hedges between some plots, washing lines,
-// flower arches and path lamps that glow after dark. Ten locals (seven grown-ups, three children) keep a simple day:
+// sections 1, 4 and 5), now a modern Indonesian coastal town with a few heritage spots
+// (docs/superpowers/specs/2026-11-17-modern-village-design.md; builders in src/kit/town.js). Everything stands on the
+// plan in AREAS (src/config.js): on the eight plots, painted houses with fenced yards, a warung, a small mosque, a
+// motorbike workshop, the village office with its flagpole and a cafe, all looking downhill; Grandmother Wulan's old
+// stilt house (plot 5, heritage) with the carved post beside it; the old meeting hall on the top terrace (heritage);
+// the square on the middle terrace with the well, the big banyan and a row of ruko shophouses where the market stalls
+// stood; dry-stone retaining walls along every terrace face, stone steps up every flight, an asphalt cart ramp with low
+// plastered fences, power poles and wires, streetlights that glow after dark, laundry lines; the pos ronda by the
+// bridge landing and a minimarket and bus stop at the top of the ramp, on the road to the port. Ten locals (seven grown-ups, three children) keep a simple day:
 // farm work in the morning, the market at midday, chores in the afternoon, home at dusk and indoors (hidden) at night.
 // They walk the terrace walks, the steps and the ramp, never up a terrace face. Each one can be greeted.
 //
-// Cost: the hamlet kit and the yard kit each share one atlas material, so everything built here is welded into TWO
-// meshes (plus one for the night glow and one cloud of halos). The ground under paths, the square and the yards is
+// Cost: the hamlet kit and the yard kit each share one atlas material, so the heritage things, walls and steps are
+// welded into TWO meshes; every town building is ONE more vertex-coloured mesh (AO baked per piece), its repeated props
+// (scooters, chairs, tables, drums, bins, poles, streetlights) one InstancedMesh per kind, all wires one LineSegments,
+// plus one mesh for the night glow and one cloud of halos. The ground under paths, the square and the yards is
 // painted by the default stamps in src/world/ground.js. People skip their animation beyond 60 m, decide what to do
 // about once a second, and the whole area is hidden past 75 m.
 import * as THREE from 'three';
@@ -18,10 +24,14 @@ import { resolveCollisions } from '../../logic/collision.js';
 import { onTerraceFace } from '../../logic/terrain.js';
 import { createFigure } from '../../actors/figure.js';
 import { talkTime } from '../../actors/schedule.js';
+import { buildStiltHouse, buildMeetingHall, buildEarthFill, buildWell, buildShadeTree, SHADE_TREE_BENCH } from '../../kit/hamlet.js';
+import { buildYard, buildRetainingWall, buildStoneSteps, buildHedge, buildFlowerArch } from '../../kit/yard.js';
 import {
-  buildStiltHouse, buildMeetingHall, buildEarthFill, buildMarketStall, buildWell, buildShadeTree, buildWashingLine, buildPathLamp, SHADE_TREE_BENCH,
-} from '../../kit/hamlet.js';
-import { buildYard, buildRetainingWall, buildStoneSteps, buildHedge, buildFenceSection, buildFlowerArch, buildHandcart, buildWaterJars, buildFirewoodStack } from '../../kit/yard.js';
+  Mesher, TOWN_MAT, PROP_COLLIDE, STREETLIGHT_HEAD, house, ruko, warung, cafe, bengkel, mosque, kantorDesa, posRonda, minimarket, busStop, pickup,
+  road, lowFence, laundryLine, carvedPost, poleLine, buildWires, instanceProps,
+} from '../../kit/town.js';
+import { bakeAO } from '../ao.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createWaterfront } from './waterfront.js';
 
 const VF = AREAS.villageFrame, VP = AREAS.villagePoint, TER = AREAS.terraces;
@@ -43,8 +53,16 @@ const WALK = [7.5, 19.7, 33.6, 52.6];   // the walk along the front of each terr
 // ---- What stands where ---------------------------------------------------------------------------------
 // House variant and yard variant for each plot in AREAS.plots (three on the low terrace, three on the second, two on top).
 const YARD_SEED = [2, 6, 8, 9, 14, 17, 20, 23], HOUSE_V = [0, 0, 2, 3, 3, 1, 1, 2], YARD_V = [0, 4, 2, 1, 5, 1, 3, 0], TURN = [0.04, -0.05, 0.03, -0.03, 0.05, -0.04, 0.02, -0.02];
-// Hedges along one side of a plot: [plot, side] (side +1 toward +v / the south coast).
-const HEDGES = [[0, -1], [1, 1], [2, -1], [3, -1], [4, 1], [5, -1], [6, 1], [7, -1]];
+// What stands on each plot (the modern village design, section 2): a town builder and its options, or the heritage
+// stilt house (HOUSE_V and YARD_V above still give plot 5 its old house and yard).
+const PLOT_TOWN = [
+  { fn: house, opts: { variant: 0 } }, { fn: house, opts: { variant: 1 } }, { fn: warung }, { fn: mosque },
+  { fn: bengkel }, { heritage: true }, { fn: kantorDesa }, { fn: cafe },
+];
+// Hedges along one side of a plot: [plot, side] (side +1 toward +v / the south coast). Only beside the houses now.
+const HEDGES = [[0, -1], [1, 1], [5, -1]];
+// Props that people walk round (chairs are left out, so nobody sticks on one).
+const SOLID_PROPS = new Set(['motorbike', 'table', 'cafeTable', 'drum', 'bin', 'pole', 'streetLight']);
 // Path lamps (ue, v): up the main stair line, round the square and on the walks.
 const LAMPS = [[4.5, -0.8], [13.5, -4.9], [25, -1.4], [35, -5.4], [47.2, -0.2], [54, -5.2], [8.6, 10], [20.6, -13], [34.6, -13], [39, 6.2], [53.6, 9.5], [21, 11.5]];
 // Extra washing lines (ue, v), running uphill, between the plots on the low and second terraces.
@@ -80,7 +98,7 @@ const PEOPLE = [
   { role: 'farmer', home: 3, shirt: 0xa66ad0, shorts: 0x4a4a5a, skin: 0xf1c7a0, hair: 0x8a5a3c, accent: null, scale: 1.15 },
   { role: 'elder', home: 5, shirt: 0xf3e6c8, shorts: 0x6b5a4a, skin: 0xc98d62, hair: 0xd8d2c8, accent: null, coat: 0x5f8f7a, scale: 1.1 },
   { role: 'kid', home: 5, shirt: 0xe48ab4, shorts: 0x4f7fc9, skin: 0xd9a273, hair: 0x2f2826, accent: 'bow', accentColor: 0xf2b63b, scale: 0.92 },
-  { role: 'kid', home: 6, shirt: 0x5fa8a0, shorts: 0x8a6a4a, skin: 0x9a6a4a, hair: 0x2f2826, accent: null, scale: 0.96 },
+  { role: 'kid', home: 4, shirt: 0x5fa8a0, shorts: 0x8a6a4a, skin: 0x9a6a4a, hair: 0x2f2826, accent: null, scale: 0.96 }, // Adi: plot 6 is the village office now
   { role: 'kid', home: 2, shirt: 0xf2e29a, shorts: 0xa66a5f, skin: 0xe6b48a, hair: 0x5b4336, accent: 'cap', accentColor: 0xe8503a, scale: 0.9 },
 ];
 
@@ -102,16 +120,39 @@ export function create(scene, deps) {
   // Places a model: its local colliders and lamps go to world space. `tilt` leans it along its own x (fences on a slope).
   function place(made, o, y, tilt = 0) {
     made.group.position.set(o.x, y, o.z); made.group.rotation.set(0, o.ry, tilt); village.add(made.group);
+    return record(made, o, y);
+  }
+  // A model's local colliders and lamps (window glow, lanterns, bulbs that only glow) in world space.
+  function record(made, o, y) {
     for (const c of made.colliders || []) {
       const p = toW(o, c.x, c.z);
       colliders.push(c.r !== undefined ? { x: p.x, z: p.z, r: c.r } : { x: p.x, z: p.z, hw: c.hw, hd: c.hd, rot: (c.rot || 0) + o.ry });
     }
     for (const l of made.lamps || []) {
       const p = toW(o, l.x, l.z), n = l.window ? { x: l.nx * Math.cos(o.ry) + l.nz * Math.sin(o.ry), z: -l.nx * Math.sin(o.ry) + l.nz * Math.cos(o.ry) } : null;
-      lampSpots.push({ x: p.x, y: y + l.y, z: p.z, n });
+      lampSpots.push({ x: p.x, y: y + l.y, z: p.z, n, r: l.r, light: l.light });
     }
     return made;
   }
+  // A town model (src/kit/town.js), built straight into world space with its own Mesher and AO (a fine crease grid of
+  // its own, the ground band from the terrain), filed for the town's one welded mesh; its props join the pools.
+  // Its own glow pieces are dropped: the night glow is drawn from its lamp spots, like everything else here.
+  const townGeos = [], townProps = [], spans = [];
+  function townPiece(o, y, fn, opts = {}, { pitch = 0, roll = 0 } = {}) {
+    const m = new Mesher(townGeos.length + 3); m.frame(o.x, y, o.z, o.ry || 0, pitch, roll);
+    const made = fn(m, opts) || {}; m.glow = [];
+    const mesh = m.build(); if (mesh) { bakeAO(mesh.geometry, { ground: groundAt }); townGeos.push(mesh.geometry); }
+    for (const p of made.props || []) { const q = toW(o, p.x, p.z); townProps.push({ ...p, x: q.x, y: y + (p.y || 0), z: q.z, ry: (p.ry || 0) + (o.ry || 0) }); }
+    return record(made, o, y);
+  }
+  // A low plastered fence from a to b, following the ground (it runs along its own +x, tilted along its length).
+  function townRun(a, b, sink = 0.04) {
+    const len = Math.hypot(b.x - a.x, b.z - a.z); if (len < 0.4) return;
+    const ha = groundAt(a.x, a.z), hb = groundAt(b.x, b.z);
+    townPiece({ x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, ry: along(a, b) }, (ha + hb) / 2 - sink, lowFence, { len }, { roll: Math.atan2(hb - ha, len) });
+  }
+  // A prop standing on the ground.
+  const putProp = (kind, p, ry = 0, c = 0xffffff) => townProps.push({ kind, x: p.x, y: groundAt(p.x, p.z) - 0.02, z: p.z, ry, c });
   // A run of a boundary (it runs along +x from 0 to len) from a to b, following the ground along its length.
   function run(make, a, b, sink = 0.04) {
     const len = Math.hypot(b.x - a.x, b.z - a.z); if (len < 0.4) return;
@@ -120,25 +161,39 @@ export function create(scene, deps) {
   }
 
   const uvOf = (p) => { const dx = p.x - VF.o.x, dz = p.z - VF.o.z, u = dx * VF.ux + dz * VF.uz, v = dx * VF.vx + dz * VF.vz; return { ue: u - VF.bow * (v - VF.vc) ** 2, v }; };
-  // ---- Houses and their yards ------------------------------------------------------------------------
+  // ---- Houses, shops and civic buildings on the plots, and their yards -----------------------------------
   const doors = [];
   AREAS.plots.forEach((pl, i) => {
-    const k = TER.findIndex((t) => t.id === pl.terrace), t = TER[k], made = buildStiltHouse(HOUSE_V[i]);
-    const depth = made.colliders[0].hd * 2, ry = downAt(pl.v) + TURN[i];
+    const k = TER.findIndex((t) => t.id === pl.terrace), t = TER[k], spec = PLOT_TOWN[i], ry = downAt(pl.v) + TURN[i];
     // The back stands 0.55 m off the wall behind; the door looks down onto the terrace walk.
-    const c = VP(t.u1 - 1.25 - depth / 2, pl.v), o = { x: c.x, z: c.z, ry };
-    place(made, o, t.y);
+    let made, c, o;
+    if (spec.heritage) {
+      made = buildStiltHouse(HOUSE_V[i]);
+      c = VP(t.u1 - 1.25 - made.colliders[0].hd, pl.v); o = { x: c.x, z: c.z, ry };
+      place(made, o, t.y);
+    } else {
+      const hd = spec.fn(new Mesher().frame(), spec.opts || {}).footprint.hd; // a dry run for the size
+      c = VP(t.u1 - 1.25 - hd, pl.v); o = { x: c.x, z: c.z, ry };
+      // The yard is what is left before the terrace walk: a house's fence stands a metre short of the walk.
+      const avail = uvOf(toW(o, 0, hd)).ue - WALK[k], opts = { ...(spec.opts || {}), seed: i + 1 };
+      if (spec.fn === house) opts.fence = avail - 1.0 >= 1.0 ? Math.min(2.4, avail - 1.0) : 0;
+      if (spec.fn === kantorDesa) opts.yard = Math.max(1.2, avail - 0.8);
+      made = townPiece(o, t.y, spec.fn, opts);
+    }
     const foot = made.stepFeet[0], door = toW(o, foot.x, foot.z + 1.0);
     // Where the way out of the door (straight on, through the yard's clear middle) meets the terrace walk.
     let out = door; for (let d = 0; d < 12 && uvOf(out).ue > WALK[k]; d += 0.1) out = toW(o, foot.x, foot.z + 1.0 + d);
     doors.push({ ...door, rot: ry + Math.PI, k, v: uvOf(out).v, out });
+    keepClear(c.x, c.z, spec.heritage ? 4.5 : 5); keepClear(door.x, door.z, 2.5);
+    if (!spec.heritage) return;
+    // Heritage: the old yard in front of the door, and the elder's carved post beside the steps (story clue `carved-post`).
+    townPiece({ ...toW(o, foot.x - 1.0, foot.z + 0.2), ry }, t.y - 0.02, carvedPost);
     // The yard in front of the door. On the low terrace it is shallow (the walk is close).
     // Its depth is what is left before the terrace walk (props further out are left out); a flower arch over the
     // way in where there is room and the yard has none of its own.
     const yo = { ...toW(o, foot.x, foot.z + 0.15), ry }, room = uvOf(yo).ue - WALK[k] - 0.9;
     place(buildYard(YARD_V[i], YARD_SEED[i], room - 0.6), yo, t.y - 0.02);
     if (room > 4.2 && YARD_V[i] !== 0 && YARD_V[i] !== 3) { const g = toW(o, foot.x, foot.z + 0.15 + Math.min(3.6, room - 0.7)); place(buildFlowerArch(), { ...g, ry }, t.y - 0.02); }
-    keepClear(c.x, c.z, 4.5); keepClear(door.x, door.z, 2.5);
   });
   for (const [i, side] of HEDGES) {
     const pl = AREAS.plots[i], t = TER.find((q) => q.id === pl.terrace), v = pl.v + side * 3.6;
@@ -151,7 +206,15 @@ export function create(scene, deps) {
   hallM.colliders = hallM.colliders.map((c) => ({ ...c, x: c.x * S[0], z: c.z * S[2], hw: c.hw * S[0], hd: c.hd * S[2] }));
   hallM.lamps = hallM.lamps.map((l) => ({ ...l, x: l.x * S[0], y: l.y * S[1], z: l.z * S[2] }));
   place(hallM, { x: H.x, z: H.z, ry: H.front }, H.y); keepClear(H.x, H.z, 8);
-  for (const s of AREAS.stalls) { place(buildMarketStall(AREAS.stalls.indexOf(s)), { x: s.x, z: s.z, ry: s.front }, s.y - 0.02); keepClear(s.x, s.z, 2.5); }
+  // The ruko row where the three market stalls stood (its shop fronts on their front line), and the town's new
+  // corners: the pos ronda by the bridge landing, the minimarket and bus stop on the road to the port (level pads in
+  // src/logic/terrain.js), a pickup parked at the square's east end.
+  const T = AREAS.town, rukoO = { x: T.ruko.x, z: T.ruko.z, ry: T.ruko.rot };
+  const rukoMade = townPiece(rukoO, T.ruko.y - 0.02, ruko, { seed: 2 }); keepClear(T.ruko.x, T.ruko.z, 7.5);
+  for (const [fn, S] of [[posRonda, T.posRonda], [minimarket, T.minimarket], [busStop, T.busStop]]) {
+    townPiece({ x: S.x, z: S.z, ry: S.rot }, groundAt(S.x, S.z) - 0.03, fn, { seed: 5 }); keepClear(S.x, S.z, Math.hypot(S.hw, S.hd) + 0.8);
+  }
+  { const p = VP(47.6, 13.4), o = { ...p, ry: Math.atan2(VF.vx, VF.vz) }; townPiece(o, groundAt(p.x, p.z) - 0.02, pickup, { color: 0xf2f0ea }); keepClear(p.x, p.z, 2.5); }
   const WELL = { x: AREAS.well.x, z: AREAS.well.z, ry: downAt(AREAS.well.v) + 0.5 };
   place(buildWell(), WELL, AREAS.well.y - 0.04); keepClear(WELL.x, WELL.z, 2.2);
   const B = AREAS.banyan, TREE = { x: B.x, z: B.z, ry: 0.3 }, treeBase = B.y - 0.02;
@@ -190,28 +253,53 @@ export function create(scene, deps) {
     }
     keepClear(s.x, s.z, 2.2);
   }
-  // ---- Bamboo fences along the cart ramp: its open south side all the way up, and the north side of each slope ----
+  // ---- The cart ramp: an asphalt lane, low plastered fences along its open south side all the way up and on the north
+  // side of each slope, power poles inside the south fence (and on along the road to the port) with their wires ----
   const rp = AREAS.ramp.path.map(uvOf);
   for (let i = 0; i < rp.length - 1; i++) {
     const a = rp[i], b = rp[i + 1], n = Math.max(1, Math.ceil(Math.abs(b.ue - a.ue) / 3));
     for (let j = 0; j < n; j++) {
       const p = (q) => VP(a.ue + (b.ue - a.ue) * q, a.v + (b.v - a.v) * q + 2.2);
-      run((len) => buildFenceSection(len), p(j / n), p((j + 1) / n));
+      townRun(p(j / n), p((j + 1) / n));
+      // the asphalt: a piece per stretch, following the ground (no kerbs: the lane is a village lane)
+      const pa = VP(a.ue + (b.ue - a.ue) * (j / n), a.v + (b.v - a.v) * (j / n)), pb = VP(a.ue + (b.ue - a.ue) * ((j + 1) / n), a.v + (b.v - a.v) * ((j + 1) / n));
+      const len = Math.hypot(pb.x - pa.x, pb.z - pa.z), ha = groundAt(pa.x, pa.z), hb = groundAt(pb.x, pb.z);
+      if (len > 0.3) townPiece({ x: pa.x, z: pa.z, ry: along(pa, pb) }, ha - 0.035, road, { len: len + 0.05, width: 3, kerb: false, gutter: false }, { roll: Math.atan2(hb - ha, len) });
     }
   }
   for (const sl of AREAS.ramp.slopes) {
     const a = uvOf(sl.foot), b = uvOf(sl.top), v = Math.min(...TER.filter((t) => t.id === sl.from || t.id === sl.to).map((t) => t.v1)) + 0.75;
     // from the foot to just past the face line: above that the terrace walks come out onto the lane
     const u0 = a.ue + 0.5, u1 = (a.ue + b.ue) / 2 + 1.0;
-    for (let j = 0; j < 2; j++) run((len) => buildFenceSection(len), VP(u0 + (u1 - u0) * j / 2, v), VP(u0 + (u1 - u0) * (j + 1) / 2, v));
+    for (let j = 0; j < 2; j++) townRun(VP(u0 + (u1 - u0) * j / 2, v), VP(u0 + (u1 - u0) * (j + 1) / 2, v));
+  }
+  {
+    const pts = [[2, 0], [13, 0], [24.5, 1], [41, 2], [57, 3]].map(([ue, k]) => VP(ue, TER[k].v1 + 2.5 + 1.85)).concat(T.poles).map((p) => ({ ...p, y: groundAt(p.x, p.z) - 0.05 }));
+    const line = poleLine(pts); townProps.push(...line.props); spans.push(...line.spans);
+    for (const p of pts) keepClear(p.x, p.z, 1);
   }
   // ---- Lamps, washing lines and a few things left about ----------------------------------------------
-  for (const [ue, v] of LAMPS) { const p = VP(ue, v); place(buildPathLamp(), { ...p, ry: face(p, C) + Math.PI / 2 }, groundAt(p.x, p.z) - 0.04); }
-  const lines = LINES_AT.map(([ue, v]) => { const a = VP(ue - 2.1, v), b = VP(ue + 2.1, v), c = VP(ue, v), o = { ...c, ry: along(a, b) }; place(buildWashingLine(), o, groundAt(c.x, c.z) - 0.03); keepClear(c.x, c.z, 2.6); return o; });
-  for (const [make, ue, v, turn] of [[buildHandcart, 47.6, 13.2, 0.6], [() => buildWaterJars(3), 29.4, -21.8, 0], [buildFirewoodStack, 9.6, -22.4, 0.2], [() => buildWaterJars(2), 54.2, 12.8, 0.4]]) {
-    const p = VP(ue, v); place(make(), { ...p, ry: downAt(v) + turn }, groundAt(p.x, p.z) - 0.02);
+  // Streetlights where the path lamps stood, their arms reaching toward the square: the village's lit lamps.
+  for (const [ue, v] of LAMPS) {
+    const p = VP(ue, v), ry = face(p, C), y = groundAt(p.x, p.z) - 0.04, h = toW({ ...p, ry }, STREETLIGHT_HEAD.x, STREETLIGHT_HEAD.z);
+    townProps.push({ kind: 'streetLight', x: p.x, y, z: p.z, ry, c: 0xffffff }); lampSpots.push({ x: h.x, y: y + STREETLIGHT_HEAD.y, z: h.z, n: null, r: 0.16 });
   }
-  mergeStatic(village, { ao: { ground: groundAt } }); scene.add(village);
+  const lines = LINES_AT.map(([ue, v]) => { const a = VP(ue - 2.1, v), b = VP(ue + 2.1, v), c = VP(ue, v), o = { ...c, ry: along(a, b) }; townPiece(o, groundAt(c.x, c.z) - 0.03, laundryLine, { len: 4.2, seed: Math.round(ue) }); keepClear(c.x, c.z, 2.6); return o; });
+  // Blue water drums where the clay jars stood.
+  for (const [ue, v, n] of [[29.4, -21.8, 3], [54.2, 12.8, 2]]) for (let j = 0; j < n; j++) putProp('drum', VP(ue + (j % 2) * 0.62, v + j * 0.62), j, 0x3a7fc0);
+  mergeStatic(village, { ao: { ground: groundAt } });
+  // ---- The town: ONE welded mesh, the props one InstancedMesh per kind, all wires one LineSegments ----------------
+  if (townGeos.length) {
+    const tm = new THREE.Mesh(mergeGeometries(townGeos), TOWN_MAT); tm.name = 'town'; tm.castShadow = true; tm.receiveShadow = true; village.add(tm);
+    for (const g of townGeos) g.dispose();
+  }
+  for (const im of instanceProps(townProps, { glow: false })) village.add(im);
+  if (spans.length) village.add(buildWires(spans));
+  for (const p of townProps) {
+    const k = PROP_COLLIDE[p.kind]; if (!k || !SOLID_PROPS.has(p.kind)) continue;
+    colliders.push(k.r !== undefined ? { x: p.x, z: p.z, r: k.r * (p.s || 1) } : { x: p.x, z: p.z, hw: k.hw, hd: k.hd, rot: p.ry || 0 });
+  }
+  scene.add(village);
   // ---- The fishing waterfront on the village's south shore (src/world/areas/waterfront.js): the fish market, the
   // fishermen's yard, the boat beach and Darto's jetty. Its colliders, lanterns and paths join the village's.
   const waterfront = createWaterfront(scene, { ...deps, groundAt, heightAt, keepClear });
@@ -262,6 +350,17 @@ export function create(scene, deps) {
     }
     return true;
   }
+  // Into each ruko shop: a node on the pavement in front (where the customer stands), one at the gap beside the counter
+  // and one behind it, so a keeper walks in round the counter, not through it. Units run east to west in the kit, so
+  // they are taken in reverse: index i is the stall that stood there (0 = Lestari's, the west end).
+  const SHOPS = rukoMade.spots.keepers.map((k, j) => ({ k, c: rukoMade.spots.customers[j] })).reverse();
+  SHOPS.forEach(({ k, c }, i) => {
+    const front = node(`k${i}`, toW(rukoO, c.x, c.z)), gap = node(`e${i}`, toW(rukoO, k.x + 1.65, c.z - 0.7)), back = node(`b${i}`, toW(rukoO, k.x + 1.65, k.z));
+    link(front, gap); link(gap, back);
+    const near = Object.keys(NODES).filter((n) => !/^[keb]\d$/.test(n)).sort((a, b) => Math.hypot(NODES[a].x - NODES[front].x, NODES[a].z - NODES[front].z) - Math.hypot(NODES[b].x - NODES[front].x, NODES[b].z - NODES[front].z));
+    near.slice(0, 10).filter((n) => clear(NODES[n], NODES[front])).slice(0, 2).forEach((n) => link(n, front));
+    if (i && clear(NODES[`k${i - 1}`], NODES[front])) link(`k${i - 1}`, front);
+  });
   const names = Object.keys(NODES), adj = new Map(names.map((n) => [n, []]));
   for (const [a, b] of EDGES) { const d = Math.hypot(NODES[a].x - NODES[b].x, NODES[a].z - NODES[b].z); adj.get(a).push([b, d]); adj.get(b).push([a, d]); }
   // Shortest way between two nodes (a few dozen nodes: a plain search is plenty).
@@ -285,9 +384,9 @@ export function create(scene, deps) {
 
   // Spots people use.
   const homes = doors.map((d, i) => { const s = { x: d.x, z: d.z, rot: d.rot, hide: true, join: doorNode[i] }; return s; });
-  const stallO = AREAS.stalls.map((s) => ({ x: s.x, z: s.z, ry: s.front }));
-  const keepers = stallO.map((s) => spot(toW(s, 0.15, -0.3), s.ry, { skip: 1.6, pose: 'explain' }));
-  const customers = stallO.map((s) => spot(toW(s, 0.5, 1.85), s.ry + Math.PI));
+  // The ruko's keepers behind their counters and their customers under the awnings, unit by unit (the stalls' order).
+  const keepers = SHOPS.map(({ k }) => spot(toW(rukoO, k.x, k.z), k.rot + rukoO.ry, { skip: 0.3, pose: 'explain' }));
+  const customers = SHOPS.map(({ c }) => spot(toW(rukoO, c.x, c.z), c.rot + rukoO.ry));
   const toSquare = Math.atan2(C.z - B.z, C.x - B.x);
   const seat = (a) => { const r = SHADE_TREE_BENCH.r + 0.12; return spot({ x: B.x + Math.cos(a) * r, z: B.z + Math.sin(a) * r }, Math.atan2(Math.cos(a), Math.sin(a)), { skip: 1.2, sit: true }); };
   const seats = [seat(toSquare - 0.55), seat(toSquare), seat(toSquare + 0.6)];
@@ -392,7 +491,7 @@ export function create(scene, deps) {
     interactables,
     colliders() { people.forEach((p, i) => { circles[i].x = p.x; circles[i].z = p.z; circles[i].r = p.hidden || !shown ? 0 : 0.3; }); return colliders.concat(circles); },
     // For checks from the console (window.__game.areas): the layout, the people and the walking network.
-    debug: { people, colliders, homes, keepers, customers, seats, chat, farm, play, wellSpot, washSpot, NODES, EDGES, platforms, clear, route, decide, phaseOf, waterfront: waterfront.debug },
+    debug: { people, colliders, homes, keepers, customers, doors, townProps, rukoO, seats, chat, farm, play, wellSpot, washSpot, NODES, EDGES, platforms, clear, route, decide, phaseOf, waterfront: waterfront.debug },
     update(dt, elapsed, player, night) {
       const px = player.position.x, pz = player.position.z;
       shown = Math.hypot(px - C.x, pz - C.z) < SHOW_WITHIN;

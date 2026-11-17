@@ -128,6 +128,24 @@ export const AREAS = (() => {
   const stalls = [36, 41, 46].map((ue) => ({ ue, v: 8.5, ...vw(ue, 8.5), y: 4.0, front: head('north') }));
   const banyan = { ue: 41, v: -15.5, ...vw(41, -15.5), y: 4.0, r: 4.5 };
   const well = { ue: 43.5, v: -1, ...vw(43.5, -1), y: 4.0 };
+  // ---- The modern town (docs/superpowers/specs/2026-11-17-modern-village-design.md): the ruko row that replaced the three
+  // market stalls (shop fronts on the stalls' old front line at v 7.3, a 1.6 m pavement in front, backs toward the ramp
+  // lane), the pos ronda (watch post) beside the bridge landing, and the minimarket and bus stop at the top of the ramp
+  // lane on the road to the port. Each: centre, `rot` a heading (its front looks along it), `hw` across, `hd` along
+  // (as in flora's rect and paintGround). `pads` are level rectangles cut into the ground for them (src/logic/terrain.js).
+  const town = (() => {
+    const A = vw(62, laneV(3)), B = { x: 145, z: -42 }, l = Math.hypot(B.x - A.x, B.z - A.z), d = { x: (B.x - A.x) / l, z: (B.z - A.z) / l }, n = { x: d.z, z: -d.x };
+    const at = (s, o) => ({ x: +(A.x + d.x * s + n.x * o).toFixed(2), z: +(A.z + d.z * s + n.z * o).toFixed(2) });
+    const face = +Math.atan2(-n.x, -n.z).toFixed(4); // looking back across the road
+    const minimarket = { ...at(6, 7), rot: face, hw: 3.7, hd: 3.9 }, busStop = { ...at(12.5, 2.7), rot: face, hw: 1.8, hd: 0.9 };
+    return {
+      ruko: { ue: 41, v: 10.8, ...vw(41, 10.8), y: 4.0, rot: head('north'), hw: 6.3, hd: 3.5, pave: 1.6 },
+      posRonda: { ...vw(4, 3), rot: head('north'), hw: 1.3, hd: 1.1 },
+      minimarket, busStop,
+      poles: [at(5, -1.8), at(14, -1.8)], // power poles along the road beyond the ramp lane (the lane's own come from the plan)
+      pads: [{ ...minimarket, hw: 4.8, hd: 5.6 }, { ...busStop, hw: 2.4, hd: 1.6 }],
+    };
+  })();
   // Walks along the front of each terrace, from end to end (out to the ramp lane on the south).
   const walk = (ue, v0, v1) => { const n = Math.ceil((v1 - v0) / 4); return Array.from({ length: n + 1 }, (_, i) => vw(ue, v0 + ((v1 - v0) * i) / n)); };
   // ---- The farm valley: a broad shallow valley north of the village, between the spur, the ridge and the
@@ -222,7 +240,7 @@ export const AREAS = (() => {
     jetty: { x: 177, z: -62, rot: Math.PI / 2 }, // the fishing jetty on the far shore, pointing out to sea (east)
     // The hillside (see the comments above for what each means).
     villageFrame: VF, terraces, steps, ramp, square, plots, hall, stalls, banyan, well,
-    valley, stream, spring, paddyFields, ridge, ridgeTrail, clearing, paths, waterfront,
+    valley, stream, spring, paddyFields, ridge, ridgeTrail, clearing, paths, waterfront, town,
     // Where paths cross the stream (plank crossings go here): filled in below.
     streamCrossings: [],
     lake: { x: 63, z: -113, r: 12.5, depth: 1.8 },

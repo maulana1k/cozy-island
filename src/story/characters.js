@@ -31,7 +31,7 @@ export const NEXT_CHARACTERS = {
     greet: ['The sea is in a good mood today.', 'Mind the slippery planks, scout.', 'Six fish at sunrise. Not bad for an old man.', 'Watch the tide board. The sea keeps her own clock.'],
   },
   shopkeeper: {
-    name: 'Lestari', role: 'Shopkeeper', links: ['local-0'], where: 'At the first market stall on the village square by day.',
+    name: 'Lestari', role: 'Shopkeeper', links: ['local-0'], where: 'In the first shop of the row on the village square by day.',
     look: { skin: 0xc98d62, hair: 0x2f2826, hat: null, shirt: 0xe07a4f, scarf: null },
   },
   nina: {

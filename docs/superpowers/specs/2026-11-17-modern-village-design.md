@@ -4,7 +4,7 @@ INTERNAL
 
 Owner's choice: **a modern Indonesian coastal town with a few heritage spots**. Most of the hillside village becomes today's coastal town (painted plaster houses, a ruko row, shops, a mosque, the village office). Three traditional buildings stay as heritage landmarks for contrast. The goal is scenery and nuance, not story.
 
-Phase 1 (this doc, commit with it): the kit `src/kit/town.js` and this map. Nothing is wired into the world yet. Phase 2 wires it into `src/world/areas/hamlet.js`.
+Phase 1: the kit `src/kit/town.js` and this map. Phase 2 (done): wired into `src/world/areas/hamlet.js` as mapped below. See section 6 for what phase 2 changed beyond the map.
 
 Sources: `src/world/areas/hamlet.js`, `src/kit/hamlet.js`, `src/kit/yard.js`, `src/config.js` (AREAS), `src/story/characters.js`, `src/story/clues.js`, `src/story/next/*.js`, `src/hud.js`, `src/world/ground.js`, `src/world/flora.js`. World positions were computed from the same code (village frame `VP(ue, v)`), rounded to 0.1 m.
 
@@ -88,3 +88,21 @@ New sites, not on a plot (no story or schedule dependency). Positions are ASSUMP
 Plan for the village. Weld each terrace group into one Mesher mesh with AO baked per piece, as `waterfront.js` does, plus one glow mesh. Use one InstancedMesh per prop kind (9, plus 1 for streetlight glass) and one LineSegments for all wires. That is about 15 draws before shadow passes. Measured in the preview: the street scene (11 buildings, road, 5 poles, wires, props) is 20 draw calls and about 111k triangles. ASSUMPTION: the whole village stays under about 150k triangles and well inside the 900-call budget. Measure with `tools/prof.mjs village` and `topterrace` in phase 2.
 
 Preview: `http://localhost:5173/kit.html?townkit` (everything), or `?townkit&fn=townStreet | townCivic | townProps`.
+
+## 6. Phase 2: what was wired (2026-11-17)
+
+Everything in sections 2 and 3 is live in `src/world/areas/hamlet.js`. Changes beyond the map:
+
+- **Sites.** `AREAS.town` (`src/config.js`) holds the ruko row (centre v 10.8, shop fronts on the stalls' old front line at v 7.3), the pos ronda at `VP(4, 3)` (already flat ground), and the minimarket and bus stop beside the road to the port. The last two stand on two level pads (`AREAS.town.pads`, levelled in `src/logic/terrain.js` the same way as the fish market). `AREAS.stalls` stays in config but nothing is built from it.
+- **Ruko way in.** Each shop has three network nodes: on the pavement in front, at the gap beside the counter, and behind the counter. Keepers walk round the counter, not through it. Kit units run east to west, so the spots are taken in reverse: index 0 is still Lestari's stall, at the west end.
+- **Kept and removed.** Hedges now stand only beside houses (plots 0, 1, 5). The flower arches, the yard props and the firewood are gone. The heritage plot 5 keeps its old yard and gains the carved post. The cart ramp is asphalt (`road` pieces, tilted on the slopes). Seven power poles carry wires. A pickup is parked at the square's east end.
+- **Lights.** The 12 streetlights are the lit lamps (glow only from the instanced heads, plus a halo and a lamp light at each head spot). Every town bulb and window only glows. There are 20 lit lamps, down from about 24.
+- **Checks.** Every door, Wulan's well, bench and chat spots, the farm and play spots, and the ruko keepers and customers are reachable in a straight clear line from their network node. A live run through midday, afternoon, dusk and morning brought every adult to their goal with no stuck walker.
+- **Performance** (`tools/prof.mjs`, High, ratio 2, the old village served from a worktree and measured back to back on the same machine):
+
+| Spot | Before (ms, calls, tris) | After (ms, calls, tris) |
+|---|---|---|
+| `village` | 13.0 to 13.1, 699, 1.85 M | 12.1 to 12.5, about 716, 1.87 M |
+| `topterrace` | 14.1 to 14.5, 689, 1.92 M | 13.4 to 13.5, 710, 1.95 M |
+
+Both stay under 900 calls and 16.7 ms. The triangle count was already over the 1.7 M guide before this change; the town adds about 1 to 2%.

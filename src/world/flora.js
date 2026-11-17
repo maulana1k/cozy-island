@@ -66,10 +66,14 @@ const rect = (o, hw, hd) => ({ x: o.x, z: o.z, c: Math.cos(o.rot ?? o.front ?? 0
 const rectOut = (r, x, z) => { const dx = x - r.x, dz = z - r.z; return Math.max(Math.abs(dx * r.c - dz * r.s) - r.hw, Math.abs(dx * r.s + dz * r.c) - r.hd); };
 const PLOTS = AREAS.plots.map((p) => ({ ...rect(p, p.w / 2, p.d / 2), plot: p }));
 const HALL = rect(AREAS.hall, AREAS.hall.w / 2, AREAS.hall.d / 2);
+// The modern town's own ground (src/config.js AREAS.town): the ruko row and its pavement, the pos ronda, the minimarket
+// with its forecourt and scooters, the bus stop.
+const TW = AREAS.town, TOWN = [rect(TW.ruko, TW.ruko.hw + 0.3, TW.ruko.hd + TW.ruko.pave + 0.3), rect(TW.posRonda, TW.posRonda.hw + 0.4, TW.posRonda.hd + 0.6),
+  rect(TW.minimarket, TW.minimarket.hw + 0.4, TW.minimarket.hd + 1.6), rect(TW.busStop, TW.busStop.hw + 0.6, TW.busStop.hd + 0.6)];
 const PADDIES = AREAS.paddyFields.map((f) => rect(f, f.hw, f.hd));
 const CIRCLES = [
   { ...AREAS.square, r: AREAS.square.r + 0.6 }, { ...AREAS.banyan, r: AREAS.banyan.r + 1 }, { ...AREAS.well, r: 2 },
-  ...AREAS.stalls.map((s) => ({ ...s, r: 2.6 })), { ...AREAS.bridge.a, r: 4 }, { ...AREAS.bridge.b, r: 4.5 },
+  { ...AREAS.bridge.a, r: 4 }, { ...AREAS.bridge.b, r: 4.5 },
   ...AREAS.streamCrossings.map((c) => ({ ...c, r: 3 })), { ...AREAS.jetty, r: 7 }, { ...AREAS.spring, r: AREAS.spring.r + 1.5 },
   { ...AREAS.lookout, r: AREAS.lookout.r + 2 },
 ];
@@ -90,6 +94,7 @@ function siteFor(kind, x, z) {
   for (const w of WALLS) if (segDist(w, x, z) < (K.tree ? 1.8 : small ? 0.25 : 0.45)) return null;
   for (const p of PLOTS) if (rectOut(p, x, z) < solidPad) return null;
   if (rectOut(HALL, x, z) < solidPad + 0.5) return null;
+  for (const r of TOWN) if (rectOut(r, x, z) < solidPad) return null;
   for (const p of PADDIES) if (rectOut(p, x, z) < (small ? 0.3 : K.tree ? 1.8 : 1.0)) return null;
   for (const c of CIRCLES) if (Math.hypot(x - c.x, z - c.z) < c.r + (small ? 0 : 0.5)) return null;
   if (!small && Math.hypot(x - CLEARING.x, z - CLEARING.z) < CLEARING.r + (K.tree ? 2.5 : 0.8)) return null;

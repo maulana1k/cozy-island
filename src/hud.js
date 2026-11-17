@@ -235,7 +235,8 @@ function drawPaperMap(c) {
   }
   for (const p of AREAS.plots) house(p.x, p.z, p.front || 0, 5, 4.4, '#fbf3e2', '#c9895a');
   if (AREAS.hall) house(AREAS.hall.x, AREAS.hall.z, AREAS.hall.front || 0, AREAS.hall.w * 0.8, AREAS.hall.d * 0.8, '#fbf3e2', '#b0704a');
-  for (const s of AREAS.stalls || []) { c.fillStyle = '#e9a25c'; c.beginPath(); c.arc(mx(s.x), mz(s.z), 2.2, 0, Math.PI * 2); c.fill(); }
+  // The modern town: the ruko row on the square, the pos ronda, the minimarket and the bus stop (AREAS.town).
+  if (AREAS.town) { const T = AREAS.town; house(T.ruko.x, T.ruko.z, T.ruko.rot, T.ruko.hw * 2, T.ruko.hd * 2, '#fbf3e2', '#e9a25c'); for (const s of [T.posRonda, T.minimarket, T.busStop]) house(s.x, s.z, s.rot, s.hw * 2, s.hd * 2, '#fbf3e2', s === T.minimarket ? '#5f9fd0' : '#9aa8b0'); }
   for (const t of TENTS) { c.fillStyle = '#ef8f62'; c.strokeStyle = '#8a5a3c'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(mx(t.x), mz(t.z) - 3.4); c.lineTo(mx(t.x) + 3, mz(t.z) + 2.4); c.lineTo(mx(t.x) - 3, mz(t.z) + 2.4); c.closePath(); c.fill(); c.stroke(); }
   for (const f of CAMPFIRES) { c.fillStyle = '#ff8a3c'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 2.4, 0, Math.PI * 2); c.fill(); c.fillStyle = '#ffd659'; c.beginPath(); c.arc(mx(f.x), mz(f.z), 1, 0, Math.PI * 2); c.fill(); }
   c.save(); c.translate(mx(WINDMILL.x), mz(WINDMILL.z)); c.fillStyle = '#fbf3e2'; c.strokeStyle = '#8a6646'; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, 3, 0, Math.PI * 2); c.fill(); c.stroke();

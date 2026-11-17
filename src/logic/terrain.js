@@ -467,6 +467,32 @@ function marketY() {
   marketLevel = +(sum / n).toFixed(2); WF.market.y = marketLevel;
   return marketLevel;
 }
+// The modern town's level pads (AREAS.town.pads: the minimarket and the bus stop on the road to the port): a level
+// rectangle each with a soft 2 m rim, at the ground's own average over it (worked out once), like the fish market.
+let townPadList = null;
+function townPads() {
+  if (townPadList) return townPadList;
+  townPadList = [];
+  for (const p of (AREAS.town && AREAS.town.pads) || []) {
+    const c = Math.cos(p.rot), s = Math.sin(p.rot); let sum = 0, n = 0;
+    for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+      const a = (i / 2) * p.hw, b = (j / 2) * p.hd, x = p.x + a * c + b * s, z = p.z - a * s + b * c, rv = riverAt(x, z);
+      sum += localsHeight(x, z, localsR(x, z, rv), rv, true); n++;
+    }
+    townPadList.push({ ...p, c, s, y: +(sum / n).toFixed(2) });
+  }
+  return townPadList;
+}
+function townPadAt(x, z) {
+  for (const p of townPads()) {
+    const dx = x - p.x, dz = z - p.z, reach = p.hw + p.hd + 3;
+    if (Math.abs(dx) > reach || Math.abs(dz) > reach) continue;
+    const across = dx * p.c - dz * p.s, along = dx * p.s + dz * p.c;
+    const w = smooth((p.hw + 2 - Math.abs(across)) / 2) * smooth((p.hd + 2 - Math.abs(along)) / 2);
+    if (w > 0) return { w, y: p.y };
+  }
+  return null;
+}
 // The locals' land at (x, z). `beforePaddies` leaves out the paddy levelling (and the market's, used to set their levels).
 function localsHeight(x, z, lr, rv, beforePaddies = false) {
   // The land as it was before the hillside, kept exactly along the river so its banks do not move.
@@ -500,6 +526,7 @@ function localsHeight(x, z, lr, rv, beforePaddies = false) {
     if (dc < C.r + 3.5) h += (C.y - h) * smooth((C.r + 3.5 - dc) / 3.5);
     const mk = Math.abs(x - WF.market.x) < 22 && Math.abs(z - WF.market.z) < 22 ? marketAt(x, z) : 0;
     if (mk > 0) h += (marketY() - h) * mk;
+    const tp = townPadAt(x, z); if (tp) h += (tp.y - h) * tp.w;
   }
   // The stream: a channel 2.8 m across, sunk into the valley floor, from the spring down to the river.
   const n = nearestOn(streamLine, x, z, 6);

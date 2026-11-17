@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { heightAt } from '../logic/terrain.js';
 import { ZIPLINE, RIDER_ROUTE, groundAt, addPlatform } from '../logic/layout.js';
 import { createFigure } from '../actors/figure.js';
-import { box, cyl, ball, stick, roofGeometry, shared } from './build.js';
+import { box, cyl, ball, stick, roofGeometry, shared, mergeStatic } from './build.js';
+import { WIND } from './weather.js';
 
 const BAMBOO = 0xd8bb72, DARK = 0x5b5b63, ROPE = 0xe9dcc0, STEEL = 0xc3c7cf, HARNESS = 0xe8743a, RUBBER = 0xd9452f;
 const HANG = 0.86;         // how far a rider's feet hang below the cable
@@ -82,6 +83,48 @@ export function createZipline(scene, deps) {
     g.add(cyl(0.035, 0.04, 2.8, BAMBOO, -2.3, 1.4, 0.6));
     const pen = new THREE.Mesh(roofGeometry(0.5, 0.85, 0.02), shared(0xe8503a)); pen.rotation.z = -Math.PI / 2; pen.position.set(-2.25, 2.5, 0.6); g.add(pen);
   }
+  // ---- Safety catch net just past the brake tyre: two posts, a top rope, guy ropes and a sagging diamond mesh.
+  {
+    const NZ = ZIPLINE.net.lz, NX = ZIPLINE.net.hw, POST = 3.7, NET_TOP = POST - 0.3, p = { x: 0, z: 0 };
+    const ground = (lx, lz) => { local(B, lx, lz, p); return heightAt(p.x, p.z); };
+    const g = new THREE.Group(); g.position.set(B.x, 0, B.z); g.rotation.y = heading; root.add(g);
+    const tops = [];
+    for (const s of [-1, 1]) {
+      const gy = ground(s * NX, NZ); tops.push(gy + POST);
+      g.add(cyl(0.09, 0.12, POST + 0.4, 0xb98a5e, s * NX, gy + POST / 2 - 0.2, NZ, 8));
+      g.add(cyl(0.12, 0.12, 0.06, DARK, s * NX, gy + POST - 0.05, NZ, 8)); // cap ring
+      for (const [ax, az] of [[s * (NX + 1.3), NZ + 1.9], [s * (NX - 0.2), NZ + 2.3]]) // guy ropes back to pegs in the sand
+        g.add(stick([s * NX, gy + POST - 0.12, NZ], [ax, ground(ax, az) + 0.05, az], 0.014, ROPE, 4), cyl(0.03, 0.03, 0.3, 0x8c6444, ax, ground(ax, az) + 0.1, az, 5));
+    }
+    const topAt = (f) => tops[0] + (tops[1] - tops[0]) * f - 0.3 - 0.0; // top rope height (before sag)
+    const SAG = 0.32;
+    // The top and bottom ropes follow the same sag as the mesh hangs from.
+    const ropePts = (fn) => Array.from({ length: 13 }, (_, k) => { const f = k / 12; return new THREE.Vector3(-NX + 2 * NX * f, fn(f), NZ); });
+    const topRope = (f) => topAt(f) - SAG * 4 * f * (1 - f);
+    const botRope = (f) => ground(-NX + 2 * NX * f, NZ) + 0.4;
+    for (const fn of [topRope, botRope]) g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ropePts(fn)), 24, 0.02, 4), shared(ROPE)));
+    // A "BRAKE ZONE" board: red with a white band, lashed to the top rope's middle.
+    g.add(box(1.1, 0.4, 0.04, 0xd9452f, 0, topRope(0.5) - 0.45, NZ - 0.07), box(1.0, 0.1, 0.045, 0xf4efe2, 0, topRope(0.5) - 0.45, NZ - 0.075));
+    mergeStatic(g);
+    // The net: nodes on a lattice, joined diagonally so the openings are diamonds.
+    const COLS = 18, ROWS = 12, pos = [];
+    const node = (i, j) => { const f = i / COLS, v = j / ROWS, x = -NX + 2 * NX * f; const y0 = topRope(f), y1 = botRope(f);
+      return [x, y0 + (y1 - y0) * v, NZ - Math.sin(Math.PI * f) * Math.sin(Math.PI * Math.min(1, v * 0.8 + 0.1)) * 0.25]; };
+    for (let i = 0; i < COLS; i++) for (let j = 0; j <= ROWS; j++) if ((i + j) % 2 === 0) for (const dj of [-1, 1]) {
+      const j2 = j + dj; if (j2 < 0 || j2 > ROWS) continue;
+      pos.push(...node(i, j), ...node(i + 1, j2));
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    const mat = new THREE.LineBasicMaterial({ color: ROPE });
+    mat.onBeforeCompile = (shader) => { // the shared wind pushes the middle of the net gently to and fro
+      shader.uniforms.uWind = WIND;
+      shader.vertexShader = 'uniform vec4 uWind;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        { float edge = 1.0 - pow(abs(position.x) / ${NX.toFixed(2)}, 4.0);
+          transformed.z += sin(uWind.w * 1.2 + position.x * 0.8 + position.y * 0.5) * (0.03 + 0.22 * uWind.z) * edge; }`);
+    };
+    const mesh = new THREE.LineSegments(geo, mat); mesh.frustumCulled = false; g.add(mesh);
+  }
+
   const matCentre = local(B, 0, -2.6, { x: 0, z: 0 });
   const mat = addPlatform({ shape: 'box', x: matCentre.x, z: matCentre.z, rot: heading, hw: 1.3, hd: 1.8, top: matTop, surface: 'wood', id: 'zipline-mat' });
   let matSquash = 0, matWobble = 0, matWobbleV = 0;

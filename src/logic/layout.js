@@ -94,7 +94,7 @@ export const SUMMIT = {
 // The flying fox: a long cable from a launch tower on the summit, out over the parade ground,
 // the campfire and the tents, down to a landing frame on the far beach.
 export const ZIPLINE = {
-  top: onSummit(4.02, 4.31), bottom: { x: 36.6, z: 36.5 }, topHeight: 4.4, bottomHeight: 2.7, sag: 1.6,
+  top: onSummit(4.02, 4.31), bottom: { x: 36.6, z: 36.5 }, topHeight: 4.4, bottomHeight: 2.7, sag: 1.6, net: { lz: 2.3, hw: 2.6 },
   // A trail from the landing round the farm shed to the barn path.
   trail: [{ x: 36.9, z: 35.3 }, { x: 38.2, z: 30 }, { x: 37.5, z: 23.5 }, { x: 33.5, z: 18 }, { x: 29.5, z: 19 }],
   queue: onSummit(2.7, 3.1),
@@ -455,6 +455,13 @@ function fenceBox([a, b]) {
   return { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2, hw: dist(a, b) / 2, hd: 0.14, rot: Math.atan2(-(b.z - a.z), b.x - a.x) };
 }
 
+// The catch net past the flying fox's tyre: a thin wall between two posts (x across the cable, z along it).
+function zipNetColliders() {
+  const { net, top, bottom } = ZIPLINE, h = Math.atan2(bottom.x - top.x, bottom.z - top.z), c = Math.cos(h), s = Math.sin(h);
+  const at = (lx) => ({ x: bottom.x + lx * c + net.lz * s, z: bottom.z - lx * s + net.lz * c });
+  return [{ ...at(0), hw: net.hw, hd: 0.12, rot: h }, { ...at(-net.hw), r: 0.2 }, { ...at(net.hw), r: 0.2 }];
+}
+
 export function getColliders() {
   if (colliderCache) return colliderCache;
   const s = getScatter();
@@ -477,6 +484,7 @@ export function getColliders() {
     { x: BOAT.x, z: BOAT.z, r: 1.2 },
     { x: WINDMILL.x, z: WINDMILL.z, r: 2.4 },
     { x: ZIPLINE.top.x, z: ZIPLINE.top.z, r: 1.25 }, { x: ZIPLINE.bottom.x - 1.2, z: ZIPLINE.bottom.z, r: 0.5 },
+    ...zipNetColliders(),
     { x: SUMMIT.mast.x, z: SUMMIT.mast.z, r: 0.3 }, { x: SUMMIT.telescope.x, z: SUMMIT.telescope.z, r: 0.4 }, { x: SUMMIT.cairn.x, z: SUMMIT.cairn.z, r: 0.6 },
     { x: SUMMIT.shelter.x, z: SUMMIT.shelter.z, hw: 1.3, hd: 0.5, rot: SUMMIT.shelter.rot },
   ];

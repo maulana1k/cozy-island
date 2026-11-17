@@ -1,6 +1,7 @@
 // Small helpers shared by the things built from simple shapes.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bakeAO, aoGrid } from './ao.js';
 
 export const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 
@@ -144,7 +145,10 @@ export function roofGeometry(width, height, depth) {
 
 // Welds everything under `root` that never moves into one mesh per material. A camp's worth of
 // crates and poles then costs a few dozen draw calls instead of several hundred.
-export function mergeStatic(root) {
+// opts.ao bakes soft contact shading into the welded meshes (src/world/ao.js): `true` when the root's own
+// y = 0 is the ground, or { ground: (x, z) => height } in world coordinates for a root laid out over the
+// terrain (plus any other bakeAO option, e.g. creases: false).
+export function mergeStatic(root, opts = {}) {
   root.updateMatrixWorld(true);
   const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert(), m4 = new THREE.Matrix4();
   const byMaterial = new Map();
@@ -160,8 +164,16 @@ export function mergeStatic(root) {
     g.computeBoundingSphere(); entry.big = Math.max(entry.big, g.boundingSphere.radius);
   });
   root.clear();
-  for (const [material, { geos, cast, big }] of byMaterial) {
-    const mesh = new THREE.Mesh(mergeGeometries(geos), material);
+  const merged = [...byMaterial].map(([material, e]) => [material, e, mergeGeometries(e.geos)]);
+  if (opts.ao && merged.length) {
+    const o = opts.ao === true ? {} : { ...opts.ao };
+    if (typeof o.ground === 'function') o.matrix = root.matrixWorld;
+    // One grid for the whole group, so a wall sees the roof above it even though they are different meshes.
+    if (o.creases !== false) o.grid = aoGrid(merged.map((m) => m[2]), o.cell);
+    for (const m of merged) bakeAO(m[2], o);
+  }
+  for (const [material, { cast, big }, geo] of merged) {
+    const mesh = new THREE.Mesh(geo, material);
     mesh.castShadow = cast; mesh.receiveShadow = true;
     mesh.userData.big = big; // the size of its largest single piece, so small things can be left out far away
     root.add(mesh);

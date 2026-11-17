@@ -234,7 +234,7 @@ export function createBuildings(scene, deps) {
     }
 
     // Everything but the door flap stands still, so weld it: one mesh per material.
-    g.remove(hinge); if (panel) g.remove(panel.group); mergeStatic(g); if (dw && !panel) g.add(hinge); if (panel) g.add(panel.group); // the door moves: it stays out of the weld
+    g.remove(hinge); if (panel) g.remove(panel.group); mergeStatic(g, { ao: true }); if (dw && !panel) g.add(hinge); if (panel) g.add(panel.group); // the door moves: it stays out of the weld
     if (tentGroup) g.add(tentGroup); // after the weld: it keeps its vertex colours and its own sliceable material
     scene.add(g);
     return { state, c, g, plane, hinge, panel, panelOpen: 0, nightGlow: 0, door, doorMat, doorSpot, shimmer: 0, doorBlock, colliders, smoke, tentFabric: !!T, canvas: T ? tentGroup.children[0].material : canvas, roofMat: T ? { emissiveIntensity: 0 } : roofMat, groundY, openTop, W, D, inside: false };

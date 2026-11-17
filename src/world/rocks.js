@@ -2,6 +2,7 @@
 // (see LOBES in src/logic/terrain.js) and heaped on the small islets off them. Scenery only: no colliders
 // (the boulders on land are low and the islets cannot be reached). One instanced mesh, one draw call.
 import * as THREE from 'three';
+import { bakeAO } from './ao.js';
 import { heightAt, landR, coastRock, coastFeatures } from '../logic/terrain.js';
 import { createRng } from '../logic/rng.js';
 import { SEED } from '../config.js';
@@ -52,7 +53,7 @@ export function createCoastRocks(scene) {
   }
 
   const TONES = [0x9a8d7e, 0x8a7e71, 0xa69a8a, 0x7c7268, 0xb0a593].map((h) => new THREE.Color(h));
-  const mesh = new THREE.InstancedMesh(boulderGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, flatShading: true }), list.length);
+  const mesh = new THREE.InstancedMesh(bakeAO(boulderGeometry(), { creases: false, ground: 0, fade: 0.7 }), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, flatShading: true }), list.length);
   const dummy = new THREE.Object3D(), color = new THREE.Color();
   list.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - b.sink * b.s, b.z);

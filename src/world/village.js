@@ -230,8 +230,8 @@ export function createVillage(scene) {
   group.add(buildSquare(mats.path));
   for (const f of FENCES) group.add(buildFence(f, mats));
   group.add(buildHillTrail());
-  // None of the scenery so far moves: weld it into a handful of meshes.
-  mergeStatic(group);
+  // None of the scenery so far moves: weld it into a handful of meshes (with soft contact shading).
+  mergeStatic(group, { ao: { ground: heightAt } });
   group.add(buildTents()); // after the weld: it keeps its vertex colours
   const windmill = buildWindmill(mats);
   windmill.g.remove(windmill.hub); mergeStatic(windmill.g); windmill.g.add(windmill.hub);

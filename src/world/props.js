@@ -65,7 +65,7 @@ export function createProps(scene, deps) {
     g.add(mesh(new THREE.BoxGeometry(0.28, 0.04, 0.28), woodDark, 0.4, 1.46, 0));
     g.position.set(l.x, y, l.z);
     g.rotation.y = (l.x * 1.7 + l.z) % 6.28;
-    mergeStatic(g); // post, arm, cap and base weld into one draw; the glass keeps its own (glowing) material
+    mergeStatic(g, { ao: true }); // post, arm, cap and base weld into one draw; the glass keeps its own (glowing) material
     group.add(g);
     const lantern = { on: false, glow: 0, flicker: 1, pos: new THREE.Vector3(0.4, 1.6, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y).add(g.position) };
     lantern.set = (on) => { lantern.on = on; };
@@ -287,7 +287,7 @@ export function createProps(scene, deps) {
     }
     g.position.set(f.x, y - 0.02, f.z);
     // The ring of stones and the logs never move: weld them (the flames and the light stay apart).
-    g.remove(flames, light); mergeStatic(g); g.add(flames, light, coals);
+    g.remove(flames, light); mergeStatic(g, { ao: true }); g.add(flames, light, coals);
     group.add(g);
 
     // The big camp bonfire keeps camp hours: it burns from 18:00 until 06:00 on its own and nobody can

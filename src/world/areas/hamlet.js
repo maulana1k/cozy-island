@@ -210,7 +210,7 @@ export function create(scene, deps) {
   for (const [make, ue, v, turn] of [[buildHandcart, 47.6, 13.2, 0.6], [() => buildWaterJars(3), 29.4, -21.8, 0], [buildFirewoodStack, 9.6, -22.4, 0.2], [() => buildWaterJars(2), 54.2, 12.8, 0.4]]) {
     const p = VP(ue, v); place(make(), { ...p, ry: downAt(v) + turn }, groundAt(p.x, p.z) - 0.02);
   }
-  mergeStatic(village); scene.add(village);
+  mergeStatic(village, { ao: { ground: groundAt } }); scene.add(village);
 
   // ---- The walking network: terrace walks, the steps, the ramp and the way out to the paddy ---------------
   const NODES = {}, EDGES = [];

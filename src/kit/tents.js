@@ -13,6 +13,7 @@
 // coloured cells of the fly itself, so nothing is layered on top of the fabric except thin poles and a few
 // patches lifted 1 cm off it.
 import * as THREE from 'three';
+import { bakeAO } from '../world/ao.js';
 
 // ---- Palette -------------------------------------------------------------------------------------------
 export const TENT_COLORS = { orange: 0xc8673a, mustard: 0xc9a23b, forest: 0x4f7a46, slate: 0x4d6a8a, brick: 0xa8473b };
@@ -92,6 +93,7 @@ function finish(b, name, size, scale = 1) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(b.p, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(b.c, 3));
   geo.computeVertexNormals(); geo.computeBoundingSphere();
+  bakeAO(geo); // soft shade at the foot of the fabric, under the flysheet and in the folds (src/world/ao.js)
   const mesh = new THREE.Mesh(geo, material()); mesh.castShadow = true; mesh.name = name; // no receiveShadow: self-shadow acne on thin fabric
   const g = new THREE.Group(); g.name = name; g.add(mesh);
   g.userData = { size, tris: b.p.length / 9, door: '+z' };

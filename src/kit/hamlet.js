@@ -305,7 +305,7 @@ export function buildStiltHouse(variant = 0) {
     hangBasket(g, -0.5, beamY, beamY - 0.5, fz, YEL); hangBasket(g, 0.5, beamY, beamY - 0.55, fz, RED); hangBasket(g, 2.2, beamY, beamY - 0.5, fz, 0xe48ab4);
     lantern(g, 0.0, beamY, beamY - 0.35, 2.2, 0xe8503a); lamps.push({ x: 0, y: beamY - 0.35, z: 2.2 });
   }
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   // `stilts` and `stepFeet` (local, on the ground) let a caller standing the house on a slope lengthen the
   // stilts and build up the ground under the steps; `floor` is the deck height.
   return result(root, { colliders: [{ x: 0, z: 0, hw: totW / 2, hd: totD / 2, rot: 0 }], lamps: lamps.map((l) => ({ ...l, x: l.x - cx, z: l.z - cz })), // window lamps carry window: true and the wall's outward normal (nx, nz)
@@ -350,7 +350,7 @@ export function buildMeetingHall() {
     at(cy(0.43, 0.43, 0.05, DK, dx - 0.25, FT + 0.78, dz, 12), 0, 0, Math.PI / 2), at(cy(0.43, 0.43, 0.05, DK, dx + 0.25, FT + 0.78, dz, 12), 0, 0, Math.PI / 2));
   // Paper lanterns hung from the tie beams.
   for (const [x, z] of [[-1.95, 1.2], [1.95, 1.2], [-1.95, -1.4], [1.95, -1.4]]) { lantern(g, x, TOP - 0.3, TOP - 0.85, z); lamps.push({ x, y: TOP - 0.85, z }); }
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   const cols = [{ x: 0, z: 0, hw: W / 2, hd: D / 2, rot: 0 }]; // the raised floor is solid to walk into from the steps only (ASSUMPTION)
   const stilts = []; for (const x of [-4.2, -2.1, 0, 2.1, 4.2]) for (const z of [-2.75, 2.75]) stilts.push({ x, z });
   return result(root, { colliders: cols, lamps, stilts, stepFeet: [{ x: 0, z: D / 2 + 0.45, w: 3.4 }], floor: FT });
@@ -402,7 +402,7 @@ export function buildMarketStall(variant = 0) {
     g.add(cy(0.3, 0.26, 0.3, 0x4f7fc9, -0.9, 0.2, zb + 0.4, 9), sc(bl(0.18, 0xdff1ff, -0.9, 0.38, zb + 0.4, 0), 1, 0.5, 1), rb(0.55, 0.3, 0.4, LT, 0.1, 0.18, zb + 0.4), cy(0.04, 0.04, 0.6, DK, 1.1, 0.3, zb + 0.5, 5));
   }
   lantern(g, 0, yf - 0.08, yf - 0.5, 0.2, v === 2 ? 0x4f7fc9 : 0xe8503a); lamps.push({ x: 0, y: yf - 0.5, z: 0.2 });
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: [{ x: 0, z: 0, hw: 1.45, hd: 1.05, rot: 0 }], lamps });
 }
 export const buildMarketStall1 = () => buildMarketStall(1);
@@ -434,7 +434,7 @@ export function buildWell() {
   roofOn(g, 0, py + 0.02, 0, true, 2.5, 3.0, 0.95, 0xd9b15a, 'thatch', 0xa8793c);
   // a wooden bucket waiting on the ground
   g.add(cy(0.17, 0.13, 0.26, MID, 1.7, 0.13, 0.8, 9), cy(0.18, 0.18, 0.025, 0x5b5b63, 1.7, 0.2, 0.8, 9), cy(0.14, 0.14, 0.02, 0x3f6f8f, 1.7, 0.26, 0.8, 9));
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: [{ x: 0, z: 0, r: 1.15 }] });
 }
 
@@ -496,7 +496,7 @@ export function buildShadeTree() {
   // A red paper lantern hung from the first limb.
   const la = 0.35, lx = Math.cos(la) * 3.2, lz = Math.sin(la) * 3.2;
   g.add(sk([lx, 4.9, lz], [lx, 3.75, lz], 0.012, ROPE, 4), cy(0.13, 0.13, 0.3, RED, lx, 3.55, lz, 6), cy(0.05, 0.15, 0.05, DK, lx, 3.73, lz, 6)); lamps.push({ x: lx, y: 3.55, z: lz });
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: cols, lamps });
 }
 
@@ -514,7 +514,7 @@ export function buildWashingLine() {
   hang(1.25, 0.7, 0.9, 0xe48ab4); hang(1.8, 0.3, 0.32, TEAL, (f) => f.add(rb(0.3, 0.32, 0.02, TEAL, 0.38, -0.2, 0)));
   // laundry tub and a bar of soap
   g.add(cy(0.38, 0.3, 0.3, MID, -1.5, 0.15, 0.8, 10), cy(0.4, 0.4, 0.03, DK, -1.5, 0.3, 0.8, 10), sc(bl(0.24, CREAM, -1.5, 0.33, 0.8, 0), 1, 0.5, 1), cy(0.34, 0.34, 0.02, 0x7ec3d9, -1.5, 0.27, 0.8, 10), rb(0.14, 0.05, 0.08, 0xf2e29a, -1.0, 0.03, 0.9));
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: [{ x: -hx, z: 0, r: 0.14 }, { x: hx, z: 0, r: 0.14 }, { x: -1.5, z: 0.8, r: 0.4 }] });
 }
 
@@ -548,7 +548,7 @@ export function buildJetty(length = 9, piles = 0) { // `piles`: extra pile lengt
   g.add(rb(0.62, 0.3, 0.42, LT, 0.4, 0.68, rz + 0.5), rb(0.56, 0.05, 0.36, 0xdff1ff, 0.4, 0.84, rz + 0.5));
   fish(g, 0.4, 0.89, rz + 0.5, 0.4, 0xaebfd0, 0.32); fish(g, 0.3, 0.88, rz + 0.55, -0.6, 0xe39a7a, 0.28);
   g.add(cy(0.04, 0.05, 1.5, DK, -0.85, 1.25, z1 - 0.3, 6), rb(0.2, 0.04, 0.2, DK, -0.85, 2.0, z1 - 0.3), cy(0.11, 0.11, 0.24, GLOW, -0.85, 1.85, z1 - 0.3, 6), cn(0.16, 0.12, DK, -0.85, 2.04, z1 - 0.3, 6)); lamps.push({ x: -0.85, y: 1.85, z: z1 - 0.3 });
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   const cols = []; for (const z of tall) for (const s of [-1, 1]) cols.push({ x: s * 1.12, z, r: 0.12 });
   return result(root, { colliders: cols, lamps, platforms: [{ x: 0, z: 0, hw, hd: L / 2, rot: 0, top: 0.5 }] });
 }
@@ -620,7 +620,7 @@ export const buildRowBoatRed = () => buildRowBoat(0xe8503a);
 export function buildEarthFill(len = 4, depth = 2, h = 1.3, color = 0xcaa36e) {
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
   g.add(rb(len, h, depth, color, len / 2, h / 2, -depth / 2));
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root);
 }
 
@@ -632,7 +632,7 @@ export function buildFootings(posts = [], pads = []) {
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
   for (const p of posts) { const h = p.y1 - p.y0; if (h > 0.02) g.add(pole(0.1, 0.125, h, DK, p.x, (p.y0 + p.y1) / 2, p.z, 6)); }
   for (const p of pads) { const h = p.y1 - p.y0; if (h > 0.02) g.add(rb(p.w, h, p.d, 0xa8a0a8, p.x, (p.y0 + p.y1) / 2, p.z).rotateY(p.ry || 0)); }
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root);
 }
 
@@ -648,7 +648,7 @@ export function buildFenceRun(length = 4) {
   for (const y of [0.25, 0.55]) for (const z of [-0.055, 0.055]) g.add(at(cy(0.026, 0.026, length, BAMBOO, 0, y, z, 5, 'bamboo'), 0, 0, Math.PI / 2));
   const posts = Math.max(2, Math.round(length / 2) + 1);
   for (let i = 0; i < posts; i++) { const x = -length / 2 + 0.04 + (i / (posts - 1)) * (length - 0.08); g.add(cy(0.05, 0.06, 1.05, 0xb08a4a, x, 0.52, 0, 6), cn(0.055, 0.1, 0xb08a4a, x, 1.08, 0, 6)); for (const y of [0.25, 0.55]) g.add(rb(0.13, 0.04, 0.16, DARK, x, y, 0)); }
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: [{ x: 0, z: 0, hw: length / 2, hd: 0.1, rot: 0 }] });
 }
 // A lantern on a post: a tapered wooden post, a short arm, and a glowing paper lantern with a little cap.
@@ -656,6 +656,6 @@ export function buildPathLamp() {
   const root = new THREE.Group(), g = new THREE.Group(); root.add(g);
   g.add(cy(0.045, 0.065, 1.7, DK, 0, 0.85, 0, 6), rb(0.26, 0.1, 0.26, 0xa8a0a8, 0, 0.05, 0), rb(0.14, 0.1, 0.14, DK, 0, 1.7, 0), rb(0.5, 0.05, 0.05, DK, 0.22, 1.68, 0), sk([0, 1.5, 0], [0.2, 1.66, 0], 0.025, DK, 4));
   g.add(cy(0.1, 0.12, 0.26, GLOW, 0.4, 1.46, 0, 6), cy(0.13, 0.13, 0.03, DK, 0.4, 1.34, 0, 6), cy(0.12, 0.12, 0.03, DK, 0.4, 1.6, 0, 6), cn(0.17, 0.14, RED, 0.4, 1.69, 0, 6), sk([0.4, 1.62, 0], [0.4, 1.68, 0], 0.01, DK, 3), bl(0.03, YEL, 0.4, 1.31, 0, 0));
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return result(root, { colliders: [{ x: 0, z: 0, r: 0.13 }], lamps: [{ x: 0.4, y: 1.46, z: 0 }] });
 }

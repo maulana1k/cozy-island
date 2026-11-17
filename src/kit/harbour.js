@@ -220,7 +220,7 @@ export function buildGangway(length = 4) {
       group.add(stick(a, mid, 0.018, WOOD), stick(mid, b, 0.018, WOOD), stick(lows[i], lows[i + 1], 0.015, WOOD));
     }
   }
-  mergeStatic(group);
+  mergeStatic(group, { ao: true });
   const platforms = [{ x: 0, z: 0, hw: W / 2, hd: length / 2, rot: 0, top0: hiY, top1: loY }];
   return { group, colliders, platforms };
 }
@@ -266,7 +266,7 @@ export function buildDock(length = 20, width = 3.6) {
     if (z < 1) continue;
     for (let i = 0; i < 2; i++) { const c = new THREE.Mesh(new THREE.TorusGeometry(0.2 - i * 0.02, 0.05, 5, 10), shared(WOOD)); c.rotation.x = Math.PI / 2; c.position.set(x, DOCK_TOP + 0.05 + i * 0.07, z); c.castShadow = true; group.add(c); }
   }
-  mergeStatic(group);
+  mergeStatic(group, { ao: true });
   const platforms = [{ x: 0, z: length / 2, hw, hd: length / 2, rot: 0, top: DOCK_TOP }];
   return { group, colliders, platforms };
 }
@@ -330,6 +330,6 @@ export function buildDockProps() {
   add(box(0.42, 0.52, 0.3, YELLOW, cx - 0.2, 0.82, 0, 0.4));
   colliders.push({ x: cx + 0.5, z: 0, hw: 1.1, hd: 0.5, rot: 0 });
 
-  mergeStatic(group);
+  mergeStatic(group, { ao: true });
   return { group, colliders, platforms: [], lamps };
 }

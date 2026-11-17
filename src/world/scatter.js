@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bakeAO } from './ao.js';
 import { heightAt, zoneAt } from '../logic/terrain.js';
 import { getScatter, distanceToPath, jungleAt, PLAY_CLEAR, COTTAGES, VILLAGE_CENTER, WINDMILL, FIELD, TENTS } from '../logic/layout.js';
 import { POND, HILL } from '../config.js';
@@ -188,7 +189,7 @@ export function createScatter(scene) {
   const byKind = TREE_KINDS.map((_, k) => data.trees.filter((t) => t.kind === k));
   const kinds = TREE_KINDS.map((def, k) => {
     const list = byKind[k], n = Math.max(1, list.length);
-    const trunk = new THREE.InstancedMesh(def.trunk(), flat(PALETTE.treeTrunk), n);
+    const trunk = new THREE.InstancedMesh(bakeAO(def.trunk(), { creases: false, fade: 0.8 }), flat(PALETTE.treeTrunk), n);
     const canopy = new THREE.InstancedMesh(def.canopy(), flat(0xffffff, { vertexColors: true }), n);
     for (const m of [trunk, canopy]) { m.count = list.length; m.castShadow = true; m.receiveShadow = true; }
     list.forEach((t, i) => {
@@ -230,7 +231,7 @@ export function createScatter(scene) {
   const shore = Array.from({ length: 34 }, () => { const a = rockRng() * Math.PI * 2, r = 57.5 + rockRng() * 5; return { x: Math.cos(a) * r, z: Math.sin(a) * r, scale: 0.7 + rockRng() * 1.6, rot: rockRng() * 6.28, shore: true }; });
   const allRocks = [...data.rocks, ...shore];
   const ROCK_TONES = [0xd9b47c, 0xcba56c, 0xbf9a68, 0xa98a6c], SHORE_TONES = [0x7a6050, 0x8a6e5a, 0x6b5648];
-  const rocks = new THREE.InstancedMesh(rockGeometry(), flat(0xffffff), allRocks.length);
+  const rocks = new THREE.InstancedMesh(bakeAO(rockGeometry(), { creases: false, fade: 0.5 }), flat(0xffffff), allRocks.length);
   rocks.castShadow = true; rocks.receiveShadow = true;
   allRocks.forEach((r, i) => {
     dummy.position.set(r.x, Math.max(heightAt(r.x, r.z), -0.25) - 0.08, r.z); dummy.rotation.set(Math.sin(i) * 0.12, r.rot, Math.cos(i * 1.3) * 0.12); dummy.scale.set(r.scale, r.scale * (0.8 + (i % 3) * 0.25), r.scale); dummy.updateMatrix();

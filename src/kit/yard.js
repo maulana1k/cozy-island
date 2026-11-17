@@ -77,7 +77,7 @@ const pick = (rnd, arr) => arr[Math.floor(rnd() * arr.length) % arr.length];
 // Runs an inner builder into a fresh group, welds it, and returns the standard result.
 function wrap(inner, ...args) {
   const root = new THREE.Group(), colliders = inner(root, ...args) || [];
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return { group: root, colliders };
 }
 
@@ -397,7 +397,7 @@ export function buildYard(variant = 0, seed = 1, maxZ = Infinity) {
     sub.position.set(px, 0, pz); sub.rotation.y = ry; root.add(sub);
     for (const c of PROPS[key](sub, arg) || []) colliders.push(toYard(c, px, pz, ry));
   }
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return { group: root, colliders };
 }
 
@@ -485,7 +485,7 @@ function stepsInner(g, width, rise, run) {
 }
 export function buildStoneSteps(width = 1.4, rise = 1.0, run = 2.4) {
   const root = new THREE.Group(), { cols, platforms } = stepsInner(root, width, rise, run);
-  mergeStatic(root);
+  mergeStatic(root, { ao: true });
   return { group: root, colliders: cols, platforms };
 }
 

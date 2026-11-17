@@ -9,6 +9,7 @@ import { isLowTide, isNight, nextOpening, GATE_TEXT, lowTidesOn } from './gates.
 import { writeSave, readSave, hasSave, sessionOnly } from './save.js';
 import { createStoryUI, journalPage, DEFAULT_LOOK } from './ui.js';
 import { clockText } from '../logic/journal.js';
+import { album } from './album.js';
 import { YOUR_TENT } from '../logic/journey.js';
 
 const AUTOSAVE_EVERY = 180; // seconds of play
@@ -39,7 +40,7 @@ export function createStoryRuntime(io) {
     else if (kind === 'note') { hud.reward({ kind: 'note', title: d.title, sub: 'Added to your notes', pic: '📝' }); audio.play('discover'); }
     else if (kind === 'badge') { hud.rankUp(d.name, 'Badge earned'); hud.reward({ kind: 'badge', title: d.name, sub: 'Badge earned', pic: d.icon }); audio.play('rank'); }
     else if (kind === 'gear') io.say(`New gear: ${d.name}`, d.icon);
-    else if (kind === 'guide') { hud.reward({ kind: 'guide', title: d.name, sub: 'Added to your field guide', pic: d.icon }); audio.play('discover'); }
+    else if (kind === 'guide') { const ph = album.get(d.id); hud.reward({ kind: 'guide', title: d.name, sub: ph ? `Photo added to your field guide ${'★'.repeat(ph.grade)}` : 'Added to your field guide', pic: (ph && ph.thumb) || d.icon }); audio.play('discover'); }
     else if (kind === 'puzzle') audio.play('discover');
     io.refreshQuest(); io.refreshJournal();
   });

@@ -49,3 +49,21 @@ export function clearSave() {
 
 // True when saves only last for this tab.
 export const sessionOnly = () => { storage(); return usable === false; };
+
+// ---- Extra slots beside the save (the camera's photo album, src/story/album.js). Kept apart so the main save stays
+// small. A slot larger than `maxChars` is kept for this tab only, never written to storage.
+const extra = new Map();
+export function writeExtra(name, text, maxChars = 400000) {
+  extra.set(name, text);
+  const s = storage();
+  if (!s) return false;
+  try {
+    if (text.length > maxChars) { s.removeItem(`${KEY}.${name}`); return false; }
+    s.setItem(`${KEY}.${name}`, text); return true;
+  } catch { return false; } // full or blocked: the tab keeps its copy
+}
+export function readExtra(name) {
+  const s = storage();
+  if (s) { try { const t = s.getItem(`${KEY}.${name}`); if (t) return t; } catch { /* fall back to this tab's copy */ } }
+  return extra.get(name) || null;
+}

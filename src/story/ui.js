@@ -2,6 +2,7 @@
 // two to four answers on keys 1-4 or a click), the new-game name and look picker, the "waiting..." veil, and the
 // journal's Quests, Notes, Field guide and People pages. All text goes in with textContent (the player's name too).
 import { GATE_TEXT } from './gates.js';
+import { album } from './album.js';
 
 const CSS = `
 #hud .talk { position: absolute; left: 50%; bottom: 26px; width: min(94vw, 760px); transform: translate(-50%, 30px) rotate(-0.6deg); opacity: 0; pointer-events: none; transition: opacity .3s ease, transform .4s cubic-bezier(.2,1.2,.3,1);
@@ -55,6 +56,13 @@ const CSS = `
 #hud .lists .nt { padding: 8px 0; border-bottom: 1.5px solid #e6edf3; }
 #hud .lists .nt b { font-size: 14.5px; } #hud .lists .nt em { font-size: 11px; color: #8a95a3; font-style: normal; font-weight: 700; margin-left: 6px; }
 #hud .lists .nt div { font-size: 13px; color: #4f5b69; font-weight: 500; margin-top: 2px; }
+#hud .lists .nt.has-photo { min-height: 104px; }
+#hud .lists .nt .snap { float: right; margin: 2px 0 6px 12px; padding: 5px 5px 3px; background: #fff; box-shadow: 0 2px 8px rgba(20,30,50,.22); transform: rotate(2deg); }
+#hud .lists .nt .snap img { display: block; width: 128px; height: 96px; object-fit: cover; }
+#hud .lists .nt .snap figcaption { text-align: center; font-size: 11px; color: #c98a00; letter-spacing: 1px; margin-top: 2px; }
+#hud .lists .nt .fact { color: #2f6f69; font-weight: 700; font-style: italic; }
+#hud .lists .nt .seen { color: #8a95a3; font-size: 11.5px; font-weight: 700; }
+#hud .lists .nt .hear { margin-left: 8px; font-size: 11px !important; font-weight: 800 !important; padding: 2px 9px !important; border-radius: 999px; background: #e3f3ee !important; color: #2f6f69 !important; vertical-align: 2px; }
 #hud .lists .pp { display: flex; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1.5px solid #e6edf3; }
 #hud .lists .pp canvas { width: 46px; height: 46px; border-radius: 50%; flex: none; }
 #hud .lists .pp .hearts { color: #e8563f; letter-spacing: 2px; font-size: 14px; }
@@ -207,12 +215,20 @@ export function journalPage(tab, ctx) {
   if (tab === 'guide') {
     const all = Object.entries(content.fieldGuide);
     const nodes = all.map(([id, g]) => {
-      const got = S.guide.includes(id), d = el('div', 'nt');
-      d.append(el('b', null, `${got ? g.icon : '❔'} ${got ? g.name : 'Not yet seen'}`));
-      if (got) d.append(el('div', null, `Eats: ${g.eats}`), el('div', null, `Lives: ${g.lives}`), el('div', null, `Around it: ${g.behave}`));
+      const got = S.guide.includes(id), d = el('div', 'nt'), ph = got ? album.get(id) : null;
+      if (ph) d.classList.add('has-photo');
+      // The best photo, as a little print with its stars (src/photo.js takes them).
+      if (ph && ph.thumb) { const f = el('figure', 'snap'); const im = document.createElement('img'); im.src = ph.thumb; im.alt = `Your photo of a ${g.name.toLowerCase()}`; f.append(im, el('figcaption', null, '★'.repeat(ph.grade) + '☆'.repeat(3 - ph.grade))); d.append(f); }
+      const head = el('b', null, `${got ? g.icon : '❔'} ${got ? g.name : 'Not yet seen'}`); d.append(head);
+      if (got && g.call && album.hear) { const b = el('button', 'hear', '♪ call'); b.title = 'Hear its call'; b.addEventListener('click', () => album.hear(g.call)); d.append(b); }
+      if (got) {
+        if (g.fact) d.append(el('div', 'fact', g.fact));
+        d.append(el('div', null, `Eats: ${g.eats}`), el('div', null, `Lives: ${g.lives}`), el('div', null, `Around it: ${g.behave}`));
+        if (ph) d.append(el('div', 'seen', `Photographed ${ph.when ? `in the ${ph.when}` : ''} on day ${ph.day}${ph.grade < 3 ? '. A closer, steadier shot gets more stars.' : '.'}`));
+      } else if (g.fact) d.append(el('div', 'seen', 'Photograph it with your camera to add it.'));
       return d;
     });
-    return { title: 'Field guide', sub: `${S.guide.length} of ${all.length} found. Meet animals and plants to fill it in.`, nodes };
+    return { title: 'Field guide', sub: `${S.guide.length} of ${all.length} found. Meet animals and plants, or photograph them (camera in your backpack), to fill it in.`, nodes };
   }
   if (tab === 'people') {
     const nodes = Object.entries(content.people).map(([id, p]) => {

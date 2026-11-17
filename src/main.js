@@ -39,6 +39,12 @@ import { createReact } from './world/react.js';
 import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
+import { createPhotoCamera } from './photo.js';
+import { album } from './story/album.js';
+import { createLitter } from './world/litter.js';
+import { createPhotoBoard } from './world/photoBoard.js';
+import { serialiseRestore, loadRestore, resetRestore } from './logic/restore.js';
+import { FIELD_GUIDE } from './story/fieldGuide.js';
 import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
 import { createWilds, keepClear } from './world/wilds.js';
 // ---- Areas of the bigger island: one file each under src/world/areas/. To add one, import it
@@ -141,6 +147,16 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
+// ---- Helping the island heal (src/logic/restore.js, src/world/litter.js): litter to pick up, a birdhouse to mend.
+const litter = createLitter(scene, { groundAt, onClean: (thing, r) => onClean(thing, r) });
+function onClean(thing, r) {
+  const pct = Math.round(r.health * 100);
+  if (thing.kind === 'birdhouse') { for (let i = 0; i < 3; i++) later(0.15 + i * 0.3, () => audio.play('door')); later(1.1, () => { say('Birdhouse mended. Someone will move in soon.', '🐦'); audio.play('discover'); }); vitals.add({ cheer: 8 }); }
+  else { if (!give('litter', 1, thing)) say('No room for the litter bag. Make space in your backpack.', '@litterbag'); else say(`Litter picked up · ${r.name}: ${pct}% clean`, '@litterbag'); vitals.add({ cheer: 3 }); }
+  tip('litter', 'Every bit of litter you pick up helps. Clean a place and more birds and butterflies come back there.');
+  progress('litter');
+  if (r.all) later(1.4, () => { hud.reward({ kind: 'discovery', title: `${r.name[4].toUpperCase()}${r.name.slice(5)} is clean`, sub: 'Listen: more birds are coming back', pic: '🌿' }); audio.play('discover'); });
+}
 const ambience = createAmbience(audio, scene); // area sound beds, real birds singing, dawn and campfire cues
 const react = params.has('noreact') ? { colliders: [], update() {} } : createReact(scene, { props, audio, player, groundAt }); // V3: plants part, loose things roll, hanging things swing, tents ripple (?noreact: off, for measuring)
 const pending = []; // things that happen a moment later: [time, fn]
@@ -212,6 +228,8 @@ function useItem(id, plain = false) {
     sips--; vitals.add(SIP); player.gesture('drink', 1.3); audio.play('gulp'); busy(1.0); discover('drink');
   } else if (item.use === 'torch') { torchOn = !torchOn; player.setTorch(torchOn); audio.play('click'); say(torchOn ? 'Torch on.' : 'Torch off.', '🔦'); }
   else if (item.use === 'bugle') { player.gesture('blow', 1.3); audio.play('bugle'); villagers.hearBell({ x: p.x, z: p.z }); vitals.add({ cheer: 3 }); busy(1.2); }
+  else if (item.use === 'camera') { openCamera(); return; }
+  else if (item.use === 'litter') { const n = bag.count('litter'); say(`${n} piece${n === 1 ? '' : 's'} of litter in your bag. Thank you for helping the island!`, '@litterbag'); }
   else if (item.use === 'bandage') { bag.remove(id, 1); vitals.add({ energy: 45, cheer: 5 }); player.gesture('rub', 1.3); audio.play('discover'); say('Good as new.', '🩹'); busy(1.2); }
   else if (item.use === 'stoke') {
     const f = props.fireNear(p.x, p.z, false);
@@ -313,7 +331,41 @@ const openStatic = allStatic.filter((c) => !c.building);
 // Soft contact shadows under everything solid, and under people's feet (src/world/contact.js).
 const contact = createContactShadows(scene, { groundAt });
 contact.addStatic([...allStatic, ...areaColliders()]);
-const interactables = [...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
+const interactables = [...litter.interactables, ...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
+// ---- The digital camera (src/photo.js): a photo of an animal in the focus box fills its field-guide entry.
+const photo = createPhotoCamera({
+  camera, input, canvas, groundAt, audio, player, interactables, scene, particles,
+  label: (s) => (s.guide && FIELD_GUIDE[s.guide] ? FIELD_GUIDE[s.guide].name : s.name || ''),
+  onPhoto: (shot) => onPhoto(shot),
+  onClose: () => { if (!director.active) { finish.dof = null; finish.useDepth(false); } storyRt.blendFrom(); syncLook(); },
+});
+album.hear = (c) => { const p = player.position; audio.call(c.kind, p.x + player.facing.x * 3, p.y + 1.5, p.z + player.facing.z * 3, c.variant || 0); };
+const photoBoard = createPhotoBoard(scene, (areas.find((a) => a.where && a.where.board) || { where: { board: { x: 7, z: -3.6, rot: 0.35 } } }).where.board, groundAt);
+void photoBoard;
+const whenWord = () => { const n = nightFactor(timeOfDay); return n > 0.5 ? 'night' : timeOfDay < 0.36 ? 'morning' : timeOfDay < 0.52 ? 'middle of the day' : timeOfDay < 0.66 ? 'afternoon' : 'evening'; };
+function openCamera() {
+  if (!hud.started || hud.menuOpen || player.riding || player.asleep || director.active || storyRt.talking || scope.active || photo.active) return;
+  if (hud.bagOpen) hud.toggleBag(); if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap();
+  if (player.sitting) player.stand();
+  if (graphics === 'high') finish.useDepth(true);
+  photo.open(); syncLook(); progress('camera');
+  tip('camera', 'Put an animal in the focus box and press Space or click. Scroll to zoom. E puts the camera away.');
+}
+// A photo was taken: { thumb, best: { guide, name, d } | null, grade }. Returns { caption } for the print.
+function onPhoto(shot) {
+  progress('photo');
+  const b = shot.best;
+  if (!b) return { caption: 'Nothing in the focus box' };
+  if (!b.guide) { if (shot.thumb) album.pin(b.name, shot.thumb); say(`Nice photo of ${b.name}! Pinned on the camp board.`, '📷'); vitals.add({ cheer: 2 }); return { caption: b.name }; }
+  const g = FIELD_GUIDE[b.guide], r = album.record(b.guide, { grade: shot.grade, thumb: shot.thumb, when: whenWord(), day: dayNumber });
+  const known = storyRt.story.state.guide.includes(b.guide);
+  if (!known) storyRt.story.apply(`guide:${b.guide}`); // the field-guide card shows the photo (src/story/runtime.js)
+  else if (r.better) { hud.reward({ kind: 'guide', title: g.name, sub: `A better photo: ${'★'.repeat(shot.grade)}`, pic: shot.thumb || g.icon }); audio.play('discover'); }
+  else if (r.first) say(`Photo of a ${g.name.toLowerCase()} added to its field-guide page.`, '📷');
+  if ((!known || r.better || r.first) && shot.thumb) album.pin(g.name, shot.thumb);
+  if (!known || r.better) { vitals.add({ cheer: 5 }); hud.refreshJournal(); }
+  return { caption: `${g.name}${!known ? ' · new!' : r.better ? ' · better!' : ''}` };
+}
 const playerXZ = { x: 0, z: 0 };
 const hintList = [];
 let hintTarget = null;
@@ -321,7 +373,7 @@ let hintTarget = null;
 // A different movement for each kind of thing you do: [gesture, seconds].
 const GESTURES = {
   lantern: ['reachUp', 0.8], door: ['push', 0.7], bell: ['pull', 1.1], flag: ['pull', 1.3], tree: ['shake', 0.9], campfire: ['crouch', 1.0],
-  pickup: ['crouch', 0.8], station: ['reach', 0.8],
+  pickup: ['crouch', 0.8], station: ['reach', 0.8], litter: ['crouch', 0.8], repair: ['reach', 1.2],
   chickens: ['shoo', 0.9], cat: ['crouch', 1.1], sheep: ['pat', 0.9], telescope: ['peer', 1.5],
   local: ['wave', 0.9], goat: ['pat', 0.9], buffalo: ['pat', 0.9], ducks: ['shoo', 0.9], monkey: ['peer', 1.2], view: ['peer', 1.5],
 };
@@ -476,6 +528,7 @@ document.addEventListener('pointerlockchange', () => {
   // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
   // (The journal, map and bag release the mouse themselves when they open, so a release with one of them open is not an Esc.)
   if (scope.active) { lockEscAt = performance.now(); scope.close(); input.consumeInteract(); return; }
+  if (photo.active) { lockEscAt = performance.now(); photo.close(); input.consumeInteract(); return; }
   if (storyRt.ui.open) { lockEscAt = performance.now(); storyRt.close(); input.consumeInteract(); return; }
   if (director.active) { lockEscAt = performance.now(); director.skip(); input.consumeHop(); input.consumeInteract(); return; }
   // An Esc keydown that just closed a screen can win the lock back and lose it to the same held key: that is not "pause".
@@ -532,7 +585,7 @@ storyRt = createStoryRuntime({
   begin: (mode) => begin(mode),
   // Saved: position, day, time, weather, bag, flask, how you feel, the camp journal and the guide switch (the story saves itself).
   snapshot: () => ({ player: { x: player.position.x, z: player.position.z, yaw: rig.yaw }, day: dayNumber, time: timeOfDay, weather: weather.kind, bag: bag.slots.map((b) => ({ id: b.id, count: b.count })), sips,
-    vitals: Object.fromEntries(STAT_KEYS.map((k) => [k, Math.round(vitals[k])])), journal: journal.list().filter((d) => d.done).map((d) => d.id), guide: guideOn }),
+    vitals: Object.fromEntries(STAT_KEYS.map((k) => [k, Math.round(vitals[k])])), journal: journal.list().filter((d) => d.done).map((d) => d.id), guide: guideOn, restore: serialiseRestore() }),
   restore(doc) {
     // Back where you were, unless that spot has no ground under it now (the ferry's deck only exists on a fresh journey): then camp.
     const at = doc.player && Number.isFinite(doc.player.x) && Number.isFinite(doc.player.z) && groundAt(doc.player.x, doc.player.z) > 0.15 ? doc.player : PLAYER_START;
@@ -545,13 +598,16 @@ storyRt = createStoryRuntime({
     if (doc.vitals) for (const k of STAT_KEYS) if (Number.isFinite(doc.vitals[k])) vitals.set(k, doc.vitals[k]);
     if (Array.isArray(doc.journal)) for (const id of doc.journal) journal.mark(id);
     guideOn = doc.guide !== false;
+    if (!bag.count('camera')) bag.add('camera'); // saves from before the camera
+    loadRestore(doc.restore); litter.refresh();
     refreshBag(); refreshProgress();
   },
 });
 hud.setContinue(storyRt.hasSave());
 refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setGraphics(graphics); hud.setDaySpeed(daySpeed);
 // What every scout sets out with.
-bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
+bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('camera'); bag.add('biscuit', 2); // the camera is in pocket 4
+album.load();
 refreshBag();
 const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.z + Math.cos(DOCK.rot) * (DOCK.length - 1.5) };
 const PLACES = [['place-dock', dockEnd, 2.2], ['place-lookout', LOOKOUT, 5.5], ['place-camp', CAMPFIRE, 6], ['place-windmill', WINDMILL, 6.5],
@@ -570,6 +626,7 @@ function begin(mode, opts = {}) {
   // Whatever key started the game should not also hop, mute or use something.
   input.consumeHop(); input.consumeInteract(); input.consumeMute();
   for (const a of areas) if (a.begin) a.begin(mode); // e.g. the harbour moors the ferry for a journey
+  if (mode !== 'continue') { resetRestore(); litter.refresh(); album.reset(); } // a new game: litter back, an empty album
   if (mode === 'journey') {
     guideOn = true;
     // At the top of the ferry's gangway, turned toward the island (see ARRIVAL in src/world/areas/harbour.js).
@@ -591,6 +648,7 @@ window.addEventListener('keydown', (e) => {
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }
   if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
+  if (photo.active) { if (e.code === 'Escape' || e.code === 'KeyE' || (/^Digit[1-6]$/.test(e.code) && bag.slots[Number(e.code.slice(5)) - 1]?.id === 'camera')) { photo.close(); input.consumeInteract(); } else if (e.code === 'Space' && !e.repeat) photo.shoot(); e.preventDefault(); return; } // the camera has the keys
   if (e.code === 'Tab') e.preventDefault(); // focus never moves, even on a held key
   if (e.repeat) return;
   // During a film any of these keys skips it; nothing else works until it is over.
@@ -727,7 +785,7 @@ function step() {
   setSleepy(night);
   // The scout's face shows how they are doing.
   player.mood = params.get('mood') || (vitals.hungry || vitals.thirsty ? 'sad' : vitals.winded ? 'effort' : vitals.cheer >= 85 ? 'happy' : null); // ?mood= is a debug aid
-  { const vp = scope.active ? scope.viewer() : camera.position; setViewer(vp.x, vp.z, player.position.x, player.position.z); } // detail is judged from the camera (through a telescope, from where it looks), so the films look right
+  { const vp = scope.active ? scope.viewer() : photo.active ? photo.viewer() : camera.position; setViewer(vp.x, vp.z, player.position.x, player.position.z); } // detail is judged from the camera (through a telescope, from where it looks), so the films look right
   audio.setFire(paused ? 0 : props.fireLoudness(player.position.x, player.position.z));
 
   // F joins in with whatever the camp is doing right now.
@@ -760,10 +818,10 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders, react.colliders);
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders, react.colliders, litter.colliders);
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
-    player.update(dt, (filming || talking || scope.active) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
+    player.update(dt, (filming || talking || scope.active || photo.active) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
     buildings.update(dt, elapsed, player);
     villagers.update(dt, elapsed, player);
     activities.update(dt, elapsed);
@@ -772,6 +830,7 @@ function step() {
     wildlife.update(dt, elapsed, player, night);
     pond.update(dt, elapsed, night, player.position);
     pickups.update(dt, player.position);
+    litter.update(dt, elapsed);
     wilds.update(elapsed, night, player.position);
     for (const a of areas) if (a.update) a.update(dt, elapsed, player, night);
     if (!sleeping && !talking) feel(dt);
@@ -824,7 +883,7 @@ function step() {
   // What would E do right now?
   playerXZ.x = player.position.x; playerXZ.z = player.position.z;
   const pressed = input.consumeInteract();
-  const target = paused || filming || talking || scope.active || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
+  const target = paused || filming || talking || scope.active || photo.active || player.sitting || player.riding || player.asleep ? null : pickInteractable(playerXZ, player.facing, interactables);
   const said = target ? storyRt.prompt(target) || target.prompt() : '';
   hintTarget = target ? said.split(' — ').slice(1).join(' — ') : null;
   player.focus = target ? target.position : null;
@@ -884,12 +943,12 @@ function step() {
   } else hud.setWaypoint(null);
 
   const rideCam = player.riding && player.riding.cam; // a climb that brings its own camera (src/world/areas/lifeguard.js)
-  if (!director.update(clampDt(raw)) && !scope.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) {
+  if (!director.update(clampDt(raw)) && !scope.update(clampDt(raw)) && !photo.update(clampDt(raw)) && !storyRt.cameraStep(clampDt(raw))) {
     if (rideCam) { if (!hadRideCam) climbLook.copy(rideCam.look); camera.position.lerp(rideCam.pos, 1 - Math.exp(-clampDt(raw) * 4)); climbLook.lerp(rideCam.look, 1 - Math.exp(-clampDt(raw) * 8)); camera.lookAt(climbLook); }
     else { if (hadRideCam) storyRt.blendFrom(); rig.update(paused ? clampDt(raw) : dt, player.position, input, allStatic, { inside: !!buildings.inside, speed: player.riding ? player.riding.camSpeed ?? 8 : player.speed * 1.4 }); storyRt.cameraAfter(clampDt(raw)); }
   }
   hadRideCam = !!rideCam;
-  if (rewardBump < 0.3) { rewardBump += clampDt(raw); camera.translateZ(-Math.sin(Math.min(1, rewardBump / 0.3) * Math.PI) * 0.05); } // find: a 5 cm nudge in and back
+  if (rewardBump < 0.3 && !photo.active) { rewardBump += clampDt(raw); camera.translateZ(-Math.sin(Math.min(1, rewardBump / 0.3) * Math.PI) * 0.05); } // find: a 5 cm nudge in and back
   weather.update(dt, timeOfDay, camera, player.position, night);
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);
@@ -913,8 +972,9 @@ function step() {
   renderer.shadowMap.needsUpdate = true;
   contact.update(camera);
   renderer.info.reset();
-  finish.dof = director.active && graphics === 'high' ? director.focus : null; // depth of field in films only
+  finish.dof = graphics !== 'high' ? null : director.active ? director.focus : photo.active ? photo.focus : null; // depth of field in films and through the camera
   if (graphics === 'high') finish.render(scene, camera); else renderer.render(scene, camera);
+  photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
   // Counted over two pictures, since only every other one redraws the shadows.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;
   drawn.lastCalls = renderer.info.render.calls; drawn.lastTris = renderer.info.render.triangles;
@@ -937,7 +997,7 @@ requestAnimationFrame(frame);
 
 // Handles for automated checks in the browser.
 window.__game = {
-  wilds, areas, player, rig, input, stats, vitals, story: storyRt, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
+  wilds, areas, player, rig, input, stats, photo, album, litter, particles, openCamera, vitals, story: storyRt, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather, finish, contact,
   get graphics() { return graphics; }, set graphics(g) { setGraphics(g); }, get rung() { return ladder[rung]; },
 };

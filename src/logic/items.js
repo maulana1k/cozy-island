@@ -5,6 +5,8 @@ export const ITEMS = {
   flask: { name: 'Water flask', icon: '@bottle', kind: 'kit', stack: 1, use: 'flask', verb: 'Drink', desc: 'Four good sips. Fill it at a water barrel or the pond.' },
   torch: { name: 'Torch', icon: '🔦', kind: 'kit', stack: 1, use: 'torch', verb: 'Switch', desc: 'Lights your way after dark.' },
   bugle: { name: 'Bugle', icon: '📯', kind: 'kit', stack: 1, use: 'bugle', verb: 'Blow', desc: 'Everyone nearby turns to look.' },
+  camera: { name: 'Digital camera', icon: '@camera', kind: 'kit', stack: 1, use: 'camera', verb: 'Open', desc: 'Frame an animal in the focus box and press Space or click. New animals go in your field guide.' },
+  litter: { name: 'Litter bag', icon: '@litterbag', kind: 'kit', stack: 99, use: 'litter', verb: 'Look', desc: 'Rubbish you have picked up. Every piece helps the birds and butterflies come back.' },
   // ---- Food
   biscuit: { name: 'Camp biscuits', icon: '🍪', kind: 'food', stack: 6, eat: { food: 14, cheer: 2 }, desc: 'Dry, crumbly and somehow perfect.' },
   apple: { name: 'Apple', icon: '🍎', kind: 'food', stack: 6, eat: { food: 16, water: 5 }, desc: 'Shaken out of a tree.' },

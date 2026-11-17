@@ -376,11 +376,22 @@ export function createHUD(handlers) {
   const tip = el('div', 'tip1'); const tipText = el('span'); tip.append(el('b', null, 'TIP'), tipText);
   let tipTimer = null; const tipQueue = [];
   function nextTip() { const t = tipQueue.shift(); if (!t) { tip.classList.remove('show'); tipTimer = null; return; } tipText.textContent = t; tip.classList.add('show'); tipTimer = setTimeout(() => { tip.classList.remove('show'); tipTimer = setTimeout(nextTip, 500); }, 6500); }
-  // ---- Film bars and captions for the little cutscenes
-  const cine = el('div', 'cine'); const cineTitle = el('div', 'ct'), cineSub = el('div', 'cs'), cineSkip = el('div', 'ck');
+  // ---- Captions for the little cutscenes: a title and a line, placed per shot, sliding softly in and out
+  const cine = el('div', 'cine'); const cineSkip = el('div', 'ck');
   cineSkip.append(el('kbd', null, 'Space'), el('span', null, 'skip'));
-  const barTop = el('div', 'bar-t'), barBottom = el('div', 'bar-b'); barBottom.append(cineTitle, cineSub); barTop.append(cineSkip);
-  cine.append(barTop, barBottom);
+  cine.append(cineSkip);
+  let capTimers = [];
+  function setCaption(title, sub, place = 'lower-left', hold = 5) {
+    capTimers.forEach(clearTimeout); capTimers = [];
+    // The old caption fades where it is; the new one is a fresh element, so the two can cross.
+    for (const old of cine.querySelectorAll('.cap')) { old.classList.remove('show'); capTimers.push(setTimeout(() => old.remove(), 1300)); }
+    if (!title && !sub) return;
+    const cap = el('div', `cap p-${place}${title ? '' : ' notitle'}`);
+    cap.append(el('i'), el('div', 'ct', title || ''), el('div', 'cs', sub || ''));
+    cine.append(cap);
+    capTimers.push(setTimeout(() => cap.classList.add('show'), 450));
+    if (hold > 1.6) capTimers.push(setTimeout(() => cap.classList.remove('show'), (hold - 0.9) * 1000));
+  }
 
   // ---- Pause menu: white words on the dimmed picture. Two panels: Game (left) and Settings (right); Controls opens the key list.
   // Keyboard: W/S move in a panel, left/right arrows jump to the other panel, A/D change a value, Enter or E picks (see menuKey, used by main.js).
@@ -542,9 +553,10 @@ export function createHUD(handlers) {
       way.classList.toggle('edge', !!edge); wayDist.textContent = `${Math.round(metres)} m`;
     },
     tip(text) { tipQueue.push(text); if (!tipTimer) nextTip(); },
-    // Film bars slide in and everything else steps back.
-    setCine(on) { root.classList.toggle('filming', on); },
-    setCaption(title, sub) { cineTitle.textContent = title || ''; cineSub.textContent = sub || ''; barBottom.classList.remove('in'); void barBottom.offsetWidth; barBottom.classList.add('in'); },
+    // A film: everything else steps back (the picture keeps the whole screen).
+    setCine(on) { root.classList.toggle('filming', on); if (!on) setCaption(); },
+    // place: 'lower-left', 'lower-right', 'upper-left', 'upper-right', 'center', 'lower-center'; hold: seconds on screen.
+    setCaption,
     // The hard stop: the whole screen is taken over while you are walked back.
     setStop(on) { root.classList.toggle('stopped', on); },
     setSleeping(on) { root.classList.toggle('asleep', on); },

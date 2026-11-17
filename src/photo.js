@@ -12,84 +12,24 @@
 // right after it is drawn (afterRender), so the viewfinder itself is never in the picture.
 import * as THREE from 'three';
 import { FIGURES } from './actors/figure.js';
+import { createViewfinder } from './photoHud.js';
 
 const MIN_ZOOM = 1, MAX_ZOOM = 4, BOX_X = 0.3, BOX_Y = 0.36; // the focus box: half size in screen units (-1..1)
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 // What each kind of thing is in the field guide, and how big it is (m), for "big enough on screen".
 const KINDS = { cat: ['cat', 0.45], chickens: ['chicken', 0.45], sheep: ['sheep', 1.0], goat: ['goat', 0.9], buffalo: ['buffalo', 1.6], ducks: ['duck', 0.45], monkey: ['monkey', 0.6] };
 const PEOPLE = { villager: 'Scout', local: 'Villager' };
-const CSS = `
-#hud .cam { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s ease; z-index: 4; color: #fff; font-variant-numeric: tabular-nums; }
-#hud .cam.on { opacity: 1; }
-#hud .cam .vig { position: absolute; inset: 16px 16px 54px; border-radius: 30px; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(10,16,24,.38) 100%); }
-/* The camera body round the picture: a dark bezel with a rounded screen cut out of it, a brand strip below. */
-#hud .cam .bezel { position: absolute; inset: 0; overflow: hidden; transform: scale(1.12); transition: transform .5s cubic-bezier(.3,.7,.2,1); }
-#hud .cam.on .bezel { transform: scale(1); }
-#hud .cam .screen { position: absolute; left: 16px; right: 16px; top: 16px; bottom: 54px; border-radius: 30px; box-shadow: 0 0 0 400px #1c2226, inset 0 0 0 2px rgba(255,255,255,.12), inset 0 0 50px rgba(0,0,0,.35); }
-#hud .cam .strip { position: absolute; left: 34px; right: 34px; bottom: 10px; height: 34px; display: flex; align-items: center; justify-content: space-between; color: #c9d3d8; text-shadow: none; }
-#hud .cam .brand { font-size: 13px; font-weight: 900; letter-spacing: 3px; color: #8fd3c1; }
-#hud .cam .brand i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e8563f; margin-right: 8px; vertical-align: 1px; box-shadow: 0 0 6px #e8563f; }
-#hud .cam .grid { position: absolute; left: 16px; right: 16px; top: 16px; bottom: 54px; opacity: 0; transition: opacity .2s ease; background:
-  linear-gradient(90deg, transparent calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% + .5px), transparent calc(66.66% + .5px)),
-  linear-gradient(0deg, transparent calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% + .5px), transparent calc(66.66% + .5px)); border-radius: 30px; }
-#hud .cam .grid.on { opacity: 1; }
-#hud .cam .info { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); display: flex; gap: 18px; font-size: 13px; font-weight: 800; letter-spacing: .6px; text-shadow: 0 1px 3px rgba(0,0,0,.5); white-space: nowrap; }
-#hud .cam .info span { opacity: .92; }
-#hud .cam .rec { color: #ff7a66; }
-#hud .cam .rec i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ff4a33; margin-right: 6px; vertical-align: 0; animation: camrec 1.2s steps(2, jump-none) infinite; }
-@keyframes camrec { 0% { opacity: 1; } 100% { opacity: .15; } }
-#hud .cam .frame { position: absolute; inset: calc(16px + 4vh) calc(16px + 3vw) calc(54px + 4vh); transform: scale(1.08); transition: transform .5s cubic-bezier(.3,.7,.2,1); }
-#hud .cam.on .frame { transform: scale(1); }
-#hud .cam .c { position: absolute; width: 46px; height: 46px; border: 0 solid rgba(255,255,255,.9); filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-#hud .cam .c.k1 { left: 0; top: 0; border-left-width: 4px; border-top-width: 4px; border-top-left-radius: 14px; }
-#hud .cam .c.k2 { right: 0; top: 0; border-right-width: 4px; border-top-width: 4px; border-top-right-radius: 14px; }
-#hud .cam .c.k3 { left: 0; bottom: 0; border-left-width: 4px; border-bottom-width: 4px; border-bottom-left-radius: 14px; }
-#hud .cam .c.k4 { right: 0; bottom: 0; border-right-width: 4px; border-bottom-width: 4px; border-bottom-right-radius: 14px; }
-#hud .cam .box { position: absolute; left: ${50 - BOX_X * 50}%; right: ${50 - BOX_X * 50}%; top: ${50 - BOX_Y * 50}%; bottom: ${50 - BOX_Y * 50}%; transition: transform .25s ease; }
-#hud .cam .box i { position: absolute; width: 22px; height: 22px; border: 0 solid rgba(255,255,255,.85); transition: border-color .2s ease; }
-#hud .cam .box i:nth-child(1) { left: 0; top: 0; border-left-width: 2.5px; border-top-width: 2.5px; }
-#hud .cam .box i:nth-child(2) { right: 0; top: 0; border-right-width: 2.5px; border-top-width: 2.5px; }
-#hud .cam .box i:nth-child(3) { left: 0; bottom: 0; border-left-width: 2.5px; border-bottom-width: 2.5px; }
-#hud .cam .box i:nth-child(4) { right: 0; bottom: 0; border-right-width: 2.5px; border-bottom-width: 2.5px; }
-#hud .cam .box.lock { transform: scale(.94); }
-#hud .cam .box.lock i { border-color: #7dffb0; }
-#hud .cam .dot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.8); }
-#hud .cam .top { position: absolute; left: 44px; right: 44px; top: 30px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 800; letter-spacing: .5px; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
-#hud .cam .mode { display: flex; gap: 8px; align-items: center; }
-#hud .cam .mode b { background: #8fd3c1; color: #1d3b37; border-radius: 6px; padding: 1px 7px; text-shadow: none; font-size: 12px; }
-#hud .cam .bat { display: inline-block; width: 26px; height: 12px; border: 2px solid #fff; border-radius: 3px; position: relative; vertical-align: -2px; margin-left: 8px; }
-#hud .cam .bat::after { content: ""; position: absolute; right: -5px; top: 2px; width: 3px; height: 4px; background: #fff; border-radius: 0 1px 1px 0; }
-#hud .cam .bat i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 70%; background: #7dffb0; border-radius: 1px; }
-#hud .cam .zoom { position: absolute; right: 46px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
-#hud .cam .zbar { width: 6px; height: 140px; border-radius: 3px; background: rgba(255,255,255,.3); position: relative; }
-#hud .cam .zbar i { position: absolute; left: -4px; width: 14px; height: 6px; border-radius: 3px; background: #fff; margin-top: -3px; }
-#hud .cam .spot { position: absolute; left: 50%; top: calc(${50 + BOX_Y * 50}% + 12px); transform: translateX(-50%); font-size: 15px; font-weight: 800; white-space: nowrap; padding: 3px 12px; border-radius: 999px; background: rgba(20,24,30,.45); opacity: 0; transition: opacity .2s ease; }
-#hud .cam .spot.on { opacity: 1; }
-#hud .cam .keys { display: flex; gap: 14px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-#hud .cam .keys kbd { margin-right: 5px; }
-#hud .cam .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
-#hud .cam .flash.go { animation: camflash .45s ease-out; }
-@keyframes camflash { 0% { opacity: .95; } 100% { opacity: 0; } }
-#hud .cam .print { position: absolute; right: 80px; bottom: 100px; padding: 8px 8px 30px; background: #fffdf8; box-shadow: 0 10px 30px rgba(0,0,0,.35); transform: translateY(30px) rotate(4deg) scale(.9); opacity: 0; transition: opacity .25s ease, transform .4s cubic-bezier(.2,1.3,.3,1); color: #2b3440; text-shadow: none; }
-#hud .cam .print.on { opacity: 1; transform: translateY(0) rotate(-3deg) scale(1); }
-#hud .cam .print img { display: block; width: 224px; height: 168px; object-fit: cover; background: #dde3e8; }
-#hud .cam .print .cap { position: absolute; left: 10px; right: 10px; bottom: 7px; font-size: 13px; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#hud .cam .print .cap em { font-style: normal; color: #c98a00; margin-left: 6px; }
-#hud.snapping .tl, #hud.snapping .bl, #hud.snapping .hints, #hud.snapping .belt, #hud.snapping .quest, #hud.snapping .way, #hud.snapping .tip1, #hud.snapping .tr { opacity: 0 !important; }
-#hud .reward .stamp img.photo { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; display: block; }
-`;
 
 // deps: { camera, input, canvas, groundAt, audio, player, interactables, scene, particles, onPhoto(shot), onClose() }
 // shot: { thumb, best: { guide, name, d } | null, grade 1..3 }
 export function createPhotoCamera(deps) {
   const { camera, input, groundAt, player } = deps;
-  let gridEl = null, isoEl = null, speedEl = null, gridOn = false;
-  let root = null, zoomEl = null, zbarEl = null, spotEl = null, boxEl = null, flashEl = null, printEl = null, printImg = null, printCap = null, shotsEl = null;
+  let vf = null, gridOn = false, roll = 0, lastInput = 0, openedAt = 0, histoN = 0; // the overlay (src/photoHud.js)
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
-  let wasLocked = false, lockAt = -9;
+  let wasLocked = false, lockAt = -9, wasLockedShown = false;
   let subject = false; // something in the focus box: only then is the background thrown out of focus
-  let shake = 0, lastSpot = '', pending = null, hidden = null, printTimer = null;
+  let shake = 0, pending = null, hidden = null;
   const eye = new THREE.Vector3(), fwd = new THREE.Vector3(), to = new THREE.Vector3(), viewer = new THREE.Vector3(), ndc = new THREE.Vector3();
   const from = new THREE.Vector3(), fromQ = new THREE.Quaternion(), aimQ = new THREE.Quaternion(), probe = new THREE.Object3D();
   let fromFov = BASE_FOV;
@@ -98,7 +38,7 @@ export function createPhotoCamera(deps) {
   const keys = new Set();
   const onKey = (e) => {
     if (!active) return;
-    if (e.type === 'keydown') { keys.add(e.code); if (e.code === 'KeyG' && !e.repeat && gridEl) { gridOn = !gridOn; gridEl.classList.toggle('on', gridOn); play('click'); } } else keys.delete(e.code);
+    if (e.type === 'keydown') { keys.add(e.code); lastInput = clock; if (e.code === 'KeyG' && !e.repeat && vf) { gridOn = !gridOn; vf.grid(gridOn); play('click'); } } else keys.delete(e.code);
   };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
   window.addEventListener('blur', () => keys.clear());
@@ -112,38 +52,8 @@ export function createPhotoCamera(deps) {
     if (document.pointerLockElement === deps.canvas || (moved < 6 && quick)) cam.shoot();
   });
 
-  function build() {
-    const hud = document.getElementById('hud');
-    const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
-    const mk = (cls, text) => { const d = document.createElement('div'); d.className = cls; if (text) d.textContent = text; return d; };
-    root = mk('cam');
-    const frame = mk('frame');
-    for (const c of ['k1', 'k2', 'k3', 'k4']) frame.append(mk(`c ${c}`));
-    boxEl = mk('box'); for (let i = 0; i < 4; i++) boxEl.append(document.createElement('i'));
-    const top = mk('top'), mode = mk('mode'), b = document.createElement('b'); b.textContent = 'AUTO';
-    const rec = document.createElement('span'); rec.className = 'rec'; rec.append(document.createElement('i'), document.createTextNode('REC'));
-    mode.append(rec, b, document.createTextNode('Nature'));
-    const right = mk('right'); shotsEl = document.createElement('span'); const bat = document.createElement('span'); bat.className = 'bat'; bat.append(document.createElement('i')); right.append(shotsEl, bat);
-    top.append(mode, right);
-    const z = mk('zoom'); zoomEl = mk('zt'); zbarEl = document.createElement('i'); const bar = mk('zbar'); bar.append(zbarEl); z.append(mk('', 'T'), bar, mk('', 'W'), zoomEl);
-    spotEl = mk('spot'); flashEl = mk('flash');
-    printEl = mk('print'); printImg = document.createElement('img'); printImg.alt = ''; printCap = mk('cap'); printEl.append(printImg, printCap);
-    // Exposure readouts under the picture: ISO and shutter speed follow the light, then the aperture and zoom.
-    const info = mk('info'); isoEl = document.createElement('span'); speedEl = document.createElement('span'); const fEl = document.createElement('span'); fEl.textContent = 'F2.8'; const zEl2 = document.createElement('span'); info.append(isoEl, speedEl, fEl, zEl2); info.zEl = zEl2; root.info = info;
-    gridEl = mk(gridOn ? 'grid on' : 'grid');
-    const bezel = mk('bezel'); bezel.append(mk('screen'));
-    const strip = mk('strip'), brand = mk('brand'); brand.append(document.createElement('i'), document.createTextNode('SCOUTCAM'));
-    const k = mk('keys');
-    for (const [key, what] of [['Space / click', 'photo'], ['Drag / W A S D', 'aim'], ['Scroll / + −', 'zoom'], ['G', 'grid'], ['E / Esc', 'put away']]) { const s = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = key; s.append(kb, document.createTextNode(what)); k.append(s); }
-    strip.append(brand, k);
-    root.append(mk('vig'), gridEl, frame, boxEl, mk('dot'), top, z, spotEl, info, bezel, strip, printEl, flashEl);
-    hud.append(root);
-  }
   const fovNow = () => BASE_FOV / zoom;
-  function showZoom() { zoomEl.textContent = `${wantZoom.toFixed(1)}×`; zbarEl.style.top = `${(1 - (wantZoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`; shotsEl.textContent = `▣ ${shots}`;
-    // Darker light, higher ISO and a slower shutter (deps.light: 0 night .. 1 bright day).
-    const L = deps.light ? deps.light() : 1, iso = L > 0.75 ? 100 : L > 0.5 ? 200 : L > 0.3 ? 400 : L > 0.15 ? 800 : 1600;
-    isoEl.textContent = `ISO ${iso}`; speedEl.textContent = `1/${iso >= 800 ? 60 : iso >= 400 ? 125 : 250}`; root.info.zEl.textContent = `${wantZoom.toFixed(1)}×`; }
+  function showZoom() { vf.zoom(wantZoom, MIN_ZOOM, MAX_ZOOM); vf.shots(shots); vf.light(deps.light ? deps.light() : 1); }
   // The scout's own body would fill the bottom of the picture: hidden while the camera is up.
   function hideSelf(on) {
     if (on) {
@@ -218,22 +128,22 @@ export function createPhotoCamera(deps) {
     get dof() { return subject ? focus : null; },
     viewer() { return viewer; },
     open() {
-      if (!root) build();
+      if (!vf) vf = createViewfinder({ x: BOX_X, y: BOX_Y });
       active = true; keys.clear(); input.consumeLook(); input.consumeZoom(); input.consumeHop();
       camera.getWorldDirection(fwd);
       yaw = aimYaw = Math.atan2(fwd.x, fwd.z); pitch = aimPitch = Math.max(-0.8, Math.min(0.6, Math.asin(Math.max(-1, Math.min(1, fwd.y))) + 0.08));
-      zoom = wantZoom = MIN_ZOOM; lastSpot = ''; hold = 0; shake = 0; wasLocked = false;
+      zoom = wantZoom = MIN_ZOOM; hold = 0; shake = 0; wasLocked = false; openedAt = clock; lastInput = clock;
       if (deps.finish) deps.finish.probeFocus = true;
       enter = 0; from.copy(camera.position); fromQ.copy(camera.quaternion); fromFov = camera.fov;
       hideSelf(true);
-      showZoom(); void root.offsetWidth; root.classList.add('on'); document.getElementById('hud').classList.add('snapping'); play('scopeIn');
+      showZoom(); vf.grid(gridOn); void vf.root.offsetWidth; vf.show(true); play('scopeIn');
     },
     close() {
       if (!active) return;
       active = false; pending = null;
       if (deps.finish) deps.finish.probeFocus = false;
       hideSelf(false);
-      root.classList.remove('on'); document.getElementById('hud').classList.remove('snapping'); spotEl.classList.remove('on'); printEl.classList.remove('on');
+      vf.show(false); vf.clear();
       camera.fov = fromFov; camera.updateProjectionMatrix();
       if (deps.onClose) deps.onClose();
     },
@@ -245,7 +155,7 @@ export function createPhotoCamera(deps) {
     // Space or a click.
     shoot() {
       if (!active || enter < 1 || hold > 0) return;
-      hold = 0.35; shots = Math.max(0, shots - 1); showZoom();
+      hold = 0.35; shots = Math.max(0, shots - 1); showZoom(); lastInput = clock; vf.shutter();
       play('scopeTick'); setTimeout(() => play('click'), 70); // the shutter: a soft detent, then the snap
       const j = judge();
       const grade = j ? (j.score > 0.72 ? 3 : j.score > 0.45 ? 2 : 1) : 0;
@@ -253,6 +163,7 @@ export function createPhotoCamera(deps) {
     },
     // Called by main.js right after the frame is drawn: the drawn frame becomes the thumbnail.
     afterRender() {
+      if (active && vf && ++histoN % 12 === 0) vf.histogram(deps.canvas); // the live histogram, five times a second
       if (!pending) return;
       const shot = pending; pending = null;
       try {
@@ -261,13 +172,9 @@ export function createPhotoCamera(deps) {
         c.getContext('2d').drawImage(src, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, 256, 192);
         shot.thumb = c.toDataURL('image/jpeg', 0.72);
       } catch { shot.thumb = null; }
-      flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go');
       const res = deps.onPhoto ? deps.onPhoto(shot) : null;
       // The freeze-frame: the photo as a little print, with what it shows.
-      if (shot.thumb) printImg.src = shot.thumb;
-      printCap.replaceChildren(document.createTextNode(res && res.caption ? res.caption : 'Nothing in the focus box'));
-      if (shot.grade) { const em = document.createElement('em'); em.textContent = '★'.repeat(shot.grade) + '☆'.repeat(3 - shot.grade); printCap.append(em); }
-      printEl.classList.add('on'); clearTimeout(printTimer); printTimer = setTimeout(() => printEl.classList.remove('on'), 2200);
+      vf.review(shot.thumb, res && res.caption ? res.caption : 'Nothing in the focus box', shot.grade);
     },
     // Moves the camera. Returns true while the camera is up.
     update(dt) {
@@ -332,10 +239,22 @@ export function createPhotoCamera(deps) {
       const locked = enter >= 1 && (j || fresh) && Math.abs(Math.log(focus.dist / want)) < 0.05;
       if (locked && !wasLocked && clock - lockAt > 0.6) { play('ui'); lockAt = clock; } // the half-press beep
       wasLocked = locked;
-      boxEl.classList.toggle('lock', !!locked);
+      vf.lock(!!locked, locked && !wasLockedShown); wasLockedShown = !!locked;
+      // The level line: the hands roll a little as they swing and breathe.
+      roll += ((-dy / Math.max(dt, 1e-3)) * 0.02 + Math.sin(clock * 0.7) * 0.006 - roll) * (1 - Math.exp(-dt * 6));
+      vf.level(roll);
+      // Button labels: shown at first and whenever you pause; faint while you are busy.
+      if (Math.abs(dy) + Math.abs(dp) > 1e-4 || look.dx || look.dy) lastInput = clock;
+      vf.hints(clock - openedAt > 4 && clock - lastInput < 3);
       const label = j ? (deps.label ? deps.label(j.s) : j.s.name || j.s.guide) : '';
       const text = j ? `${label} · ${j.d < 10 ? j.d.toFixed(1) : Math.round(j.d)} m` : '';
-      if (text !== lastSpot) { lastSpot = text; spotEl.textContent = text; spotEl.classList.toggle('on', !!j); }
+      // Subject detect: an outline round the animal, its name above.
+      if (j) {
+        ndc.set(j.s.x, j.s.y, j.s.z).project(camera);
+        const H = deps.canvas.clientHeight, W = deps.canvas.clientWidth, half = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+        const h = Math.max(24, Math.min(H * 0.8, (j.s.size / (2 * j.d * half)) * H * 1.15));
+        vf.subject({ x: (ndc.x * 0.5 + 0.5) * W - 18, y: (-ndc.y * 0.5 + 0.5) * H - 18, w: h * 1.25, h }, text);
+      } else vf.subject(null);
       return true;
     },
   };

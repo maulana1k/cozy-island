@@ -149,7 +149,7 @@ export function createPhotoCamera(deps) {
     },
     close() {
       if (!active) return;
-      active = false; pending = null;
+      active = false; pending = null; if (deps.audio && deps.audio.lensMotor) deps.audio.lensMotor(0);
       if (deps.finish) deps.finish.probeFocus = false;
       hideSelf(false);
       vf.show(false); vf.clear();
@@ -165,7 +165,7 @@ export function createPhotoCamera(deps) {
     shoot() {
       if (!active || enter < 1 || hold > 0) return;
       hold = 0.35; shots = Math.max(0, shots - 1); showZoom(); lastInput = clock; vf.shutter();
-      play('scopeTick'); setTimeout(() => play('click'), 70); // the shutter: a soft detent, then the snap
+      if (wasLocked) { play('afBeep'); setTimeout(() => play('shutter'), 90); } else play('shutter'); // focus-confirm beep, then the double click
       const j = judge();
       const grade = j ? (j.score > 0.72 ? 3 : j.score > 0.45 ? 2 : 1) : 0;
       pending = { best: j ? { guide: j.s.guide, name: j.s.name, d: j.d } : null, grade };
@@ -204,12 +204,16 @@ export function createPhotoCamera(deps) {
       // Steadiness: how fast the view is still swinging (radians a second, eased); a blur risk when high.
       shake += ((Math.hypot(dy, dp) / Math.max(dt, 1e-3)) * zoom - shake) * (1 - Math.exp(-dt * 8));
       // Zoom: the wheel or + / - set it; the lens eases there with a motor whirr.
-      let z = wantZoom - input.consumeZoom() * 0.003;
+      const wheel = input.consumeZoom(); // scroll direction flipped on purpose (owner's request)
+      let z = wantZoom + wheel * 0.003;
       if (keys.has('Equal') || keys.has('NumpadAdd')) z += dt * 1.5;
       if (keys.has('Minus') || keys.has('NumpadSubtract')) z -= dt * 1.5;
       z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
-      if (Math.abs(z - wantZoom) > 1e-3) { if (clock - whirrAt > 0.35) { play('scopeWhirr'); whirrAt = clock; } wantZoom = z; showZoom(); }
+      if (Math.abs(z - wantZoom) > 1e-3) { wantZoom = z; showZoom(); }
+      if (wheel && clock - whirrAt > 0.09) { play('lensZoom'); whirrAt = clock; } // a soft tick per wheel step, merged when spammed
+      const zb = zoom;
       zoom += (wantZoom - zoom) * (1 - Math.exp(-dt * 4));
+      if (deps.audio && deps.audio.lensMotor) deps.audio.lensMotor(Math.min(1, Math.abs(zoom - zb) / Math.max(dt, 1e-3) / 2.5)); // the motor follows the zoom speed
       // A breath of hand shake.
       const sy = yaw + Math.sin(clock * 1.3) * 0.0016 * zoom, sp = pitch + Math.sin(clock * 1.7 + 0.6) * 0.0012 * zoom;
       fwd.set(Math.sin(sy) * Math.cos(sp), Math.sin(sp), Math.cos(sy) * Math.cos(sp));

@@ -120,7 +120,28 @@ export function createAudio(makeContext = () => new AudioContext()) {
       if (!sound) return;
       try { sound(); } catch { /* audio is optional */ }
     },
+    // The camera lens motor: call every frame with the zoom speed (0 = still, 1 = fast). A soft geared whirr (filtered noise
+    // plus a slight pitched buzz) whose pitch and volume rise with the speed; a tiny click when it settles. Silent when muted.
+    lensMotor(speed) {
+      if (!api.started || !ctx || !master) return;
+      try {
+        const s = Math.min(1, Math.max(0, speed || 0)), now = ctx.currentTime;
+        if (s < 0.02) { if (motor && motor.on) { motor.on = false; motor.g.gain.setTargetAtTime(0, now, 0.025); if (!api.muted) SOUNDS.lensStop(); } return; }
+        if (!motor) {
+          const n = noiseSource(true), bp = filter('bandpass', 1400, 2.5), o = ctx.createOscillator(), og = amp(0.35), g = amp(0);
+          o.type = 'sawtooth'; o.frequency.value = 150;
+          n.connect(bp).connect(g); o.connect(og).connect(g); g.connect(master);
+          n.start(0, Math.random() * 1.5); o.start();
+          motor = { g, bp, o, on: false };
+        }
+        motor.on = true;
+        motor.g.gain.setTargetAtTime(0.004 + s * 0.016, now, 0.04);
+        motor.o.frequency.setTargetAtTime(140 + s * 150, now, 0.05);
+        motor.bp.frequency.setTargetAtTime(1000 + s * 900, now, 0.05);
+      } catch { /* audio is optional */ }
+    },
   };
+  let motor = null;
 
   function noiseSource(loop = false) {
     const src = ctx.createBufferSource();
@@ -577,6 +598,18 @@ export function createAudio(makeContext = () => new AudioContext()) {
     // The telescope: a soft detent click as the zoom ring passes each step, and a small motor whirr as it turns.
     scopeTick() { hiss({ type: 'bandpass', freq: 2600, q: 7, dur: 0.016, gain: 0.05 }); tone(520, { type: 'square', dur: 0.018, gain: 0.01 }); },
     scopeWhirr() { tone(170, { type: 'sawtooth', dur: 0.35, gain: 0.01, to: 260, attack: 0.04 }); hiss({ type: 'bandpass', freq: 1100, q: 3, dur: 0.35, gain: 0.018 }); },
+    // Camera lens: a very soft tick per wheel step, the motor's closing click, a crisp double-click shutter with a mirror
+    // slap, and a faint electronic beep for the AF confirm.
+    lensZoom() { hiss({ type: 'bandpass', freq: 2200, q: 6, dur: 0.014, gain: 0.02 }); },
+    lensStop() { hiss({ type: 'bandpass', freq: 2800, q: 6, dur: 0.012, gain: 0.04 }); tone(420, { type: 'square', dur: 0.012, gain: 0.006 }); },
+    afBeep() { tone(1900, { type: 'sine', dur: 0.07, gain: 0.025, attack: 0.004 }); },
+    shutter() {
+      tone(110, { type: 'sine', dur: 0.07, gain: 0.07, to: 55, attack: 0.002 }); // mirror slap
+      hiss({ type: 'bandpass', freq: 2400, q: 3, dur: 0.022, gain: 0.07 }); // shutter opens
+      hiss({ type: 'bandpass', freq: 1500, q: 2, dur: 0.018, gain: 0.025 });
+      hiss({ type: 'bandpass', freq: 3200, q: 3.5, dur: 0.026, gain: 0.06, delay: 0.075 }); // and closes
+      tone(700, { type: 'square', dur: 0.012, gain: 0.008, delay: 0.075 });
+    },
     scopeIn() { hiss({ type: 'lowpass', freq: 700, dur: 0.5, gain: 0.03 }); tone(330, { type: 'sine', dur: 0.12, gain: 0.025, delay: 0.55, to: 300 }); },
     nope() { tone(220, { type: 'triangle', dur: 0.12, gain: 0.06 }); tone(180, { type: 'triangle', dur: 0.16, gain: 0.06, delay: 0.1 }); },
     splash() { hiss({ freq: 1500, q: 0.6, dur: 0.22, gain: 0.06 }); },

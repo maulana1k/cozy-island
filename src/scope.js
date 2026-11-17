@@ -90,7 +90,7 @@ export function createScope(deps) {
       const follow = 1 - Math.exp(-dt * 3.2);
       yaw += (aimYaw - yaw) * follow; pitch += (aimPitch - pitch) * follow;
       // Zoom: the wheel or + / - set the power; the lens eases there with a whirr and a click at every step.
-      let z = wantZoom - input.consumeZoom() * 0.006;
+      let z = wantZoom + input.consumeZoom() * 0.006;
       if (keys.has('Equal') || keys.has('NumpadAdd')) z += dt * 3;
       if (keys.has('Minus') || keys.has('NumpadSubtract')) z -= dt * 3;
       z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));

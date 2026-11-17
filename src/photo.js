@@ -70,6 +70,7 @@ export function createPhotoCamera(deps) {
   let root = null, zoomEl = null, zbarEl = null, spotEl = null, boxEl = null, flashEl = null, printEl = null, printImg = null, printCap = null, shotsEl = null;
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
+  let subject = false; // something in the focus box: only then is the background thrown out of focus
   let shake = 0, lastSpot = '', pending = null, hidden = null, printTimer = null;
   const eye = new THREE.Vector3(), fwd = new THREE.Vector3(), to = new THREE.Vector3(), viewer = new THREE.Vector3(), ndc = new THREE.Vector3();
   const from = new THREE.Vector3(), fromQ = new THREE.Quaternion(), aimQ = new THREE.Quaternion(), probe = new THREE.Object3D();
@@ -180,6 +181,8 @@ export function createPhotoCamera(deps) {
   const cam = {
     get active() { return active; },
     focus,
+    // The depth of field for main.js: shallow focus on the subject in the box, else all sharp.
+    get dof() { return subject ? focus : null; },
     viewer() { return viewer; },
     open() {
       if (!root) build();
@@ -275,6 +278,7 @@ export function createPhotoCamera(deps) {
       focus.dist += (want - focus.dist) * (1 - Math.exp(-dt * 5));
       focus.aperture = 1.1 + zoom * 0.25;
       viewer.copy(eye).addScaledVector(fwd, hit * (1 - 1 / zoom));
+      subject = !!j;
       const locked = !!j && Math.abs(focus.dist - j.d) < Math.max(0.4, j.d * 0.12);
       boxEl.classList.toggle('lock', locked);
       const label = j ? (deps.label ? deps.label(j.s) : j.s.name || j.s.guide) : '';

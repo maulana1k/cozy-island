@@ -972,7 +972,7 @@ function step() {
   renderer.shadowMap.needsUpdate = true;
   contact.update(camera);
   renderer.info.reset();
-  finish.dof = graphics !== 'high' ? null : director.active ? director.focus : photo.active ? photo.focus : null; // depth of field in films and through the camera
+  finish.dof = graphics !== 'high' ? null : director.active ? director.focus : photo.active ? photo.dof : null; // depth of field in films and through the camera
   if (graphics === 'high') finish.render(scene, camera); else renderer.render(scene, camera);
   photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
   // Counted over two pictures, since only every other one redraws the shadows.

@@ -192,7 +192,7 @@ export function createScatter(scene) {
     const list = byKind[k], n = Math.max(1, list.length);
     const trunk = new THREE.InstancedMesh(bakeAO(def.trunk(), { creases: false, fade: 0.8 }), flat(PALETTE.treeTrunk), n);
     const canopy = new THREE.InstancedMesh(def.canopy(), flat(0xffffff, { vertexColors: true }), n);
-    for (const m of [trunk, canopy]) { m.count = list.length; m.castShadow = true; m.receiveShadow = true; }
+    for (const m of [trunk, canopy]) { m.count = list.length; m.castShadow = true; m.receiveShadow = true; m.userData.staticCaster = true; }
     list.forEach((t, i) => {
       // Slightly different tint per tree so the woods do not look stamped out.
       canopy.setColorAt(i, color.setHex(def.color).offsetHSL(Math.sin(t.x * 12.9 + t.z * 78.2) * 0.015, 0, Math.cos(t.x * 3.1) * 0.035));
@@ -219,7 +219,7 @@ export function createScatter(scene) {
 
   // ---- Spiky bushes
   const bushes = new THREE.InstancedMesh(bushGeometry(), brushable(windSway(flat(0xffffff, { vertexColors: true }), 0.03), true), data.bushes.length); // parts round legs (src/world/react.js)
-  bushes.castShadow = true; bushes.receiveShadow = true;
+  bushes.castShadow = true; bushes.receiveShadow = true; bushes.userData.staticCaster = true;
   data.bushes.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - 0.05, b.z); dummy.rotation.set(0, b.rot, 0); dummy.scale.setScalar(b.scale * 1.15); dummy.updateMatrix();
     bushes.setMatrixAt(i, dummy.matrix);
@@ -233,7 +233,7 @@ export function createScatter(scene) {
   const allRocks = [...data.rocks, ...shore];
   const ROCK_TONES = [0xd9b47c, 0xcba56c, 0xbf9a68, 0xa98a6c], SHORE_TONES = [0x7a6050, 0x8a6e5a, 0x6b5648];
   const rocks = new THREE.InstancedMesh(bakeAO(rockGeometry(), { creases: false, fade: 0.5 }), flat(0xffffff), allRocks.length);
-  rocks.castShadow = true; rocks.receiveShadow = true;
+  rocks.castShadow = true; rocks.receiveShadow = true; rocks.userData.staticCaster = true;
   allRocks.forEach((r, i) => {
     dummy.position.set(r.x, Math.max(heightAt(r.x, r.z), -0.25) - 0.08, r.z); dummy.rotation.set(Math.sin(i) * 0.12, r.rot, Math.cos(i * 1.3) * 0.12); dummy.scale.set(r.scale, r.scale * (0.8 + (i % 3) * 0.25), r.scale); dummy.updateMatrix();
     rocks.setMatrixAt(i, dummy.matrix);

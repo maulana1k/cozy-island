@@ -31,11 +31,12 @@ export function weldable(o) {
 // Is this caster a lamp's own fixture (post, arm, lantern housing)? A small, non-skinned thing whose bounding
 // sphere encloses the light. A real lantern is a glowing area source a few tens of cm wide, so its own post
 // leaves only a faint soft penumbra; a point light would cast an endless hard wedge, so the lamp's cube must
-// not draw it. centres: entries with `light` (a Vector3) are the shadowing lamps. _v: the caster's world centre.
+// not draw it. centres: entries with `light` (a Vector3) and `slot` are the shadowing lamps.
+// Returns the slot of the lamp this caster is the fixture of, or -1.
 export function ownFixture(o, cx, cy, cz, r, centres) {
-  if (r >= 1.6 || o.isSkinnedMesh || onBone(o)) return false;
-  for (const c of centres) if (c.light && (cx - c.light.x) ** 2 + (cy - c.light.y) ** 2 + (cz - c.light.z) ** 2 < (r + 0.1) ** 2) return true;
-  return false;
+  if (r >= 1.6 || o.isSkinnedMesh || onBone(o)) return -1;
+  for (const c of centres) if (c.light && (cx - c.light.x) ** 2 + (cy - c.light.y) ** 2 + (cz - c.light.z) ** 2 < (r + 0.1) ** 2) return c.slot;
+  return -1;
 }
 
 export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
@@ -118,8 +119,37 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
     }
   }
 
+  // Trees, bushes and rocks are instanced meshes that never move (marked userData.staticCaster), so they
+  // cannot be welded like the rest. For each light that shades (a lamp, the bonfire) their instances within
+  // reach are merged once, from the instance matrices (sway ignored), into one shadow-only mesh on the cube
+  // layer; only those of the lights now in use are visible, the rest wait in the cache.
+  const stat = new Map(); // "x,z" -> { mesh|null, x, z }
+  function buildStatic(c) {
+    const list = [], m = new THREE.Matrix4();
+    scene.traverse((o) => {
+      if (!o.isInstancedMesh || !o.userData.staticCaster) return;
+      const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, m); m.premultiply(o.matrixWorld);
+        _v.copy(g.boundingSphere.center).applyMatrix4(m);
+        const reach = c.r + 3 + g.boundingSphere.radius * m.getMaxScaleOnAxis();
+        if ((_v.x - c.x) ** 2 + (_v.z - c.z) ** 2 < reach * reach) list.push({ geometry: g, matrixWorld: m.clone() });
+      }
+    });
+    return list.length ? merged(list, THREE.DoubleSide, cubeLayer) : null;
+  }
+  function syncStatic(centres) {
+    const live = new Set();
+    for (const c of centres) {
+      const key = `${c.x.toFixed(1)},${c.z.toFixed(1)}`; live.add(key);
+      let e = stat.get(key); if (!e) { e = { mesh: buildStatic(c) }; stat.set(key, e); }
+      if (e.mesh) e.mesh.visible = true;
+    }
+    for (const [key, e] of stat) if (!live.has(key) && e.mesh) e.mesh.visible = false;
+  }
+
   return {
-    root,
+    root, syncStatic,
     // Called with each caster handed back (e.g. to put it on the cube layer at once).
     set onFree(fn) { onFree = fn; },
     // A few times a second: weld still casters near the player, let go of those far behind.
@@ -133,7 +163,7 @@ export function createShadowProxies(scene, { cubeLayer, sunLayer }) {
         _v.copy(g.boundingSphere.center).applyMatrix4(o.matrixWorld);
         const d2 = (_v.x - px) ** 2 + (_v.z - pz) ** 2;
         const rw = g.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis();
-        if (centres.length && ownFixture(o, _v.x, _v.y, _v.z, rw, centres)) { if (welded) unweld(o); return; } // stays a live caster; the lamp's own cube skips it
+        if (centres.length && ownFixture(o, _v.x, _v.y, _v.z, rw, centres) >= 0) { if (welded) unweld(o); return; } // stays a live caster; the lamp's own cube skips it
         if (welded) {
           if (d2 > LET_GO * LET_GO) { unweld(o); return; }
           const st = cells.get(where.get(o)).members.get(o), near = isNear(g.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis(), centres);

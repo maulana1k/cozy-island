@@ -300,7 +300,7 @@ const waterFragment = /* glsl */ `
     float foam = clamp(mix(seaFoam, rivFoam, inland) * mix(0.6, 1.0, near) + obsFoam + rainRing * 0.12, 0.0, 1.0);
     col = mix(col, uFoam * uLight * 1.1, foam * 0.85);
     // Low sun: a golden path of light on the sea toward the real sun (the light itself never sinks below 13 degrees).
-    float sp = max(dot(R, uSunTrue), 0.0), path = (pow(sp, 60.0) * 0.9 + pow(sp, 14.0) * 0.12) * uPath * (1.0 - inland);
+    float sp = max(dot(R, uSunTrue), 0.0), path = (pow(sp, 40.0) * 1.2 + pow(sp, 10.0) * 0.2) * uPath * (1.0 - inland);
     col += uSunColor * vec3(1.0, 0.82, 0.55) * path * (1.0 - foam);
     glint = max(glint, path);
     col += uSunColor * glint * (1.0 - foam);
@@ -440,7 +440,7 @@ export function buildWater() {
   // (it is what the sky looks like low down), `sun` the sky's sun/moon light for glints, `rain` 0..1 for rings.
   mesh.userData.setLight = (light, fog, density, sun, rain = 0, sunDir = null, gold = 0) => {
     // sunDir: the real sun's direction; gold 0..1 how golden and clear the hour is (src/sunfx.js)
-    if (sunDir) { u.uSunTrue.value.copy(sunDir); u.uPath.value = gold * THREE.MathUtils.smoothstep(sunDir.y, -0.02, 0.06) * (1 - THREE.MathUtils.smoothstep(sunDir.y, 0.35, 0.6)); } else u.uPath.value = 0;
+    if (sunDir) { u.uSunTrue.value.copy(sunDir); u.uPath.value = gold * THREE.MathUtils.smoothstep(sunDir.y, -0.02, 0.06) * (1 - THREE.MathUtils.smoothstep(sunDir.y, 0.45, 0.75)); } else u.uPath.value = 0;
     u.uLight.value.copy(light);
     u.uFogColor.value.copy(fog);
     u.uFogDensity.value = density;

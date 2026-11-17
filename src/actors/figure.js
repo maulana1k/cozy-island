@@ -564,29 +564,30 @@ export function createFigure({
   // Walking, the step comes from the angles: the leg lands with the thigh about 24 degrees forward and a
   // nearly straight knee, so the footprint each foot sweeps (own units) follows from the leg's length.
   const WK_HU = 0.45, WK_K0 = WK_S_KN[0];                                   // the foot's tilt (toes up) and knee bend at heel strike
-  const WK_D0 = -HEEL * (1 - Math.cos(WK_HU)) - ANK * Math.sin(WK_HU);      // the ankle against the flat foot's spot, heel down and toes up
-  const WK_A = 0.45;                                                       // the share of the footprint ahead of the hip as the heel lands
-  const walkC = (A) => (TH * Math.sin(A) + SH * Math.sin(A - WK_K0) - WK_D0) / WK_A;
-  const A_NOM = 0.42, A_MAX = 0.60, C_LO = 1.8, C_HI = 3.5;               // 24 and up to 41 degrees (1.95 m/s walks on ~0.55 m steps, ~3.5 a second); a natural cadence band (steps a second on a scout's legs)
+  const huOf = (A) => WK_HU * smooth(A / 0.42);                             // short steps land flatter (toes high on a short step would prop the hips up as the heel lands)
+  const d0Of = (hu) => -HEEL * (1 - Math.cos(hu)) - ANK * Math.sin(hu);     // the ankle against the flat foot's spot, heel down and toes up
+  const WK_A = 0.42;                                                       // the share of the footprint ahead of the hip as the heel lands (the trailing leg, up on its toes, reaches further)
+  const walkC = (A) => (TH * Math.sin(A) + SH * Math.sin(A - WK_K0) - d0Of(huOf(A))) / WK_A;
+  // The landing thigh goes up to 40 degrees forward; the steps a second a scout's legs like to take at a
+  // standstill (C_0) and how much quicker they turn over for each m/s (C_V); the slowest amble (C_LO).
+  const A_MAX = 0.70, C_0 = 1.75, C_V = 0.69, C_LO = 1.6;
   const gaitOut = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 }, gaitAsk = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 };
   let gDw = 0.6;
   const sOf = (A) => (walkC(A) * scale) / (2 * gDw);                      // a walking step at this angle (m)
   function gaitOf(v, out = gaitOut) {
     const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
-    // Walking: about 24 degrees each way, the cadence whatever puts the planted foot down without skating
-    // (speed over step). Ambling, the steps shorten rather than the legs turning over in slow motion; brisk,
-    // the hips swing wider (up to 30 degrees) before the legs turn over faster than about 3 a second.
-    // Each foot is down 60% of the stride, so for a tenth of it at each footfall both are (double support).
+    // Walking: speeding up, the steps get longer much more than they get quicker (about 2.4 a second at a
+    // stroll, 3.1 at a brisk 1.95 m/s), so the legs never scurry. The step comes from the landing angle: the
+    // cadence is whatever puts the planted foot down without skating (speed over step). Only once the hips
+    // swing as wide as they can (A_MAX) do the legs turn over faster instead.
+    // Each foot is down 60% of the stride at a stroll and 55% striding out, so at each footfall both are
+    // down for a moment (double support).
     // Running (above about 2.2 on a scout's legs): every step has a moment in the air; the blend runs over 2.15 to 2.9.
-    const Dw = 0.6 - 0.02 * smooth(vk / 2.0); gDw = Dw;
-    let A = A_NOM, want = 0;
-    if (v * sqK > C_HI * sOf(A_NOM)) want = (v * sqK) / C_HI;
-    else if (v * sqK < C_LO * sOf(A_NOM)) want = (v * sqK) / C_LO;
-    if (want > 0) {
-      let lo = want > sOf(A_NOM) ? A_NOM : 0, hi = want > sOf(A_NOM) ? A_MAX : A_NOM;
-      for (let k = 0; k < 14; k++) { const m = (lo + hi) / 2; if (sOf(m) < want) lo = m; else hi = m; }
-      A = (lo + hi) / 2;
-    }
+    const Dw = 0.6 - 0.05 * smooth(vk / 1.9); gDw = Dw;
+    const want = (v * sqK) / (C_0 + C_V * vk);
+    let lo = 0, hi = A_MAX;
+    for (let k = 0; k < 14; k++) { const m = (lo + hi) / 2; if (sOf(m) < want) lo = m; else hi = m; }
+    const A = (lo + hi) / 2;
     const cWk = Math.max(C_LO, (v * sqK) / sOf(A));                       // steps a second, on a scout's legs
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
     const Cr = 0.50;                                                      // the longest footprint a scout's leg sweeps running (m)
@@ -774,7 +775,7 @@ export function createFigure({
       if (!inAir && spd >= 0.04) phase = (phase + dt * G.c * 0.5 * going * hurry) % 1; // (stopped: see the settling step below)
       // How much of a real run this is: a moment in the air between steps (none walking, so walking is untouched).
       fly = run * smooth((0.5 - D) / 0.12);
-      const heelUp = lerp(WK_HU, 0.3, run) * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
+      const hu = huOf(G.A), heelUp = lerp(hu, 0.3, run) * gait, toeOff = lerp(lerp(0.62, 0.75, run), 0.9, fly) * gait; // no rolling heel-to-toe when standing
       // Leaning: forward into a run, a touch more while speeding up, back a little while braking. Never into bends.
       const accLean = inAir ? 0 : clamp(acc * 0.008, -0.08, 0.08);
       const crouch = o.crouch || 0, land = o.land || 0;
@@ -799,10 +800,10 @@ export function createFigure({
       fwdX = Math.sin(yaw); fwdZ = Math.cos(yaw);
       const legFree = !o.sitting && !o.sitGround && !inAir && !LEG_POSES.has(o.pose) && !(o.gesture && LEG_GESTURES.has(o.gesture.name));
       if (!legFree || lastElapsed === null) { legs[0].anc = legs[1].anc = false; legs[0].held = legs[1].held = false; stLeg = -1; }
-      wkGait = gait; wkHu = WK_HU * gait; wkC = C; wkSH = Math.min(1, 0.5 / D); wkSig = 0;
+      wkGait = gait; wkHu = hu * gait; wkC = C; wkSH = Math.min(1, 0.5 / D); wkSig = 0;
       const sTO = Math.max(0, (D - 0.5) / D); // how far into its stance the leading leg is when the other one's toes leave
       // The hips turn toward the forward leg (see below), most as a heel lands: that carries its hip joint this far forward.
-      const walkW = gait * locoLegs * (inAir ? 0 : 1), rA = C > 1e-3 ? 1 / (C * 0.5 + 0.02) : 0, yawK = walkW * lerp(0.11, 0.13, run) * 0.5;
+      const walkW = gait * locoLegs * (inAir ? 0 : 1), rA = C > 1e-3 ? 1 / (C * 0.5 + 0.02) : 0, wide = smooth((G.A - 0.3) / (A_MAX - 0.3)) * (1 - run), yawK = walkW * lerp(lerp(0.11, 0.17, wide), 0.13, run) * 0.5; // (a long stride turns the hips further)
       const dzHS = P.hipX * Math.sin(yawK * (clamp(rollAt(C * WK_A, -wkHu, wkP).z * rA, -1.2, 1.2) - clamp(rollAt(C * (WK_A - wkSH), 0, wkP).z * rA, -1.2, 1.2)));
       const H0 = wkH(0, -wkHu, dzHS, 0);     // the hips over a leg landing on its heel
       wkCl = 1; wkSl = 0;
@@ -1092,13 +1093,17 @@ export function createFigure({
       // ---- Arms: pendulums from the shoulders, driven by the opposite leg through the twist of the trunk.
       // Nearly straight and loose at a walk; bent to about a right angle and pumping at a run.
       // Each arm goes with the opposite leg's place in its stride (+1 forward). Angles are aimed in the world,
-      // so a body leaning into a run does not carry the arms up with it. Walking: a loose swing of about 15
-      // degrees each way. Running: elbows at about a right angle, the hand coming forward to the chest and
+      // so a body leaning into a run does not carry the arms up with it. Walking: a loose swing of about 12
+      // degrees each way at a stroll. Running: elbows at about a right angle, the hand coming forward to the chest and
       // back past the hip (further back than forward), not an athlete's punch.
       const fR = C > 1e-3 ? clamp(legs[0].z / (C * 0.5 + 0.02), -1, 1) : 0, fL = C > 1e-3 ? clamp(legs[1].z / (C * 0.5 + 0.02), -1, 1) : 0;
-      const aSw = lerp(0.27, 0.1, run) * gait * going, aOff = lerp(0.025, 0.35, run) * gait - (lean + t.trunk) * 0.85 + clamp(acc * 0.012, -0.15, 0.12);
-      t.shLx = aOff - aSw * fL; t.shRx = aOff - aSw * fR;
-      const elOf = (f) => -(0.15 * (1 - gait) + gait * (lerp(0.2, 0.3, run) + lerp(0.15 * Math.max(0, f), 0.04 * f, run) * going));
+      // Striding out, the swing widens with the step (to about 20 degrees), further forward than back, and the
+      // elbow folds as the hand comes forward and opens again behind. (The springs below carry each arm, and
+      // then its forearm, a moment late, so nothing turns round in step with the legs.)
+      const aSw = lerp(0.24 + 0.2 * wide, 0.1, run) * gait * going, aOff = lerp(0.025 + 0.03 * wide, 0.35, run) * gait - (lean + t.trunk) * 0.85 + clamp(acc * 0.012, -0.15, 0.12);
+      const aFwd = (f) => f * lerp(f > 0 ? 1.15 : 0.8, 1, run);
+      t.shLx = aOff - aSw * aFwd(fL); t.shRx = aOff - aSw * aFwd(fR);
+      const elOf = (f) => -(0.15 * (1 - gait) + gait * (lerp(0.2 + 0.05 * wide, 0.3, run) + lerp((0.15 + 0.25 * wide) * Math.max(0, f) - 0.08 * wide * Math.max(0, -f), 0.04 * f, run) * going));
       t.elL = elOf(fL); t.elR = elOf(fR);
       t.shLz = -(0.12 + 0.56 * run); t.shRz = 0.12 + 0.56 * run; // running: both arms out to the sides like little wings (about 40 degrees)
       // Winding up for a jump: arms swing back. Landing from a standing jump: arms out for balance.
@@ -1112,22 +1117,22 @@ export function createFigure({
       if (inAir) {
         const a = clamp(o.air, -1, 1), up = Math.max(0, a), down = Math.max(0, -a), top = 1 - up - down;
         const m3 = (u0, t0, d0) => u0 * up + t0 * top + d0 * down;
+        // Both arms go up for joy: swinging up with the take-off, highest (overhead, in an open V, elbows a
+        // little soft) at the top, on their way down again as the feet come back to the ground.
+        const armsUp = m3(-2.0, -2.85, -1.6), armsEl = m3(-0.45, -0.15, -0.4), armsOutZ = m3(0.3, 0.5, 0.55); // (wide enough for the hands to clear the head and hat)
         if (jump && jump.run) {
-          // A leap off one foot: lead knee driven forward, the other leg trailing long behind, the opposite
-          // arm reaching forward; the trailing leg folds up through the top and the lead leg reaches to land.
+          // A leap off one foot: lead knee driven forward, the other leg trailing long behind; the trailing
+          // leg folds up through the top and the lead leg reaches to land.
           const thLead = m3(-1.05, -1.15, -0.62), knLead = m3(1.3, 0.95, 0.3), thTrail = m3(0.42, 0.15, -0.1), knTrail = m3(0.35, 1.0, 1.2);
-          const fwdArm = m3(-1.2, -1.0, -0.75), backArm = m3(0.65, 0.4, 0.15);
-          if (jump.lead === 0) { t.thL = thLead; t.knL = knLead; t.thR = thTrail; t.knR = knTrail; t.shRx = fwdArm; t.shLx = backArm; }
-          else { t.thR = thLead; t.knR = knLead; t.thL = thTrail; t.knL = knTrail; t.shLx = fwdArm; t.shRx = backArm; }
-          t.elL = t.elR = -m3(1.15, 1.0, 0.7); t.shLz = -0.28; t.shRz = 0.28;
+          if (jump.lead === 0) { t.thL = thLead; t.knL = knLead; t.thR = thTrail; t.knR = knTrail; t.shRx = armsUp - 0.12; t.shLx = armsUp + 0.12; }
+          else { t.thR = thLead; t.knR = knLead; t.thL = thTrail; t.knL = knTrail; t.shLx = armsUp - 0.12; t.shRx = armsUp + 0.12; }
+          t.elL = t.elR = armsEl; t.shLz = -armsOutZ; t.shRz = armsOutZ; // (the arm opposite the lead leg a touch further forward)
           t.lean = m3(0.16, 0.1, 0.03); t.trunk = m3(0.12, 0.05, 0.0);
           t.fL = t.fR = m3(0.55, 0.4, 0.05);
         } else {
-          // From standing: pushed off long with arms flung high, tucked at the top, legs reaching down and
-          // arms spreading out for balance on the way to the ground.
+          // From standing: pushed off long, tucked at the top, legs reaching down to the ground.
           t.thL = t.thR = m3(-0.12, -1.05, -0.42); t.knL = t.knR = m3(0.18, 1.65, 0.5);
-          t.shLx = t.shRx = m3(-2.5, -1.3, -0.5); t.elL = t.elR = m3(-0.25, -0.65, -0.3);
-          t.shLz = -m3(0.2, 0.45, 1.05); t.shRz = m3(0.2, 0.45, 1.05);
+          t.shLx = t.shRx = armsUp; t.elL = t.elR = armsEl; t.shLz = -armsOutZ; t.shRz = armsOutZ;
           t.lean = m3(0.0, 0.1, 0.04); t.trunk = m3(-0.06, 0.25, 0.06);
           t.fL = t.fR = m3(0.65, 0.4, 0.1);
         }
@@ -1228,7 +1233,7 @@ export function createFigure({
         snap = 26;
       }
       // Holding a torch out in front, the beam swinging a little with each step.
-      if (o.hold === 'torch' && !o.pose && !o.sitting) { t.shRx = -0.95 - (t.lean + t.trunk) * 0.6 + Math.sin(phase * Math.PI * 4) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
+      if (o.hold === 'torch' && !o.pose && !o.sitting && !inAir) { t.shRx = -0.95 - (t.lean + t.trunk) * 0.6 + Math.sin(phase * Math.PI * 4) * 0.05 * gait; t.elR = -0.62 - t.lean; t.shRz = 0.06; }
       // Sat on the ground, leaning in (to write, to eat) bends the back over the lap: the hips stay put.
       if (o.sitGround) { t.trunk += t.lean; t.lean = 0; }
       // ---- Gestures layered on top

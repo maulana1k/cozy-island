@@ -92,6 +92,7 @@ Rules without Three.js are in `src/logic/` (`terrain`, `layout`, `collision`, `d
 | `world/react.js` | V3: bushes and ferns part round people, loose pebbles/cones/mugs/sticks get kicked, bunting, washing line, lanterns and bell rope swing as damped pendulums, tent cloth ripples |
 | `cutscene.js` | Film director and shot format (section 5) |
 | `world/flames.js`, `world/props.js` | Shader fire; lamps, campfires, flag, seats, bell (with pull rope), telescope. Night shadow cubes on the `NEAR_CASTERS` layer (5) |
+| `world/shadowProxy.js` | Every shadow map (sun/moon, bonfire cube, nearest-lamp cube) is redrawn every picture; still casters within 50 m are welded per 10 m cell into shadow-only meshes (layer 6 for the sun, 5 for the cubes) and cast nothing themselves while welded. Anything that moves more than 1.5 cm, reshapes or hides casts live again |
 | `world/buildings.js`, `world/zipDoor.js`, `kit/tents.js` | Walk-in tents, beds, doors with zip-door animation; tent models |
 | `actors/figure.js` | One skinned body per person: FK walk/run, ground sit, fidgets, glances, `setGround` |
 | `actors/player.js` | Player movement, collisions, set-off and stop, hop, backpack and cap |

@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WIND } from './weather.js';
 import { createFlames } from './flames.js';
 import { emitSparks, emitSmoke } from './particles.js';
+import { createShadowProxies } from './shadowProxy.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, flatShading: true, ...extra });
 
@@ -20,7 +21,7 @@ function mesh(geo, material, x = 0, y = 0, z = 0, shadow = true) {
 const SHADOW_FIRE = 1024; // cube-map size per face for the bonfire
 const NEAR_CASTERS = 5; // a layer: the people and things close enough to a fire or lamp to be drawn into its shadow cube
 const SHADOW_LAMP = 512;  // and for the nearest lit lamp
-const FIRE_SHADOW_EVERY = 0.025, LAMP_SHADOW_EVERY = 0.045; // s between shadow redraws: the bonfire every shadow pass (about 30 a second), the lamp about 10 a second
+export const SUN_PROXIES = 6; // a layer: welded still casters (src/world/shadowProxy.js) the sun's shadow camera also draws
 
 export function createProps(scene, deps) {
   const shadowFires = [];
@@ -283,8 +284,8 @@ export function createProps(scene, deps) {
       flames.position.y = 0.25;
       g.scale.setScalar(1.9);
       light.distance = 20; light.position.y = 1.3; // also the reach of its shadow cube, redrawn every picture: keep it close
-      // The bonfire throws real shadows, radially away from itself. Its cube map is not redrawn every
-      // frame: it is rebuilt on its own slow schedule (see the updater below). The logs and stones round
+      // The bonfire throws real shadows, radially away from itself. Its cube map is redrawn every picture
+      // while it burns near the player, so people's shadows keep step with them. The logs and stones round
       // the flame must not cast, or they would shadow everything from a light that sits inside the stack.
       g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
       light.castShadow = true;
@@ -315,16 +316,12 @@ export function createProps(scene, deps) {
       interact() { if (hooks.fire && fire.lit && hooks.fire.interact(rec)) return; if (scheduled) return; fire.lit = !fire.lit; audio.play('fire'); },
     });
     fires.push(rec);
-    let shadowAge = 99, shadowWas = false;
     updaters.push((dt, elapsed) => {
       if (scheduled) fire.lit = burning();
       if (big) {
-        // Redraw the shadow cube a little over once a second while it can be seen (lit, player near);
-        // the redraw itself happens in main.js's alternate-frame shadow pass, never as an extra pass.
-        const on = fire.level > 0.3 && Math.hypot(player.position.x - f.x, player.position.z - f.z) < 40;
-        shadowAge += dt;
-        if (on && (!shadowWas || shadowAge > FIRE_SHADOW_EVERY)) { light.shadow.needsUpdate = true; shadowAge = 0; }
-        shadowWas = on;
+        // Redraw the shadow cube every picture while it can be seen (lit, player near); the redraw happens
+        // in main.js's shadow pass, never as an extra pass. Cheap: still casters are welded (shadowProxy.js).
+        if (fire.level > 0.3 && Math.hypot(player.position.x - f.x, player.position.z - f.z) < 40) light.shadow.needsUpdate = true;
       }
       fire.level += ((fire.lit ? 1 : 0) - fire.level) * Math.min(1, dt * 5);
       const near = Math.hypot(player.position.x - f.x, player.position.z - f.z) < 135; // far fires draw and shade nothing
@@ -360,15 +357,18 @@ export function createProps(scene, deps) {
   // A few real lights follow the lamps nearest you, so the ground and walls round them are lit; every
   // other lamp just glows. Lamps from other areas (the village, the pier) join through addLamps.
   const lampLights = [0, 1, 2, 3].map(() => { const l = new THREE.PointLight(0xffeedd, 0, 22, 1.0); scene.add(l); return l; }); // a soft warm white, not yellow, reaching well down the path
-  // The nearest lit lamp also casts a cube shadow, rebuilt on a slow schedule or when another lamp becomes nearest.
+  // The nearest lit lamp also casts a cube shadow, redrawn every picture while it is lit.
   { const sh = lampLights[0].shadow; lampLights[0].castShadow = true; sh.mapSize.set(SHADOW_LAMP, SHADOW_LAMP); sh.bias = -0.0008; sh.normalBias = 0.02; sh.radius = 1.5; sh.camera.near = 0.4; sh.autoUpdate = false; sh.intensity = 1; sh.camera.layers.set(NEAR_CASTERS); }
-  let lampShadowTarget = null, lampShadowAge = 99;
   // A few times a second, mark which shadow casters stand near a lit fire or the shadowing lamp, so the
   // cube shadows (redrawn every picture) draw a handful of things instead of the whole island six times over.
+  // Still casters near the player are welded into a few shadow-only meshes (src/world/shadowProxy.js,
+  // already on this layer), so the cubes draw those plus the people, and can be redrawn every picture.
   const _c = new THREE.Vector3(); let casterScan = 0;
+  const proxies = createShadowProxies(scene, { cubeLayer: NEAR_CASTERS, sunLayer: SUN_PROXIES });
+  proxies.onFree = (o) => o.layers.enable(NEAR_CASTERS); // drawn live at once; the next scan sorts near from far
   function markNearCasters(centres) {
     scene.traverse((o) => {
-      if (!o.isMesh || !o.castShadow || o.isInstancedMesh) return;
+      if (!o.isMesh || !o.castShadow || o.isInstancedMesh || o.userData.shadowProxy) return;
       const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere();
       const bs = o.boundingSphere || g.boundingSphere;
       _c.copy(bs.center).applyMatrix4(o.matrixWorld);
@@ -421,18 +421,18 @@ export function createProps(scene, deps) {
       for (const l of outside) { l.glow = Math.max(dusk, gloom); if (dusk > 0.03 && l.pos.distanceToSquared(pp) < 45 * 45) byDistance.push(l); }
       byDistance.sort((a, b) => a.pos.distanceToSquared(pp) - b.pos.distanceToSquared(pp));
       const dark = lampDark = Math.min(1, Math.max(0, (nightF - 0.1) / 0.5)); // in daylight a lamp casts no light on its surroundings, whether or not it is switched on
-      { // the first lamp light's shadow: rebuilt when it moves to another lamp, else about every 1.5 s
-        const l0 = dark > 0.3 ? byDistance[0] : null, sh = lampLights[0].shadow;
-        lampShadowAge += dt;
-        if (l0 && (l0 !== lampShadowTarget || lampShadowAge > LAMP_SHADOW_EVERY)) { sh.needsUpdate = true; lampShadowAge = 0; }
-        lampShadowTarget = l0;
+      { // the first lamp light's shadow: redrawn every picture, so it keeps step with the people
+        const l0 = dark > 0.3 ? byDistance[0] : null;
+        if (l0) lampLights[0].shadow.needsUpdate = true;
         casterScan -= dt;
         if (casterScan <= 0) {
           casterScan = 0.25; casterCentres.length = 0;
           for (const sf of shadowFires) if (sf.light.intensity > 0.5 && (sf.x - pp.x) ** 2 + (sf.z - pp.z) ** 2 < 45 * 45) casterCentres.push({ x: sf.x, z: sf.z, r: 14 });
           if (l0) casterCentres.push({ x: l0.pos.x, z: l0.pos.z, r: 9 });
           if (casterCentres.length) markNearCasters(casterCentres);
+          proxies.scan(pp.x, pp.z, casterCentres);
         }
+        proxies.check(); // a welded caster that moved or hid casts live again from this picture
       }
       lampLights.forEach((light, k) => { const l = byDistance[k]; if (l && (dark > 0.01 || dimness() > 0.02)) { light.position.copy(l.pos); light.intensity = l.glow * 7 * l.flicker * Math.max(dark, 0.5 * dimness()); } else light.intensity = 0; });
 

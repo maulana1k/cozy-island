@@ -8,7 +8,7 @@ import { createCampProps } from './world/campProps.js';
 import { createScatter } from './world/scatter.js';
 import { createPond } from './world/pond.js';
 import { createZipline } from './world/zipline.js';
-import { createProps } from './world/props.js';
+import { createProps, SUN_PROXIES } from './world/props.js';
 import { createInput } from './input.js';
 import { createPlayer } from './actors/player.js';
 import { createVillagers } from './actors/villagers.js';
@@ -102,6 +102,7 @@ const ui = createUI(scene);
 const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
+sky.sunLight.shadow.camera.layers.enable(SUN_PROXIES); // the welded still casters near the player (src/world/shadowProxy.js), next to layer 0
 const weather = createWeather(scene, params, audio); // random weather; ?weather=rain|wind|fog|sun forces one
 weather.setGround(groundAt); // rain rings land on decks and bridges too
 const village = createVillage(scene);
@@ -979,11 +980,10 @@ function step() {
   react.update(dt, elapsed);
   ui.update(dt, elapsed);
 
-  // Shadows are redrawn every second picture at the smooth rate: nobody sees a shadow one frame late.
-  // The sun's big shadow map is redrawn every second picture; the fire's and the lamp's (small, only at
-  // night and close by) every picture, so the shadows round the bonfire never lag behind the people.
+  // Every shadow a moving person casts is redrawn every picture, so it moves in lockstep with them: the
+  // sun's (or moon's) map here, the fire's and the nearest lamp's cubes when src/world/props.js asks.
   sky.sunLight.shadow.autoUpdate = false;
-  sky.sunLight.shadow.needsUpdate = saver || (stats.frames & 1) === 0;
+  sky.sunLight.shadow.needsUpdate = true;
   renderer.shadowMap.needsUpdate = true;
   contact.update(camera);
   renderer.info.reset();
@@ -991,7 +991,7 @@ function step() {
   finish.lite = graphics !== 'high'; // Low still draws through the finishing pass while the camera is up: no glow, a cheaper blur
   if (graphics === 'high' || photo.active) finish.render(scene, camera); else renderer.render(scene, camera);
   photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
-  // Counted over two pictures, since only every other one redraws the shadows.
+  // Averaged over two pictures, to steady the readout.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;
   drawn.lastCalls = renderer.info.render.calls; drawn.lastTris = renderer.info.render.triangles;
 }

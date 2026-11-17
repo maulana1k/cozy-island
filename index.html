@@ -40,15 +40,21 @@
     #hud .line .time { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
     #hud .now { margin-top: 5px; font-size: 15px; font-weight: 700; }
 
-    /* How you feel: small icons, only shown when low or for a moment after a change */
-    #hud .stats { margin-top: 10px; display: flex; gap: 12px; align-items: flex-start; min-height: 30px; }
-    #hud .stat { display: flex; flex-direction: column; align-items: center; gap: 3px; opacity: 0; transform: scale(0.8); transition: opacity 0.9s ease, transform 0.9s ease; }
-    #hud .stat.seen, #hud .stat.low { opacity: 0.95; transform: none; transition-duration: 0.35s; }
-    #hud .stat .ico { width: 18px; height: 18px; }
-    #hud .meter { width: 18px; height: 3px; border-radius: 9px; background: rgba(255, 255, 255, 0.32); overflow: hidden; box-shadow: 0 1px 3px rgba(20, 20, 30, 0.3); }
-    #hud .meter i { display: block; height: 100%; width: 50%; background: #fff; border-radius: 9px; transition: width 0.5s ease; }
-    #hud .stat.low { color: #ffc2ad; animation: pulse 1.6s ease-in-out infinite; }
-    #hud .stat.low .meter i { background: #ff9a7a; }
+    /* How you feel: a compact row of paper pills right above the quick bar. Dimmed when all is well, full when low / changed / belt awake */
+    #hud .stats { position: absolute; left: 50%; bottom: 80px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; opacity: 0; transition: opacity 0.7s ease; white-space: nowrap; }
+    #hud.playing .stats { opacity: 0.6; }
+    #hud.playing .stats.awake { opacity: 1; transition-duration: 0.35s; }
+    #hud .stat { display: flex; align-items: center; gap: 7px; height: 26px; padding: 3px 11px 3px 8px; box-sizing: border-box; border-radius: 999px; color: var(--ink); text-shadow: none; background: rgba(255, 251, 242, 0.9); box-shadow: 0 2px 6px rgba(20, 20, 30, 0.25); }
+    #hud .stat .ico { width: 22px; height: 22px; color: #3f9a6b; }
+    #hud .stat svg { filter: none; }
+    #hud .meter { width: 76px; height: 9px; border-radius: 9px; background: rgba(43, 52, 64, 0.14); overflow: hidden; }
+    #hud .meter i { display: block; height: 100%; width: 50%; background: #5bb98b; border-radius: 9px; transition: width 0.5s ease, background 0.4s ease; }
+    #hud .stat .sn { font: 800 12px var(--font); font-variant-numeric: tabular-nums; width: 0; overflow: hidden; opacity: 0; transition: width 0.2s ease, opacity 0.2s ease; }
+    #hud .stat.low .sn, #hud .stat:hover .sn { width: 22px; opacity: 1; text-align: right; }
+    #hud .stat.low .ico { color: #e8563f; }
+    #hud .stat.low .meter i { background: #f2764f; animation: statlow 1.6s ease-in-out infinite; }
+    @keyframes statlow { 50% { opacity: 0.55; } }
+    #hud .stats { pointer-events: auto; }
 
     /* Calm: the clock block, the toolbar and the pocket belt fade out when idle (rule in src/hud.js) */
     #hud .fade { transition: opacity 0.4s ease; }

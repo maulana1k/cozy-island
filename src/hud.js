@@ -394,12 +394,12 @@ export function createHUD(handlers) {
   const wxEl = el('span', 'wx'); // the weather: a small icon and word next to the clock
   clockLine.append(clockIco, time, phase, wxEl);
   const nowLine = el('div', 'line now');
-  // How you are feeling: four small icons that only show when a stat is low, or for a moment when it changes
+  // How you are feeling: Food, Water, Energy, Cheer as a compact row just above the quick bar (always there, dimmed when calm)
   const statBox = el('div', 'stats'); const statRows = {};
-  for (const k of STAT_KEYS) { const row = el('div', 'stat'); row.title = STAT_LABEL[k]; const fill = el('i'); const meter = el('div', 'meter'); meter.append(fill); row.append(icon(k), meter); statBox.append(row); statRows[k] = { row, fill, shown: null, timer: null }; }
+  for (const k of STAT_KEYS) { const row = el('div', 'stat'); row.title = STAT_LABEL[k]; const fill = el('i'); const meter = el('div', 'meter'); meter.append(fill); const num = el('b', 'sn'); row.append(icon(k), meter, num); statBox.append(row); statRows[k] = { row, fill, num, shown: null, timer: null }; }
   // Rank, clock and weather fade away when idle (see "calm" below); the stat icons have their own rule.
   const topGroup = el('div', 'fade'); topGroup.append(rankLine, bar, clockLine, nowLine);
-  tl.append(topGroup, statBox);
+  tl.append(topGroup);
 
   // ---- Bottom-left: line-drawn buttons, and what you are standing on
   const bl = el('div', 'bl');
@@ -554,7 +554,7 @@ export function createHUD(handlers) {
   paintCursor();
 
   const night = el('div', 'sleep'); night.append(el('div', 'zz', 'Z z z'), el('div', 'sub', 'Sleeping until morning. Press any movement key to get up.'));
-  root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, belt, hints, toasts, rewards, banner, bubble, book, sheet, packSheet, start, menu);
+  root.append(danger, alertBox, stop, night, lookHint, way, quest, tip, cine, tl, bl, statBox, belt, hints, toasts, rewards, banner, bubble, book, sheet, packSheet, start, menu);
 
   resume.addEventListener('click', () => handlers.onResume());
   menuBtn.addEventListener('click', () => handlers.onToggleMenu());
@@ -591,6 +591,9 @@ export function createHUD(handlers) {
   function paintCalm() {
     const now = performance.now();
     for (const n of ['top', 'bar', 'belt']) calm[n].node.classList.toggle('away', hud.started && !calm.alt && now > calm[n].until);
+    // The stat row moves with the belt: full strength when any stat is low or just changed, or the belt is awake; else dimmed.
+    const rows = STAT_KEYS.map((k) => statRows[k].row);
+    statBox.classList.toggle('awake', calm.alt || now <= calm.belt.until || rows.some((r) => r.classList.contains('low') || r.classList.contains('seen')));
   }
   setInterval(paintCalm, 500);
   const ZONES = { top: (x, y) => x < 400 && y < 170, bar: (x, y) => x < 460 && y > innerHeight - 130, belt: (x, y) => Math.abs(x - innerWidth / 2) < 260 && y > innerHeight - 120 };
@@ -665,13 +668,14 @@ export function createHUD(handlers) {
         const v = Math.round(s[k]), low = s[k] < LOW;
         if (statRows[k].v === v) continue;
         const R = statRows[k];
-        R.v = v; R.fill.style.width = `${v}%`; R.row.classList.toggle('low', low);
+        R.v = v; R.fill.style.width = `${v}%`; R.num.textContent = v; R.row.classList.toggle('low', low);
         // Shown while low; otherwise for a few seconds after a real change (not every tiny drain tick).
         if (R.shown === null) R.shown = v;
         else if (Math.abs(v - R.shown) >= 6) { R.shown = v; R.row.classList.add('seen'); clearTimeout(R.timer); R.timer = setTimeout(() => R.row.classList.remove('seen'), 3500); }
         feelRows[k].fill.style.width = `${v}%`; feelRows[k].n.textContent = v; feelRows[k].r.classList.toggle('low', low);
       }
       statRows.energy.row.classList.toggle('low', s.winded || s.energy < LOW);
+      paintCalm();
     },
     // view: { slots: [{ id, count, label? }], capacity }. Redraws the belt and the pockets.
     setBag(view) {

@@ -66,7 +66,7 @@ const LABELS = [
   ['Dock', { x: DOCK.x + 6, z: DOCK.z + 2 }, 46, 26], ['Bridge', { x: (AREAS.bridge.a.x + AREAS.bridge.b.x) / 2, z: (AREAS.bridge.a.z + AREAS.bridge.b.z) / 2 }, 40, 34],
   ['River', AREAS.river[5], -50, 6], ['Lake', AREAS.lake, -58, 18], ['Waterfall', AREAS.waterfall.foot, 54, 4], ['Lookout', AREAS.lookout, -46, -34],
   ['Village', AREAS.village, 6, 52], ['Fields', AREAS.paddies, 26, 36], ['Jetty', AREAS.jetty, -10, 40], ['Clearing', AREAS.clearing, 44, 28],
-  ['Fish market', AREAS.waterfront.market, 44, 34], ["Fishermen's beach", AREAS.waterfront.at(-6, 8), -40, 46],
+  ['Fish market', AREAS.waterfront.market, 44, -30], ["Fishermen's beach", AREAS.waterfront.at(-10, 16), -40, 46], ['Pier', AREAS.waterfront.at(AREAS.waterfront.pier.s, 40), 46, 30],
 ];
 
 // A tiny repeatable random number from a seed.

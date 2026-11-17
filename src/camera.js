@@ -3,7 +3,7 @@ import { heightAt } from './logic/terrain.js';
 import { CAMERA } from './config.js';
 
 const DEG = Math.PI / 180;
-const LOOK_HEIGHT = 0.95;
+const LOOK_HEIGHT = 1.1; // a little above the shoulders, so a low pitch still shows the ground round the feet
 const CAMERA_CLEARANCE = 0.5;
 const INSIDE_PITCH = 46 * DEG, INSIDE_DISTANCE = 6.8;
 
@@ -21,7 +21,9 @@ function insideTall(x, z, colliders) {
 export function createFollowCamera(camera) {
   const target = new THREE.Vector3();
   let initialised = false;
-  let pitch = 19 * DEG, livePitch = pitch, wantDistance = CAMERA.distance, distance = CAMERA.distance, insideBlend = 0;
+  // A low default pitch (The Trail's view): the horizon sits about a quarter down the frame, so sky and
+  // far hills share the picture with the ground. Mouse drag still tips it from CAMERA.minPitch to maxPitch.
+  let pitch = 13 * DEG, livePitch = pitch, wantDistance = CAMERA.distance, distance = CAMERA.distance, insideBlend = 0;
   const offset = new THREE.Vector3();
   const baseFov = camera.fov;
 

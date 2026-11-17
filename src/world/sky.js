@@ -7,7 +7,7 @@ import { markGlow } from '../finish.js';
 
 const SUN_SCALE = 1.0;
 const AMBIENT_SCALE = 1.25;
-const FOG_DENSITY = 0.006; // aerial perspective: the near ground stays vivid, far hills fade into soft haze
+const FOG_DENSITY = 0.0064; // aerial perspective: the near ground stays vivid, far hills fade into soft haze
 const WEATHER_FOG = 0.0046; // the step weather adds per unit of fog or rain (kept from before the haze, so fog and rain look as they did)
 // Shadows are drawn only near the player, where you can see them, so the map's texels stay small and
 // edges stay smooth. SHADOW_TEXELS is the map size; one texel is 2 * SHADOW_HALF / SHADOW_TEXELS metres.
@@ -71,14 +71,16 @@ function buildClouds(rng) {
       if (i) { const o = first + (i - 1) * 2; idx.push(o, o + 1, o + 2, o + 2, o + 1, o + 3); }
     }
   };
-  for (let n = 0; n < 16; n++) {
-    const a = (n / 16) * Math.PI * 2 + (rng() - 0.5) * 0.3, R = 330 + rng() * 140, y0 = 70 + rng() * 90;
+  // A few big ones rather than many small: The Trail's sky is a handful of large flat paper shapes.
+  const COUNT = 9;
+  for (let n = 0; n < COUNT; n++) {
+    const a = (n / COUNT) * Math.PI * 2 + (rng() - 0.5) * 0.45, R = 400 + rng() * 120, y0 = 85 + rng() * 95;
     const cx = Math.cos(a) * R, cz = Math.sin(a) * R, tx = -Math.sin(a), tz = Math.cos(a), nx = -Math.cos(a), nz = -Math.sin(a);
     const place = (x, y, back) => pos.push(cx + tx * x - nx * back, y0 + y, cz + tz * x - nz * back);
-    const w = 50 + rng() * 80, h = 10 + rng() * 14;
-    slab(place, -w / 2, w / 2, 0, h, 5 + Math.floor(rng() * 3), white, 0);
+    const w = 120 + rng() * 110, h = 20 + rng() * 18;
+    slab(place, -w / 2, w / 2, 0, h, 4 + Math.floor(rng() * 3), white, 0);
     const off = (rng() - 0.5) * w * 0.5, fw = w * (0.45 + rng() * 0.3);
-    slab(place, off - fw / 2, off + fw / 2, -h * 0.28, h * 0.6, 3 + Math.floor(rng() * 2), under, 3);
+    slab(place, off - fw / 2, off + fw / 2, -h * 0.28, h * 0.6, 3 + Math.floor(rng() * 2), under, 4);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -87,6 +89,55 @@ function buildClouds(rng) {
   const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false, depthWrite: false, transparent: true, opacity: 0.94 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = -8;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+// Far ridges: a few spans of distant hills on the sea horizon, in two layers - the nearer a little
+// deeper blue, the further paler - each fading into the haze at its foot (The Trail's stepped, paper-cut
+// distance). One mesh, one draw call; it follows the player like the clouds and takes its colours from the
+// sky of the hour in update(), so it goes lavender at dusk, dark at night and vanishes in fog and rain.
+function buildRidges(rng) {
+  const pos = [], aux = [], idx = [];
+  const span = (layer, a0, a1, R, hMin, hMax) => {
+    // A handful of peaks joined by straight runs: an angular silhouette with flat facets.
+    const cols = Math.max(4, Math.round((a1 - a0) * R / 22)), first = pos.length / 3;
+    let peak = hMin + rng() * (hMax - hMin);
+    for (let i = 0; i <= cols; i++) {
+      const f = i / cols, a = a0 + (a1 - a0) * f, end = Math.min(f, 1 - f);
+      if (i % 3 === 0) peak = hMin + rng() * (hMax - hMin);
+      const h = Math.max(4, peak * Math.min(1, end * 5) * (0.75 + 0.25 * rng()));
+      const x = Math.cos(a) * R, z = Math.sin(a) * R;
+      pos.push(x, -12, z, x, h, z);
+      aux.push(layer, 0, layer, 1);
+      if (i) { const o = first + (i - 1) * 2; idx.push(o, o + 2, o + 1, o + 1, o + 2, o + 3); }
+    }
+  };
+  // Far layer first (behind), then the nearer one over it.
+  for (let n = 0; n < 4; n++) { const a = n * 1.6 + rng() * 0.6; span(1, a, a + 0.7 + rng() * 0.6, 680, 30, 72); }
+  for (let n = 0; n < 4; n++) { const a = n * 1.6 + 0.7 + rng() * 0.5; span(0, a, a + 0.4 + rng() * 0.45, 600, 16, 42); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aRidge', new THREE.Float32BufferAttribute(aux, 2));
+  geo.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    side: THREE.DoubleSide, depthWrite: false, fog: false,
+    uniforms: { uFog: { value: new THREE.Color() }, uNear: { value: new THREE.Color() }, uFar: { value: new THREE.Color() }, uShow: { value: 1 } },
+    vertexShader: /* glsl */ `
+      attribute vec2 aRidge; varying vec2 vR;
+      void main() { vR = aRidge; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uFog; uniform vec3 uNear; uniform vec3 uFar; uniform float uShow; varying vec2 vR;
+      void main() {
+        vec3 col = mix(uNear, uFar, vR.x);
+        // Misty at the foot, the silhouette's colour from about a third of the way up.
+        col = mix(uFog, col, smoothstep(0.08, 0.4, vR.y) * uShow);
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = -8.5; // over the sky and the sun's disc, under the clouds and everything on the island
   mesh.frustumCulled = false;
   return mesh;
 }
@@ -109,6 +160,7 @@ export function createSky(scene, renderer) {
   const dome = buildDome();
   const stars = buildStars(rng);
   const clouds = buildClouds(rng);
+  const ridges = buildRidges(createRng(SEED + 12));
   const sunDisc = buildDisc(0xfff2c8, 34);
   markGlow(sunDisc.material, 0); // glows low in the sky (Graphics: High, src/finish.js)
   const moonDisc = buildDisc(0xeef2ff, 20);
@@ -126,7 +178,7 @@ export function createSky(scene, renderer) {
 
   const ambient = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
   scene.fog = new THREE.FogExp2(0xffffff, FOG_DENSITY);
-  scene.add(dome, stars, clouds, sunDisc, moonDisc, sunLight, sunLight.target, ambient);
+  scene.add(dome, stars, ridges, clouds, sunDisc, moonDisc, sunLight, sunLight.target, ambient);
 
   const tmp = new THREE.Color();
   const cloudTint = new THREE.Color();
@@ -195,6 +247,14 @@ export function createSky(scene, renderer) {
       cloudTint.setHex(c.horizon).lerp(tmp.setHex(c.sun), 0.35).lerp(tmp.set(0xffffff), 0.5 * (1 - night));
       clouds.material.color.copy(cloudTint).multiplyScalar(1 - night * 0.6);
 
+      // The far ridges: a step deeper than the haze toward the zenith's hue, the nearer layer more so.
+      ridges.position.set(fx, 0, fz);
+      const rU = ridges.material.uniforms;
+      rU.uFog.value.copy(fogColor);
+      rU.uNear.value.copy(fogColor).lerp(dome.material.uniforms.uTop.value, 0.34).multiplyScalar(0.93);
+      rU.uFar.value.copy(fogColor).lerp(dome.material.uniforms.uTop.value, 0.17);
+      rU.uShow.value = 1;
+
       // A single tint the water shader multiplies by, so the sea follows the time of day.
       waterLight.setHex(c.ambient).multiplyScalar(0.55 * c.ambientIntensity)
         .add(tmp.setHex(c.sun).multiplyScalar(0.19 * c.sunIntensity));
@@ -210,6 +270,7 @@ export function createSky(scene, renderer) {
         const fl = wx.flash || 0; // lightning: the whole sky blinks pale for a moment
         if (fl > 0) { tmp.setRGB(0.82, 0.88, 1); dome.material.uniforms.uTop.value.lerp(tmp, fl * 0.5); dome.material.uniforms.uHorizon.value.lerp(tmp, fl * 0.55); fogColor.lerp(tmp, fl * 0.5); }
         dome.material.uniforms.uFog.value.copy(fogColor); scene.fog.color.copy(fogColor); if (scene.background) scene.background.copy(fogColor);
+        rU.uFog.value.copy(fogColor); rU.uShow.value = Math.max(0, 1 - wx.fog * 1.3 - wx.rain * 0.8 - wx.cloud * 0.3); // lost in fog and rain
         sunLight.intensity *= 1 - 0.78 * gloom; sunLight.shadow.intensity *= 1 - 0.8 * gloom;
         tone(sunLight.color, chill * 0.6, 1); tone(ambient.color, chill * 0.55, 1);
         ambient.intensity *= 1 - 0.2 * gloom + 0.12 * wx.rain; ambient.intensity += fl * 1.1; // the sky light stays up a little, so rain is dim, not black

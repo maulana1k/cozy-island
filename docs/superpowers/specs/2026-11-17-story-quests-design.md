@@ -218,6 +218,8 @@ Exact layout, sizes and how far the island grows are **left to the builder** and
 
 6. **Built in milestones (owner, 2026-11-17):** the story is built gradually, one checkpoint at a time, and the owner playtests each one before the next starts. Milestone 1 = engine, saving, picker, conversation screen, Quests/Notes tabs, Chapter 1 "New scout" with the camp leader, buddy and younger scout, and one sample sequence puzzle. Later milestones add the village cast, Chapter 2, more puzzles and the side-quest templates, a chapter at a time.
 
+7. **Milestone 2 decisions (owner, 2026-11-17, "use your picks"):** the tide really moves the sea (the water level drops and uncovers the tide stones; boats are dragged across wet sand); the scientist stays a postcard in Chapter 2 (met in person later); both docks stay (the camp fishing dock and Old Darto's village jetty). M2 is split: **M2a** the fishing waterfront (wide sloping beach, crowded fish market, fishermen's area, many local boats, schedule-driven fishing day) on the village's ocean side; **M2b** the Chapter 2 story set there.
+
 ## 10b. Builder check results (settled as BUILDER CALLs; owner may override)
 
 1. **Save compatibility:** save has a `version`. Quest and node ids are treated as stable once shipped. On load, unknown ids are dropped and missing ones start fresh; no migration code until a breaking change actually happens.

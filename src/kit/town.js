@@ -417,8 +417,8 @@ export function ruko(m, { units = RUKO_DEFAULT, floors = 2, seed = 1 } = {}) {
     const x0 = -W / 2 + UW * (i + 0.5), paint = u.paint, front = u.front;
     m.push(x0, 0, 0);
     // Party walls, back wall, the upper floors' mass (set back 0.1 from the shop front), floor slabs.
-    m.box(0.22, Ht + 0.9, D, shade(paint, 0.95), -UW / 2 + 0.11, (Ht + 0.9) / 2, 0);
-    if (i === n - 1) m.box(0.22, Ht + 0.9, D, shade(paint, 0.95), UW / 2 - 0.11, (Ht + 0.9) / 2, 0);
+    m.box(0.22, Ht + 0.9, D, shade(paint, 0.95), -UW / 2 + 0.11, (Ht + 0.9) / 2, 0); colBox(m, colliders, -UW / 2 + 0.11, 0, 0.13, D / 2);
+    if (i === n - 1) { m.box(0.22, Ht + 0.9, D, shade(paint, 0.95), UW / 2 - 0.11, (Ht + 0.9) / 2, 0); colBox(m, colliders, UW / 2 - 0.11, 0, 0.13, D / 2); }
     m.box(UW, Ht, 0.2, shade(paint, 0.92), 0, Ht / 2, -D / 2 + 0.1);
     m.box(UW - 0.2, Ht - G, D - 0.3, paint, 0, G + (Ht - G) / 2, -0.15);
     m.box(UW, 0.3, D + 0.05, C.white, 0, G - 0.05, 0.02);
@@ -431,16 +431,15 @@ export function ruko(m, { units = RUKO_DEFAULT, floors = 2, seed = 1 } = {}) {
     const op = UW - 0.72;
     if (front === 'open' || front === 'half') {
       shelves(m, -UW / 2 + 0.35, UW / 2 - 0.35, fz - 3.85, 0.2, 2.2, seed + i * 7, 4);
-      m.box(UW - 1.6, 0.95, 0.55, C.white, -0.2, 0.475 + 0.12, fz - 1.0); m.box(UW - 1.6, 0.4, 0.5, C.glassLt, -0.2, 1.27, fz - 1.0); // counter and its glass case
-      for (let k = 0; k < 6; k++) m.box(0.2, 0.15, 0.25, [0xe8503a, 0xf2c03b, 0x3a8fd0][k % 3], -1.2 + k * 0.4, 1.16, fz - 1.0);
+      m.box(UW - 2.0, 0.95, 0.55, C.white, -0.4, 0.475 + 0.12, fz - 1.0); m.box(UW - 2.0, 0.4, 0.5, C.glassLt, -0.4, 1.27, fz - 1.0); // counter and its glass case (a way in at its right end)
+      for (let k = 0; k < 5; k++) m.box(0.2, 0.15, 0.25, [0xe8503a, 0xf2c03b, 0x3a8fd0][k % 3], -1.2 + k * 0.4, 1.16, fz - 1.0);
       sachets(m, -UW / 2 + 0.4, UW / 2 - 0.4, G - 0.35, fz - 0.5, seed + i);
       if (front === 'half') strips(m, [-op / 2, 1.5, fz - 0.17], [op / 2, 1.5, fz - 0.17], [op / 2, G - 0.3, fz - 0.17], [-op / 2, G - 0.3, fz - 0.17], C.zinc, shade(C.zinc, 0.86), 22, 'rows');
       m.box(op + 0.1, 0.34, 0.34, shade(C.zinc, 0.9), 0, G - 0.32, fz - 0.17); // the rolled-up shutter's drum
-      spots.keepers.push(spot(m, 0.4, fz - 1.7, 0, { unit: i })); spots.customers.push(spot(m, 0.2, fz + 1.2, Math.PI, { unit: i }));
-      colBox(m, colliders, 0, -0.9 - 0.3, UW / 2, (D - 2.8) / 2);
-      colBox(m, colliders, -0.2, fz - 1.0, (UW - 1.6) / 2, 0.3);
-      bulb(m, lamps, 0, G - 0.45, fz - 2.2, 0.08);
-      winLamp(m, lamps, 0, 1.6, fz - 0.2);
+      spots.keepers.push(spot(m, -0.4, fz - 1.65, 0, { unit: i })); spots.customers.push(spot(m, -0.4, fz + 1.0, Math.PI, { unit: i }));
+      colBox(m, colliders, 0, -1.2, UW / 2, (D - 2.8) / 2);
+      colBox(m, colliders, -0.4, fz - 1.0, (UW - 2.0) / 2, 0.3);
+      bulb(m, lamps, 0, G - 0.45, fz - 2.2, 0.08); // an open shop: its ceiling bulb glows (no window pane to light)
     } else if (front === 'closed') {
       strips(m, [-op / 2, 0.12, fz - 0.17], [op / 2, 0.12, fz - 0.17], [op / 2, G - 0.3, fz - 0.17], [-op / 2, G - 0.3, fz - 0.17], C.zinc, shade(C.zinc, 0.86), 30, 'rows');
       m.box(op + 0.1, 0.34, 0.34, shade(C.zinc, 0.9), 0, G - 0.32, fz - 0.17); m.box(0.08, 0.1, 0.05, C.ink, 0.3, 0.3, fz - 0.13);
@@ -604,7 +603,7 @@ export function cafe(m, { seed = 5, paint = PAINT.white } = {}) {
   m.rod([-hw + 0.12, PY - 0.08, zf - 0.12], [hw - 0.12, PY - 0.08, zf - 0.12], 0.006, 0.006, C.ink, 3);
   // Tables, chairs, plants, the A-board.
   spots.sit = [];
-  for (const [tx, tz] of [[-1.9, zb1 + 1.2], [0.2, zb1 + 1.35], [2.2, zb1 + 1.1]]) {
+  for (const [tx, tz] of [[-2.1, zb1 + 1.2], [-0.2, zb1 + 1.35], [1.3, zb1 + 1.1]]) {
     prop(m, props, 'cafeTable', tx, tz, 0, 0xffffff);
     for (const [cx, r] of [[-0.55, Math.PI / 2], [0.55, -Math.PI / 2]]) { prop(m, props, 'cafeChair', tx + cx, tz, r, 0xffffff); spots.sit.push(spot(m, tx + cx, tz, r, { sit: true, top: 0.62 })); }
   }
@@ -734,7 +733,7 @@ export function kantorDesa(m, { seed = 8, yard = 3.0 } = {}) {
   m.box(2.1, 0.9, 0.1, GREEN, hw - 1.4, 1.55, zf + yard * 0.55); m.box(1.9, 0.72, 0.02, 0xf4efe2, hw - 1.4, 1.55, zf + yard * 0.55 + 0.06);
   m.box(1.8, 0.1, 0.03, GREEN, hw - 1.4, 1.75, zf + yard * 0.55 + 0.075); m.box(1.4, 0.07, 0.03, GREEN, hw - 1.4, 1.5, zf + yard * 0.55 + 0.075);
   colRound(m, colliders, hw - 2.25, zf + yard * 0.55, 0.1); colRound(m, colliders, hw - 0.55, zf + yard * 0.55, 0.1);
-  planter(m, -0.9, 0.9, zf + yard - 0.3, seed);
+  if (yard > 2.4) planter(m, 0.9, 2.2, zf + yard - 0.4, seed);
   spots.clerk = spot(m, -2.0, zb1 + 0.45, 0, { sit: true, top: PL + 0.47 }); spots.flag = spot(m, fx, fz + 1.4, Math.PI);
   return { colliders, lamps, props, spots, floor: PL, footprint: { hw, hd }, stepFeet: [{ x: 0, z: zf + 0.5, w: 2.4 }], door: { x: 0, z: zb1 } };
 }
@@ -778,6 +777,23 @@ export function posRonda(m, { seed = 9 } = {}) {
   spots.sit = [spot(m, -0.5, hd - 0.15, 0, { sit: true, top: FY + 0.05 }), spot(m, 0.3, hd - 0.15, 0, { sit: true, top: FY + 0.05 })];
   return { colliders, lamps, props, spots, footprint: { hw, hd } };
 }
+
+// The elder's carved post (story clue `carved-post`): an old dark timber post, carved from the top down with a wave, a
+// crescent moon and a heart-shaped shell, on a stone footing, a little worn and leaning. Faces +z.
+export function carvedPost(m) {
+  const W = 0x6a4a32, CARVE = 0x8c6a48;
+  m.cyl(0.34, 0.4, 0.22, 0x9d928c, 0, 0.11, 0, 7);
+  m.push(0, 0.2, 0, 0, 0.03, -0.04);
+  m.box(0.26, 1.9, 0.26, W, 0, 0.95, 0); m.box(0.34, 0.12, 0.34, CARVE, 0, 1.94, 0); m.cyl(0.05, 0.14, 0.18, W, 0, 2.08, 0, 6);
+  const f = 0.135;
+  m.bend([[-0.1, 1.62, f], [-0.05, 1.68, f], [0, 1.62, f], [0.05, 1.56, f], [0.1, 1.62, f]], 0.018, CARVE, 4); // the wave
+  m.at(new THREE.TorusGeometry(0.075, 0.02, 4, 10, Math.PI * 1.2), CARVE, 0, 1.25, f, 0, 0, Math.PI * 0.9); // the crescent moon
+  m.sph(0.045, CARVE, -0.035, 0.9, f, 1, 1, 0.5, 6, 4); m.sph(0.045, CARVE, 0.035, 0.9, f, 1, 1, 0.5, 6, 4);
+  m.tris([[[-0.075, 0.885, f + 0.01], [0.075, 0.885, f + 0.01], [0, 0.78, f + 0.01]]], CARVE); // the shell, a heart
+  m.pop();
+  return { colliders: [{ x: 0, z: 0, r: 0.3 }], lamps: [], props: [], spots: {} };
+}
+export const buildCarvedPost = () => wrap(carvedPost);
 
 // ---- Street ------------------------------------------------------------------------------------------------------
 // A straight piece of road along +x from 0 to len: asphalt, a dashed centre line, kerbs painted black and white (as on
@@ -952,12 +968,12 @@ export function propGeometry(kind) {
   return protoCache.get(kind);
 }
 // One InstancedMesh per kind (plus one for the kinds that glow) from a list of { kind, x, y, z, ry, c, s?, roll? }.
-export function instanceProps(list, { material = TOWN_MAT, glowMaterial = TOWN_GLOW_MAT, y0 = 0 } = {}) {
+export function instanceProps(list, { material = TOWN_MAT, glowMaterial = TOWN_GLOW_MAT, y0 = 0, glow: withGlow = true } = {}) {
   const byKind = new Map(), out = [], dummy = new THREE.Object3D(), col = new THREE.Color();
   for (const p of list) { if (!byKind.has(p.kind)) byKind.set(p.kind, []); byKind.get(p.kind).push(p); }
   for (const [kind, items] of byKind) {
     const { geo, glow } = propGeometry(kind);
-    const parts = [[geo, material, true]]; if (glow) parts.push([glow, glowMaterial, false]);
+    const parts = [[geo, material, true]]; if (glow && withGlow) parts.push([glow, glowMaterial, false]);
     for (const [g, mat, lit] of parts) {
       const im = new THREE.InstancedMesh(g, mat, items.length); im.name = `town-${kind}${lit ? '' : '-glow'}`;
       items.forEach((it, i) => {

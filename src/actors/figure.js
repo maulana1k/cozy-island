@@ -572,7 +572,7 @@ export function createFigure({
   // standstill (C_0) and how much quicker they turn over for each m/s (C_V); the slowest amble (C_LO).
   const A_MAX = 0.70, C_0 = 1.75, C_V = 0.69, C_LO = 1.6;
   const gaitOut = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 }, gaitAsk = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 };
-  let gDw = 0.6;
+  let gDw = 0.6, npcRunLatch = 0;
   const sOf = (A) => (walkC(A) * scale) / (2 * gDw);                      // a walking step at this angle (m)
   function gaitOf(v, out = gaitOut) {
     const vk = v / sqK; // the same pace on a scout's legs (dynamic similarity: speed goes with the root of leg length)
@@ -591,7 +591,10 @@ export function createFigure({
     const cWk = Math.max(C_LO, (v * sqK) / sOf(A));                       // steps a second, on a scout's legs
     const cRun = 3.15 + Math.min(1, (vk - 2.4) / 1.5) * 0.3;
     const Cr = 0.50;                                                      // the longest footprint a scout's leg sweeps running (m)
-    const r = smooth((vk - 2.15) / 0.75);                                 // 0 walking .. 1 running
+    // The player runs on the Shift toggle's speeds (blend 2.15..2.9 on a scout's legs). Everyone else picks the
+    // gait from their real ground speed: walk to run over 2.4..3.0 m/s whatever their leg length, and (npcRunLatch)
+    // the window sits 0.2 lower while running, so hovering at the threshold does not flicker between gaits.
+    const r = self ? smooth((vk - 2.15) / 0.75) : smooth((v - 2.4 + npcRunLatch * 0.2) / 0.6); // 0 walking .. 1 running
     const cK = lerp(cWk, cRun, r);
     const Sk = vk / cK;
     out.r = r; out.vk = vk; out.c = cK / sqK; out.S = Sk * legK; out.A = A;
@@ -744,6 +747,7 @@ export function createFigure({
       spd += (speed - spd) * ease(14);
       if (dt > 0) acc += (clamp((spd - lastSpd) / dt, -25, 25) - acc) * ease(10);
       lastSpd = spd;
+      if (!self) npcRunLatch = spd > 2.85 ? 1 : spd < 2.35 ? 0 : npcRunLatch; // hysteresis for the NPC walk/run blend
       const G = gaitOf(spd);
       gait = smooth(spd / (0.45 * sqK));                 // 0 standing .. 1 striding out
       run += (G.r - run) * ease(10);

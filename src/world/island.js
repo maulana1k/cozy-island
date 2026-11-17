@@ -129,6 +129,6 @@ export function createIsland(scene) {
     water,
     update(elapsed) { water.userData.update(elapsed); terrain.userData.repaint(); },
     // Lets the sky tint the water so it follows the time of day (see setLight in water.js).
-    setLight(lightColor, fogColor, fogDensity, sun, rain) { water.userData.setLight(lightColor, fogColor, fogDensity, sun, rain); },
+    setLight(lightColor, fogColor, fogDensity, sun, rain, sunDir, gold) { water.userData.setLight(lightColor, fogColor, fogDensity, sun, rain, sunDir, gold); },
   };
 }

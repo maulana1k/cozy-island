@@ -16,7 +16,7 @@
 // pool (the camp's grass material). Made a few 4 m cells a frame as you walk.
 import * as THREE from 'three';
 import { heightAt, groundKind, wildness } from '../logic/terrain.js';
-import { paintNewGround, groundVersion, grassDrift, vegDist, addVegetation } from './ground.js';
+import { paintNewGround, groundVersion, grassDrift, vegDist, addVegetation, dryPatch } from './ground.js';
 import { areaKeepsClear } from './wilds.js';
 import { swayingGrassMaterial } from './scatter.js';
 import { windSway } from './weather.js';
@@ -281,6 +281,7 @@ function grassCell(ix, iz) {
     const wild = vegDist(x, z), tall = wild < 1.8 ? 1 + (1 - Math.max(0, wild) / 1.8) * (0.7 + r1 * 0.5) : 1;
     const v = 0.9 + r3 * 0.2, c1 = ((x * 13.7 + z * 7.3) % 1 + 1) % 1, c2 = ((x * 5.1 - z * 11.9) % 1 + 1) % 1;
     const o = { x, y: y - 0.03, z, s: 0.8 + r3 * 0.5, sy: short * (0.65 + r2 * 0.5) * tall, rot: r1 * 6.283, r: v * (0.94 + c1 * 0.12), g: v * (0.96 + c2 * 0.08), b: v * (0.9 + c1 * 0.16) };
+    { const d = dryPatch(x, z); o.r *= 1 + 0.3 * d; o.g *= 1 + 0.03 * d; o.b *= 1 - 0.32 * d; } // gold where the ground has dried (ground.js)
     out.push(o);
   }
   return out;
@@ -292,7 +293,7 @@ export function create(scene) {
   // The ground under and round bushes and trees turns dark and damp (src/world/ground.js); the camp's and the jungle's meshes repaint once.
   addVegetation(plants.filter((p) => KINDS[p.kind].col > 0).map((p) => ({ x: p.x, z: p.z, r: (KINDS[p.kind].tree ? 1.1 : 0.6) * p.s })), true);
   const mat = windSway(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }), 0.02);
-  const lumpMat = windSway(new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, roughness: 1, metalness: 0 }), 0.02);
+  const lumpMat = windSway(new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, roughness: 1, metalness: 0 }), 0.02); // lit top, cool belly baked in (M.lump)
   const pool = (geo, material, cap, shadow) => { const m = new THREE.InstancedMesh(geo, material, cap); m.count = 0; m.frustumCulled = false; m.castShadow = !!shadow; m.receiveShadow = true; group.add(m); return m; };
   const pools = {};
   for (const [k, K] of Object.entries(KINDS)) pools[k] = pool(K.make(), mat, Math.min(K.cap, Math.max(1, plants.filter((p) => p.kind === k).length)), K.shadow);

@@ -6,7 +6,7 @@ import { getScatter, distanceToPath, jungleAt, PLAY_CLEAR, COTTAGES, VILLAGE_CEN
 import { POND, HILL } from '../config.js';
 import { createRng } from '../logic/rng.js';
 import { facetShade, meadowClump } from '../kit/plants.js';
-import { campDrift, vegDist } from './ground.js';
+import { campDrift, vegDist, dryPatch } from './ground.js';
 import { PALETTE, SEED } from '../config.js';
 import { WIND, WIND_GLSL, windSway } from './weather.js';
 import { brushable } from './react.js';
@@ -284,8 +284,8 @@ export function createScatter(scene) {
     dummy.scale.set(s, s * (inCamp ? 0.7 + rng() * 0.3 : 0.75 + rng() * 0.45) * tall * (1 + wild * (0.7 + rng() * 0.5)), s); dummy.updateMatrix();
     grass.setMatrixAt(placed, dummy.matrix);
     // The blades carry the colour; each clump only nudges hue and value, deeper in the jungle and where it is wild.
-    const v = 0.9 + rng() * 0.2, deep = (lush > 0.5 ? 0.92 : 1) * (1 - wild * 0.12);
-    grass.setColorAt(placed, color.setRGB(v * deep * (0.94 + rng() * 0.12), v * (0.96 + rng() * 0.08), v * deep * (0.9 + rng() * 0.16), THREE.LinearSRGBColorSpace));
+    const v = 0.9 + rng() * 0.2, deep = (lush > 0.5 ? 0.92 : 1) * (1 - wild * 0.12), dry = dryPatch(x, z) * (1 - lush * 0.7); // gold where the ground has dried
+    grass.setColorAt(placed, color.setRGB(v * deep * (0.94 + rng() * 0.12) * (1 + 0.3 * dry), v * (0.96 + rng() * 0.08) * (1 + 0.03 * dry), v * deep * (0.9 + rng() * 0.16) * (1 - 0.32 * dry), THREE.LinearSRGBColorSpace));
     placed++;
   }
   grass.count = placed;

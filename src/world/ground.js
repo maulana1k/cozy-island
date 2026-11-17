@@ -27,7 +27,7 @@ import { AREAS } from '../config.js';
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
 const C = (hex) => new THREE.Color(hex);
 const bankSand = C(0xead6a4), bankWet = C(0xcdb688), bed = C(0x8f8462), trail = C(0xedd2a0);
-const campGrass = C(0x7f9a4e), rockLedge = C(0xb4a690), rockFace = C(0x8f8173), rockDark = C(0x7a6e63), moss = C(0x8e9a5e);
+const campGrass = C(0x86994e), rockLedge = C(0xb4a690), rockFace = C(0x8f8173), rockDark = C(0x7a6e63), moss = C(0x8e9a5e);
 // The hillside's palette.
 const dry = C(0xa9a25c), dryPale = C(0xb9b177), olive = C(0x8f9d50), green = C(0x7a984a), lush = C(0x5f8640); // natural, slightly muted greens
 const dirt = C(0xd3a46c), clay = C(0xcc8a5c), clayDark = C(0xb87250), damp = C(0x97794f), mud = C(0x7d6246);
@@ -241,6 +241,31 @@ export function vegTone(c, x, z, camp = false) {
   c.lerp(veg.deep, green * smooth((drift + 0.1) / 0.7) * 0.4);
   const e = vegDist(x, z);
   if (e < VEG_HALO) c.lerp(veg.damp, green * smooth((VEG_HALO - e) / VEG_HALO) * 0.6).lerp(veg.dampBrown, green * smooth((0.8 - e) / 0.8) * 0.25);
+}
+
+// ---- Sun-dried patches (The Trail and Alba: warm ochre ground under cool blue distance) --------------
+// Big, soft patches where open grass has dried to a muted gold, about 40% of the open ground: fewer
+// round the camp's lawn (kept a little greener as the place you live), none under trees and bushes.
+// dryPatch is 0..1; the grass tufts use it too (scatter.js, flora.js, wilds.js) so blades and ground agree.
+const goldDry = C(0xb3a05c), goldPale = C(0xc2ad70), ochre = C(0xb8925a);
+export function dryPatch(x, z) {
+  const n = fbm(x / 26 + 50, z / 26 + 20) + (vnoise(x / 7 + 3, z / 7 + 61) - 0.5) * 0.12;
+  const camp = Math.hypot(x - 10, z - 8);
+  const p = smooth((n - 0.45 - (camp < 22 ? 0.03 * (1 - camp / 22) : 0)) / 0.12);
+  const e = vegDist(x, z);
+  return e < VEG_HALO + 0.6 ? p * smooth((e + 0.4) / (VEG_HALO + 1)) : p;
+}
+// Warms `c` in place where it is grass (green, not dirt, sand or stone): gold in the dry patches, with a
+// paler or more ochre cast from a second, finer field, so the patches are not one flat tone.
+export function warmGround(c, x, z) {
+  const green = smooth((c.g / Math.max(1e-4, c.r) - 1.08) / 0.3);
+  if (green <= 0.01) return;
+  const k = dryPatch(x, z) * green;
+  if (k <= 0.01) return;
+  const f = vnoise(x / 4.3 + 17, z / 4.3 + 5);
+  t.copy(goldDry).lerp(goldPale, smooth((f - 0.55) / 0.3) * 0.6).lerp(ochre, smooth((0.4 - f) / 0.3) * 0.5);
+  t.multiplyScalar(0.94 + 0.12 * Math.min(1, c.r * 3)); // keep a little of the old light and dark
+  c.lerp(t, k * 0.85);
 }
 
 // Slope (rise per metre) at each vertex of a regular grid of heights (row-major, n x n, spacing `step`).

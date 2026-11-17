@@ -15,8 +15,10 @@
 import * as THREE from 'three';
 
 const TOON_BAND = 0.6; // 0 = plain Lambert, 1 = hard bands
-const TOON_COOL = 0.35; // 0 = neutral shade, 1 = shade fully in the sky's hue
-const TOON_HAZE_DESAT = 0.45; // how much of the haze's strength goes to draining colour first
+const TOON_COOL = 0.42; // 0 = neutral shade, 1 = shade fully in the sky's hue
+const TOON_HAZE_DESAT = 0.6; // how much of the haze's strength goes to draining colour first
+const TOON_OLIVE = 0.75; // 0 = greens as painted, 1 = fully pushed toward a dusty olive
+const TOON_TEAL = 0.3; // how far the cool shade leans from the sky's blue toward teal
 
 const C = THREE.ShaderChunk;
 const swap = (src, from, to) => {
@@ -61,6 +63,26 @@ C.lights_physical_pars_fragment = swap(C.lights_physical_pars_fragment, DOTNL, T
   C.lights_fragment_begin = C.lights_fragment_begin.slice(0, start) + dir + C.lights_fragment_begin.slice(end);
 }
 
+// Palette grade (The Trail and Alba: dusty olive foliage, never lime): before any light is added, every
+// green surface colour leans toward olive (a little more red, a little less saturated) at the same
+// brightness. Non-green colours (sand, wood, sky-blue tents, flowers) are untouched. Lit materials only.
+const OLIVE = /* glsl */`
+{
+	const vec3 oLuma = vec3( 0.2126, 0.7152, 0.0722 );
+	vec3 oC = diffuseColor.rgb;
+	float oK = smoothstep( 0.06, 0.3, ( oC.g - max( oC.r, oC.b ) ) / max( oC.g, 1e-3 ) );
+	if ( oK > 0.0 ) {
+		float oL = dot( oC, oLuma );
+		vec3 oO = vec3( mix( oC.r, oC.g, 0.34 ), oC.g, oC.b * 0.92 );
+		oO = mix( vec3( dot( oO, oLuma ) ), oO, 0.8 );
+		oO *= oL / max( dot( oO, oLuma ), 1e-4 );
+		diffuseColor.rgb = mix( oC, oO, oK * ${TOON_OLIVE.toFixed(2)} );
+	}
+}
+`;
+C.lights_lambert_fragment = OLIVE + C.lights_lambert_fragment;
+C.lights_physical_fragment = OLIVE + C.lights_physical_fragment;
+
 // Cool shade: where the sun does not reach, the ambient light leans toward the sky colour's hue.
 C.lights_fragment_end += /* glsl */`
 {
@@ -70,6 +92,7 @@ C.lights_fragment_end += /* glsl */`
 		vec3 toonTint = vec3( 0.32, 0.45, 0.75 );
 	#endif
 	const vec3 toonLuma = vec3( 0.2126, 0.7152, 0.0722 );
+	toonTint *= mix( vec3( 1.0 ), vec3( 0.72, 1.0, 0.96 ), ${TOON_TEAL.toFixed(2)} ); // blue shade leans teal
 	toonTint /= max( dot( toonTint, toonLuma ), 1e-4 );
 	vec3 toonCool = toonTint * dot( reflectedLight.indirectDiffuse, toonLuma );
 	reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, toonCool, ( 1.0 - toonSunLit ) * ${TOON_COOL.toFixed(2)} );

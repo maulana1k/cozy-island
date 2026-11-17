@@ -27,11 +27,17 @@ function paint(geo, hex, top = null) {
   if (!g.attributes.normal) g.computeVertexNormals();
   return g;
 }
-// Two-tone faceting for foliage lumps (the look of The Trail's bushes): every triangle of a non-indexed geometry
-// is multiplied (in its colour attribute, made white if missing) by a warm tone where it faces up and a cooler,
-// darker blue-green one where it faces down or out, plus a little darker toward the bottom and a small per-face
-// jitter. Baked once into the vertices: no per-frame cost, no extra draw calls. `seed` varies the jitter.
-const LIT = [1.1, 1.08, 0.88], SHADE = [0.5, 0.66, 0.8];
+// Soft two-tone foliage (The Trail's facets, Alba's soft clumps): each canopy reads as a few blobs lit
+// warm on top and cool teal-green underneath. Baked into the colour attribute (made white if missing) of
+// a non-indexed geometry, as a product of two terms:
+// - a smooth top-to-bottom gradient per vertex over the whole geometry (warm, light crown; cool belly),
+//   which interpolates across faces, so a clump reads as one soft blob rather than many tiles;
+// - a gentler per-face term from which way the face points (up: lit, down: shade) plus a small jitter,
+//   so the low-poly facets still show.
+// The underside is a cool mid tone, never near-black, so the woods do not make a busy dark band.
+// No per-frame cost, no extra draw calls. `seed` varies the jitter.
+const LIT = [1.1, 1.06, 0.84], SHADE = [0.62, 0.76, 0.82];
+const lerp3 = (a, b, t, k) => a[k] + (b[k] - a[k]) * t;
 export function facetShade(geo, seed = 1) {
   const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position, n = p.count;
   let col = g.attributes.color;
@@ -42,10 +48,13 @@ export function facetShade(geo, seed = 1) {
   for (let f = 0; f < n; f += 3) {
     a.fromBufferAttribute(p, f); b.fromBufferAttribute(p, f + 1); c.fromBufferAttribute(p, f + 2);
     const ny = b.clone().sub(a).cross(c.clone().sub(a)).normalize().y;
-    const up = Math.min(1, Math.max(0, (ny + 0.15) / 0.85)), t = up * up * (3 - 2 * up);
-    const h = (((a.y + b.y + c.y) / 3 - y0) / Math.max(1e-6, y1 - y0)), jit = 1 + (Math.sin((a.x + b.z * 1.7 + c.y) * 91.7 + seed * 12.3) * 0.5) * 0.12;
-    const low = 0.84 + 0.16 * h;
-    for (let v = 0; v < 3; v++) for (let k = 0; k < 3; k++) col.setComponent(f + v, k, col.getComponent(f + v, k) * (SHADE[k] + (LIT[k] - SHADE[k]) * t) * low * jit);
+    const up = Math.min(1, Math.max(0, (ny + 0.2) / 0.9)), face = up * up * (3 - 2 * up);
+    const jit = 1 + Math.sin((a.x + b.z * 1.7 + c.y) * 91.7 + seed * 12.3) * 0.035;
+    for (let v = 0; v < 3; v++) {
+      const h = Math.min(1, Math.max(0, (p.getY(f + v) - y0) / Math.max(1e-6, y1 - y0)));
+      const t = Math.min(1, Math.max(0, 0.6 * (h * h * (3 - 2 * h)) + 0.4 * face));
+      for (let k = 0; k < 3; k++) col.setComponent(f + v, k, col.getComponent(f + v, k) * lerp3(SHADE, LIT, t, k) * jit);
+    }
   }
   return g;
 }
@@ -254,7 +263,7 @@ export const grassTuft = () => meadowClump({ blades: 8, height: 0.5, spread: 0.1
 // A far-off stand-in for a tree or a bush: one squashed lump (20 triangles).
 export function lump() {
   const g = new THREE.IcosahedronGeometry(1, 0); g.scale(1, 0.62, 1);
-  return paint(g, 0xffffff);
+  return facetShade(paint(g, 0xffffff), 3); // lit top, cool belly, like the near crowns (needs a vertexColors material)
 }
 
 // All of them in a row on the preview stage.

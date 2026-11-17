@@ -6,7 +6,7 @@ import { buildWater } from './water.js';
 import { PALETTE, ISLAND_RADIUS, GRASS_RADIUS, HILL, POND } from '../config.js';
 import { distanceToPath, jungleAt, VILLAGE_CENTER, getScatter } from '../logic/layout.js';
 import { ROCK_HEIGHT } from '../logic/surface.js';
-import { paintNewGround, gridSlopes, groundChanges, vegTone, addVegetation } from './ground.js';
+import { paintNewGround, gridSlopes, groundChanges, vegTone, addVegetation, warmGround } from './ground.js';
 
 const TERRAIN_SIZE = 170;
 const TERRAIN_SEGMENTS = 250;
@@ -75,6 +75,7 @@ function buildTerrain() {
       c.lerp(C(0xfff7dc), smooth((speck(x * 0.5, z * 0.5) - 0.6) / 0.3) * 0.3);
     }
     if (!paintNewGround(c, x, z, h, slopes[i]) && h > 0.1) vegTone(c, x, z, true); // the river banks, the locals' land and the rest of the new ground; else the camp's own grass tone
+    if (h > 0.1) warmGround(c, x, z); // sun-dried gold patches in the open grass
     paintCoastRock(c, x, z, r);
     // Break up the big flat greens: only where the ground is grass (not sand, dirt, rock or water).
     const green = smooth((c.g / Math.max(1e-4, c.r) - 1.2) / 0.2);

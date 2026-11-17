@@ -237,9 +237,9 @@ export const AREAS = (() => {
 })();
 
 export const PALETTE = {
-  grass: 0x7f9a4e, // moody natural green
-  grassDark: 0x6b8743,
-  grassHill: 0x97a35c,
+  grass: 0x86994e, // moody natural green, leaning olive
+  grassDark: 0x718543,
+  grassHill: 0xa6a25c,
   sand: 0xf4dfb4,
   sandWet: 0xe9cfa0,
   path: 0xf6e2b0,

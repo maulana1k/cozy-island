@@ -405,7 +405,7 @@ const DAY_SPEEDS = [1, 1.25, 1.5, 2];
 let daySpeed = 1; try { daySpeed = DAY_SPEEDS.includes(Number(localStorage.getItem('daySpeed'))) ? Number(localStorage.getItem('daySpeed')) : 1; } catch { /* private window */ }
 function cycleDaySpeed() { daySpeed = DAY_SPEEDS[(DAY_SPEEDS.indexOf(daySpeed) + 1) % DAY_SPEEDS.length]; hud.setDaySpeed(daySpeed); if (hud.started) hud.note && hud.note(`Day speed ${daySpeed}×`); audio.play('ui'); try { localStorage.setItem('daySpeed', String(daySpeed)); } catch { /* private window */ } }
 let saver = false; try { saver = localStorage.getItem('saver') === '1'; } catch { /* private window */ }
-let guideOn = false, filmsOn = true, collected = 0, filmDue = null;
+let guideOn = false, filmsOn = true, collected = 0;
 const tipsSeen = new Set(), filmsSeen = new Set();
 // One line of help, the first time something comes up.
 function tip(id, text) { if (tipsSeen.has(id) || !hud.started) return; tipsSeen.add(id); hud.tip(text); }
@@ -778,12 +778,10 @@ function step() {
     zipline.setOpen(block.id === 'free' || block.id === 'work');
     if (block.id === 'ceremony') props.setFlag(true);
     if (block.id === 'campfire') props.setFlag(false);
-    if (!first && hud.started) { tip('timetable', 'The camp follows a timetable. Press F to join in with whatever is going on.'); if (FILMS[block.id] && !filmsSeen.has(block.id)) filmDue = { id: block.id, at: elapsed + 16 }; }
+    if (!first && hud.started) { tip('timetable', 'The camp follows a timetable. Press F to join in with whatever is going on.'); if (JOIN[block.id] && block.id !== 'free' && block.id !== 'work') later(2.5, () => say(`${block.label} has started. Press F when you are at the spot to join in.`, '📣')); }
     if (!first && hud.started) { hud.announce(block.note, block.label); audio.play(block.id === 'ceremony' || block.id === 'exercise' ? 'whistle' : 'bell'); }
   }
   crowd.tick(block, blockProgress(block, timeOfDay));
-  // A little film of the camp's activity, once everyone has had time to gather.
-  if (filmDue && elapsed >= filmDue.at && !paused) { if (filmDue.id === block.id && !buildings.inside) film(filmDue.id); filmDue = null; }
   const filming = director.active;
   if (filming) { input.consumeInteract(); input.consumeJoin(); input.consumeSit(); input.consumeLook(); input.consumeZoom(); }
   if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${keyOf(bag.slots, 'torch')} to switch on your torch.`);
@@ -797,7 +795,7 @@ function step() {
   const join = JOIN[block.id] && (player.act || nearJoinSpot(block.id, player.position.x, player.position.z)) ? JOIN[block.id] : null; // only near the activity (or while already joined: then moving away stops it)
   if (!paused && input.consumeJoin() && join && !player.riding && !player.asleep && !player.sitting) {
     player.act = player.act ? null : { pose: join.pose, sit: !!join.sit };
-    if (player.act) { audio.play('ui'); discover('join'); }
+    if (player.act) { audio.play('ui'); discover('join'); if (FILMS[block.id] && !filmsSeen.has(block.id)) film(block.id); } // the camp's film plays only when you choose to join in
   }
   // The key list bottom-right: only what is useful right now, the main action first.
   hintList.length = 0;
@@ -919,11 +917,10 @@ function step() {
     for (const [id, p, r] of PLACES) if (!journal.has(id) && Math.hypot(playerXZ.x - p.x, playerXZ.z - p.z) < r) discover(id);
     if (buildings.inside) { discover('place-inside'); tip('bed', 'The bed with the gold pillow is yours. Lie down in it to sleep until morning.'); }
     if (Math.hypot(playerXZ.x - FLAGPOLE.x, playerXZ.z - FLAGPOLE.z) < 10) progress('arrive');
-    if (journal.has('place-cliff') && !filmsSeen.has('cliff') && !filming) { if (!film('cliff')) filmsSeen.add('cliff'); }
     // The river is too deep to wade: say so the first time you come down to its bank.
     if (!tipsSeen.has('river')) for (const p of AREAS.river) if (Math.hypot(playerXZ.x - p.x, playerXZ.z - p.z) < p.w + 3) { tip('river', 'The river is too deep to wade. Cross by the plank bridge, or by the stepping stones up near the lake.'); break; }
     if (Math.hypot(playerXZ.x - AREAS.cliffPath[0].x, playerXZ.z - AREAS.cliffPath[0].z) < 4) tip('cliffpath', 'The cliff path climbs to a lookout beside the waterfall. Take it slowly.');
-    if (journal.has('place-lookout') && !filmsSeen.has('summit') && !filming) { if (!film('summit')) filmsSeen.add('summit'); tip('fox', 'The flying fox starts here: climb the launch tower and press E.'); }
+    if (journal.has('place-lookout')) { tip('fox', 'The flying fox starts here: climb the launch tower and press E.'); }
   }
   const ground = SURFACES[player.riding ? 'wood' : player.surface] || SURFACES.grass;
   hud.setGround(player.riding ? player.riding.label || 'Flying fox' : ground.label, ground.color);

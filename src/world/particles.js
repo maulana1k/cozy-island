@@ -10,7 +10,8 @@
 //   where each may show and how high the ground is under it.
 // - Butterflies flitting round the camp's flowers by day.
 // - Birds: little flocks pecking on the camp lawns that fly off when the player runs at them, and come
-//   back a while later.
+//   back a while later. Places the player has cleaned up (src/logic/restore.js) get flocks of their own
+//   as their health rises, and more butterflies (FLY_N: about 10 show as before; up to 16 where it is healed).
 // - Halos (Graphics: Low only, where there is no bloom): soft additive glows round fires, lamps, the torch
 //   and the searchlight.
 import * as THREE from 'three';
@@ -22,8 +23,9 @@ import { surfaceAt } from '../logic/surface.js';
 import { getScatter, getColliders, distanceToPath, VILLAGE_CENTER } from '../logic/layout.js';
 import { FIGURES } from '../actors/figure.js';
 import { WET } from './weather.js';
+import { restoreSpots, areaHealth, healthAt } from '../logic/restore.js';
 
-const BURST_N = 768, POLLEN_N = 150, FIREFLY_N = 90, FLY_N = 10, FLOCKS = 3, PER_FLOCK = 5, HALO_N = 48;
+const BURST_N = 768, POLLEN_N = 150, FIREFLY_N = 90, FLY_N = 16, FLOCKS = 3, PER_FLOCK = 5, HALO_N = 48;
 const HAB_RES = 48, HAB_SIZE = 64, HAB_PER_FRAME = 160; // the habitat picture: texels, metres across, texels worked out per frame
 const HIDE = 'gl_Position = vec4(2.0, 2.0, 2.0, 1.0);';
 
@@ -404,6 +406,8 @@ export function createParticles(scene, deps) {
     if (spots.some((p) => Math.hypot(p.x - x, p.z - z) < 12)) continue;
     spots.push({ x, z });
   }
+  // Flocks that only come back once their place has been cleaned up (need: the health it takes).
+  for (const r of restoreSpots().flocks) spots.push({ x: r.x, z: r.z, need: r.need, area: r.area });
   const birds = buildBirds(spots.length * PER_FLOCK);
   const flocks = spots.map((p) => ({ ...p, y: groundAt(p.x, p.z), state: 'ground', timer: 0, members: [] }));
   let birdsStarted = false;
@@ -418,13 +422,14 @@ export function createParticles(scene, deps) {
   const off = typeof location !== 'undefined' && new URLSearchParams(location.search).has('noparticles');
   if (off) { pool = null; for (const m of [bursts.mesh, motes.mesh, flies.mesh, birds.mesh, halos.mesh]) m.visible = false; }
 
-  let clock = 0, flyCheck = 0, searchLens; const lensPos = new THREE.Vector3();
+  let clock = 0, flyCheck = 0, searchLens, flyNow = 0, fireNow = 0; const lensPos = new THREE.Vector3();
   const pollenOff = new THREE.Vector2();
   const figSteps = new Map(); // FIGURES index -> footfalls last seen
   const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
   const flowerHomes = (() => {
     const s = getScatter(), out = [...s.flowers, ...s.bushes.filter((_, i) => i % 3 === 0)];
     for (let i = 0; i < 10; i++) { const a = rng() * Math.PI * 2, r = POND.rw + 2 + rng() * 8; out.push({ x: POND.x + Math.cos(a) * r, z: POND.z + Math.sin(a) * r }); } // the pond meadow
+    out.push(...restoreSpots().homes); // flowers in the places being cleaned up (used once they are a third healed)
     return out;
   })();
 
@@ -435,7 +440,7 @@ export function createParticles(scene, deps) {
       const o = i * 4, hx = flies.home[o], hz = flies.home[o + 2];
       if (flies.home[o + 3] > -1e5 && Math.hypot(hx - px, hz - pz) < 30) continue;
       let pick = null;
-      for (let tries = 0; tries < 12 && !pick; tries++) { const f = flowerHomes[Math.floor(Math.random() * flowerHomes.length)]; const d = Math.hypot(f.x - px, f.z - pz); if (d > 6 && d < 26) pick = f; }
+      for (let tries = 0; tries < 12 && !pick; tries++) { const f = flowerHomes[Math.floor(Math.random() * flowerHomes.length)]; const d = Math.hypot(f.x - px, f.z - pz); if (d > 6 && d < 26 && !(f.area && areaHealth(f.area) < 0.34)) pick = f; }
       if (!pick) { if (flies.home[o + 3] > -1e5) { flies.home[o + 3] = -1e6; dirty = true; } continue; }
       flies.home[o] = pick.x; flies.home[o + 1] = groundAt(pick.x, pick.z); flies.home[o + 2] = pick.z; flies.home[o + 3] = clock; dirty = true;
     }
@@ -447,11 +452,12 @@ export function createParticles(scene, deps) {
     const pp = player.position, running = player.speed > 3.1 || player.airborne;
     const away = night > 0.55 || wx.rain > 0.45; // roosting for the night, sheltering from the rain
     let k = 0;
-    if (!birdsStarted) { birdsStarted = true; if (away) for (const f of flocks) { f.state = 'gone'; f.timer = 5; for (const b of f.members) b.to.set(f.x + 50, f.y + 18, f.z); } }
+    if (!birdsStarted) { birdsStarted = true; for (const f of flocks) if (away || (f.need && areaHealth(f.area) < f.need)) { f.state = 'gone'; f.timer = 5; for (const b of f.members) b.to.set(f.x + 50, f.y + 18, f.z); } }
     for (const f of flocks) {
       const d = Math.hypot(pp.x - f.x, pp.z - f.z);
+      const gone = away || (f.need && areaHealth(f.area) < f.need); // a cleaned-up place's flock waits until it is healed enough
       f.timer -= dt;
-      if (f.state === 'ground' && (away || (scare && ((running && d < 7.5) || d < 2.6)))) {
+      if (f.state === 'ground' && (gone || (scare && ((running && d < 7.5) || d < 2.6)))) {
         f.state = 'flee'; f.timer = 7;
         const base = Math.atan2(f.z - pp.z, f.x - pp.x);
         for (const b of f.members) {
@@ -460,7 +466,7 @@ export function createParticles(scene, deps) {
           b.u = -Math.random() * 0.06; b.phase = Math.random() * 6.28;
         }
       } else if (f.state === 'flee' && f.timer <= 0) { f.state = 'gone'; f.timer = 25 + Math.random() * 25; }
-      else if (f.state === 'gone' && f.timer <= 0 && !away && d > 14) {
+      else if (f.state === 'gone' && f.timer <= 0 && !gone && d > (f.need ? 9 : 14)) {
         f.state = 'back'; f.timer = 6.5;
         for (const b of f.members) { b.u = -Math.random() * 0.08; b.from.copy(b.to); b.to.set(f.x + b.ox, f.y, f.z + b.oz); }
       } else if (f.state === 'back' && f.timer <= 0) f.state = 'ground';
@@ -547,7 +553,24 @@ export function createParticles(scene, deps) {
   // Lower the first habitat picture right away, so motes stand on the ground from the first frame.
   { const px = player.position.x, pz = player.position.z; habBX = habX = px; habBZ = habZ = pz; for (let i = 0; i < HAB_RES * HAB_RES; i++) habTexel(habData[0], i, px, pz); habTex[0].needsUpdate = true; motes.uniforms.uHab.value.set(px, pz, HAB_SIZE); }
 
+  const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const flyPath = (t, ph, sp) => [Math.sin(t * 0.7 * sp + ph) * 1.2 + Math.sin(t * 1.9 * sp + ph * 2) * 0.35, 0.45 + 0.3 * Math.sin(t * 1.3 * sp + ph) + 0.12 * Math.sin(t * 0.45 * sp + ph * 3), Math.cos(t * 0.55 * sp + ph * 1.4) * 1.2 + Math.cos(t * 1.7 * sp + ph) * 0.35];
+  const seedOf = flies.mesh.geometry.attributes.aSeed.array;
   return {
+    // Where the butterflies are now (the same sums as their shader), for the camera (src/photo.js): [{ x, y, z }].
+    butterflies() {
+      const out = [];
+      if (!flyNow || off) return out;
+      for (let i = 0; i < FLY_N; i++) {
+        const o = i * 4;
+        if (smoothstep(0, 2, clock - flies.home[o + 3]) * smoothstep(0, 0.1, flyNow - seedOf[o + 3]) <= 0.3) continue;
+        const [x, y, z] = flyPath(clock, seedOf[o] * 6.2832, seedOf[o + 2]);
+        out.push({ x: flies.home[o] + x, y: flies.home[o + 1] + y, z: flies.home[o + 2] + z });
+      }
+      return out;
+    },
+    // How many fireflies are out round the player (0..1).
+    get fireflies() { return off ? 0 : fireNow; },
     // dt game seconds (0 while paused); night 0..1.
     update(dt, night = 0) {
       if (off) return;
@@ -565,6 +588,7 @@ export function createParticles(scene, deps) {
       const calm = 1 - 0.65 * wx.wind;
       const pollen = day * calm * (1 - Math.min(1, wx.rain * 2.5)) * (1 - 0.5 * wx.fog) * 0.85;
       const fire = Math.min(1, Math.max(0, (night - 0.55) / 0.3)) * (1 - Math.min(1, wx.rain * 4)) * (1 - 0.6 * wx.wind) * (1 - 0.5 * wx.cold) * Math.max(0, 1 - WET.value * 1.5);
+      fireNow = fire;
       motes.mesh.visible = pollen > 0.01 || fire > 0.01;
       if (motes.mesh.visible) {
         const u = motes.uniforms, v = (0.12 + wx.wind * 1.2) * dt;
@@ -572,8 +596,9 @@ export function createParticles(scene, deps) {
         u.uTime.value = t; u.uPollen.value = pollen; u.uFire.value = fire; u.uDark.value = dark; u.uHot.value = high ? 1 : 0;
         u.uSun.value = (1 - 0.7 * wx.cloud) * day; u.uCenter.value.set(pp.x, pp.y, pp.z); u.uOff.value.copy(pollenOff);
       }
-      const flyAmt = day * (1 - Math.min(1, wx.rain * 3)) * (1 - 0.75 * wx.wind) * (1 - 0.6 * wx.fog);
-      flies.mesh.visible = flyAmt > 0.01;
+      // About ten of the sixteen as before; the rest join where the island has been cleaned up.
+      const flyAmt = day * (1 - Math.min(1, wx.rain * 3)) * (1 - 0.75 * wx.wind) * (1 - 0.6 * wx.fog) * (0.62 + 0.38 * healthAt(pp.x, pp.z));
+      flies.mesh.visible = flyAmt > 0.01; flyNow = flies.mesh.visible ? flyAmt : 0;
       if (flies.mesh.visible) {
         flyCheck -= dt; if (flyCheck <= 0) { flyCheck = 1.5; placeButterflies(pp.x, pp.z); }
         flies.uniforms.uTime.value = clock; flies.uniforms.uAmt.value = flyAmt; flies.uniforms.uDark.value = dark;

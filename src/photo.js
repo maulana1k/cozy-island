@@ -22,12 +22,14 @@ const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0),
 // What each kind of thing is in the field guide, and how big it is (m), for "big enough on screen".
 const KINDS = { cat: ['cat', 0.45], chickens: ['chicken', 0.45], sheep: ['sheep', 1.0], goat: ['goat', 0.9], buffalo: ['buffalo', 1.6], ducks: ['duck', 0.45], monkey: ['monkey', 0.6] };
 const PEOPLE = { villager: 'Scout', local: 'Villager' };
+// Width over height of each kind's outline on screen (people are tall, sheep and buffalo long).
+const ASPECT = { sheep: 1.35, goat: 1.3, buffalo: 1.5, cat: 1.2, chicken: 1, duck: 1.2, monkey: 1, rabbit: 1.1, sparrow: 1.3, gull: 2.2, butterfly: 1.3, fish: 1.8, firefly: 1.6 };
 
 // deps: { camera, input, canvas, groundAt, audio, player, interactables, scene, particles, onPhoto(shot), onClose() }
 // shot: { thumb, best: { guide, name, d } | null, grade 1..3 }
 export function createPhotoCamera(deps) {
   const { camera, input, groundAt, player } = deps;
-  let vf = null, gridOn = false, lastInput = 0, openedAt = 0; // the overlay (src/photoHud.js)
+  let vf = null, gridOn = false, roll = 0, lastInput = 0, openedAt = 0, histoN = 0; // the overlay (src/photoHud.js)
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
   let wasLocked = false, lockAt = -9, wasLockedShown = false;
@@ -56,7 +58,7 @@ export function createPhotoCamera(deps) {
   });
 
   const fovNow = () => BASE_FOV / zoom;
-  function showZoom() { vf.zoom(wantZoom); vf.shots(shots); }
+  function showZoom() { vf.zoom(wantZoom, MIN_ZOOM, MAX_ZOOM); vf.shots(shots); vf.light(deps.light ? deps.light() : 1); }
   // The scout's own body would fill the bottom of the picture: hidden while the camera is up.
   function hideSelf(on) {
     if (on) {
@@ -170,6 +172,7 @@ export function createPhotoCamera(deps) {
     },
     // Called by main.js right after the frame is drawn: the drawn frame becomes the thumbnail.
     afterRender() {
+      if (active && vf && ++histoN % 12 === 0) vf.histogram(deps.canvas); // the live histogram, five times a second
       if (!pending) return;
       const shot = pending; pending = null;
       try {
@@ -246,12 +249,21 @@ export function createPhotoCamera(deps) {
       if (locked && !wasLocked && clock - lockAt > 0.6) { play('ui'); lockAt = clock; } // the half-press beep
       wasLocked = locked;
       vf.lock(!!locked, locked && !wasLockedShown); wasLockedShown = !!locked;
+      // The level line: the hands roll a little as they swing and breathe.
+      roll += ((-dy / Math.max(dt, 1e-3)) * 0.02 + Math.sin(clock * 0.7) * 0.006 - roll) * (1 - Math.exp(-dt * 6));
+      vf.level(roll);
       // Button labels: shown at first and whenever you pause; faint while you are busy.
       if (Math.abs(dy) + Math.abs(dp) > 1e-4 || look.dx || look.dy) lastInput = clock;
       vf.hints(clock - openedAt > 4 && clock - lastInput < 3);
       const label = j ? (deps.label ? deps.label(j.s) : j.s.name || j.s.guide) : '';
-            // The animal in the focus box, by name: how far in plain words.
-      vf.subject(j ? `${label} · ${j.d < 4 ? 'close' : j.d < 15 ? 'near' : 'far'}` : null);
+      // Subject detect: a tight outline round the animal as it is drawn (its size at its distance, shaped to its kind),
+      // its name and distance above.
+      if (j) {
+        ndc.set(j.s.x, j.s.y, j.s.z).project(camera);
+        const H = deps.canvas.clientHeight, W = deps.canvas.clientWidth, half = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+        const h = Math.max(18, Math.min(H * 0.7, (j.s.size / (2 * j.d * half)) * H)), w = h * (ASPECT[j.s.guide] || (j.s.guide ? 1 : 0.45));
+        vf.subject({ x: (ndc.x * 0.5 + 0.5) * W, y: (-ndc.y * 0.5 + 0.5) * H, w, h }, `${label} · ${j.d < 10 ? j.d.toFixed(1) : Math.round(j.d)} m`);
+      } else vf.subject(null);
       return true;
     },
   };

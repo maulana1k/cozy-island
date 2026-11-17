@@ -509,7 +509,8 @@ let freeLook = false;
 const mouseHeld = () => document.pointerLockElement === canvas;
 const lookWanted = () => freeLook && hud.started && !hud.menuOpen && !hud.journalOpen && !hud.mapOpen && !hud.bagOpen;
 let lockRefused = false; // the browser said no to the last request: it wants a click first
-function updateLookHint() { hud.setLookHint(lookWanted() && !mouseHeld() && lockRefused); }
+let quietRelock = false; // the camera or telescope was left with Esc: the browser wants a gesture, so re-lock on the next key or click with no banner
+function updateLookHint() { if (mouseHeld() || !lookWanted()) quietRelock = false; hud.setLookHint(lookWanted() && !mouseHeld() && lockRefused && !quietRelock); }
 function syncLook() {
   const want = lookWanted();
   if (want && !mouseHeld()) {
@@ -529,8 +530,8 @@ document.addEventListener('pointerlockchange', () => {
   if (!hud.started) return;
   // Esc releases the mouse before the game sees the key, so answer it here: close whatever is open, else pause.
   // (The journal, map and bag release the mouse themselves when they open, so a release with one of them open is not an Esc.)
-  if (scope.active) { lockEscAt = performance.now(); scope.close(); input.consumeInteract(); return; }
-  if (photo.active) { lockEscAt = performance.now(); photo.close(); input.consumeInteract(); return; }
+  if (scope.active) { lockEscAt = performance.now(); quietRelock = true; scope.close(); input.consumeInteract(); return; }
+  if (photo.active) { lockEscAt = performance.now(); quietRelock = true; photo.close(); input.consumeInteract(); return; }
   if (storyRt.ui.open) { lockEscAt = performance.now(); storyRt.close(); input.consumeInteract(); return; }
   if (director.active) { lockEscAt = performance.now(); director.skip(); input.consumeHop(); input.consumeInteract(); return; }
   // An Esc keydown that just closed a screen can win the lock back and lose it to the same held key: that is not "pause".
@@ -540,6 +541,8 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('pointerlockerror', () => { lockRefused = true; updateLookHint(); });
 // Esc is not a user gesture, so closing the menu with it may not be allowed to take the mouse back.
 // Try again on the key coming up; if the browser still refuses, the next mouse press takes it, and does nothing else.
+// A movement key counts as a gesture, so the first W (etc.) after an Esc exit takes the mouse back.
+window.addEventListener('keydown', (e) => { if (quietRelock && /^(Key[WASD]|Arrow(Up|Down|Left|Right)|Space|Shift(Left|Right))$/.test(e.code) && lookWanted() && !mouseHeld() && !photo.active && !scope.active) syncLook(); }, true);
 window.addEventListener('keyup', (e) => { if (e.code === 'Escape' && lookWanted() && !mouseHeld()) syncLook(); });
 let swallowClick = false;
 const relockPress = (e) => {
@@ -649,8 +652,8 @@ window.addEventListener('keydown', (e) => {
   // A conversation or the name picker takes the keys while it is open (1-4 answer, Esc leaves).
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }
-  if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
-  if (photo.active) { if (e.code === 'Escape' || e.code === 'KeyE' || (/^Digit[1-8]$/.test(e.code) && beltOf(bag.slots)[Number(e.code.slice(5)) - 1]?.id === 'camera')) { photo.close(); input.consumeInteract(); } else if (e.code === 'Space' && !e.repeat) photo.shoot(); e.preventDefault(); return; } // the camera has the keys
+  if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { if (e.code === 'Escape') quietRelock = true; scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
+  if (photo.active) { if (e.code === 'Escape' || e.code === 'KeyE' || (/^Digit[1-8]$/.test(e.code) && beltOf(bag.slots)[Number(e.code.slice(5)) - 1]?.id === 'camera')) { if (e.code === 'Escape') quietRelock = true; photo.close(); input.consumeInteract(); } else if (e.code === 'Space' && !e.repeat) photo.shoot(); e.preventDefault(); return; } // the camera has the keys
   if (e.code === 'Tab') e.preventDefault(); // focus never moves, even on a held key
   if (e.repeat) return;
   // During a film any of these keys skips it; nothing else works until it is over.

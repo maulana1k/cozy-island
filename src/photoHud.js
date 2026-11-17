@@ -133,7 +133,7 @@ export function createViewfinder(box) {
   const body = mk('body'), rim = mk('rim');
   const strip = mk('strip'), brand = mk('brand'); brand.append(document.createElement('i'), document.createTextNode('SCOUTCAM'));
   const hints = mk('btns');
-  for (const [g, what, key] of [['shutter', 'SHUTTER', 'space · click'], ['aim', 'AIM', 'drag · WASD'], ['zoom', 'ZOOM', 'scroll · + −'], ['grid', 'GRID', 'G'], ['exit', 'EXIT', 'E · Esc']]) { const s = mk('', '', 'span'); s.append(ico(g), document.createTextNode(what), mk('', key, 'small')); hints.append(s); }
+  for (const [g, what, key] of [['shutter', 'SHUTTER', 'space · click'], ['aim', 'AIM', 'drag · WASD'], ['zoom', 'ZOOM', 'scroll · + −'], ['grid', 'GRID', 'G'], ['exit', 'EXIT', 'E · 4']]) { const s = mk('', '', 'span'); s.append(ico(g), document.createTextNode(what), mk('', key, 'small')); hints.append(s); }
   strip.append(brand, mk('lens', '24–96 mm  1:2.8'), hints);
   root.append(scr, body, rim, strip);
   document.getElementById('hud').append(root);

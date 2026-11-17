@@ -142,8 +142,16 @@ function buildTower() {
   const head = new THREE.Group(); head.add(make(H));
   const lens = new THREE.Mesh(new THREE.CircleGeometry(0.24, 18), new THREE.MeshBasicMaterial({ color: 0x9a9a8a })); lens.position.set(0, 0.36, 0.325); lens.name = 'searchlightLens'; head.add(lens); // named: its Low-graphics halo finds it (src/world/particles.js)
   // The beam: a long soft cone of light from the lens (only drawn at night).
-  const beamGeo = new THREE.CylinderGeometry(0.24, 3.4, 30, 20, 1, true); beamGeo.translate(0, 15, 0); beamGeo.rotateX(Math.PI / 2);
-  const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color: 0xfff0c4, transparent: true, opacity: 0.08, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+  // CylinderGeometry: radiusTop sits at +y, which rotateX(+90deg) sends to +z (the far end), so the wide radius goes on top.
+  const beamGeo = new THREE.CylinderGeometry(3.4, 0.24, 30, 20, 1, true); beamGeo.translate(0, 15, 0); beamGeo.rotateX(Math.PI / 2);
+  // Brightest at the lens (z=0), fading to nothing by z=30; the silhouette fades too so there are no hard wedge edges.
+  const beamMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    uniforms: { uColor: { value: new THREE.Color(0xfff0c4) }, uGain: { value: 0.16 } },
+    vertexShader: 'varying float vAlong; varying vec3 vN; varying vec3 vV; void main(){ vAlong = position.z / 30.0; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'uniform vec3 uColor; uniform float uGain; varying float vAlong; varying vec3 vN; varying vec3 vV; void main(){ float along = clamp(vAlong, 0.0, 1.0); float fade = pow(1.0 - along, 1.6) * smoothstep(0.0, 0.02, along + 0.02); float rim = pow(abs(dot(normalize(vN), normalize(vV))), 1.5); gl_FragColor = vec4(uColor, fade * rim * uGain); }',
+  });
+  const beam = new THREE.Mesh(beamGeo, beamMat);
   beam.position.set(0, 0.36, 0.33); beam.visible = false; head.add(beam);
   return { frame: make(P), roof: make(R), head, lens, beam };
 }

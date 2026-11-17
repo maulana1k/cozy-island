@@ -43,6 +43,8 @@ export function createPlayer(scene, opts = {}) {
       look = target ? { x: target.x, z: target.z, t: 0.5 } : null;
     },
     torch: false, setTorch(on) { player.torch = on; figure.setTorch(on); },
+    // Where the body's origin goes for a seat whose top is at height `top` (a swing, a bench).
+    seatLift(top) { return figure.seatLift(top); },
     // Rebuilds the body in a new look, in the same place and pose.
     setLook(look) {
       const old = figure;

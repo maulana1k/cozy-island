@@ -146,16 +146,16 @@ export function createPickups(scene, deps) {
     { x: LOOKOUT.x + 0.3, z: LOOKOUT.z + 4.9, rot: 0 },
     { x: CAMPFIRE.x + Math.cos(2.1) * 3.9, z: CAMPFIRE.z + Math.sin(2.1) * 3.9, rot: 1 },
   ];
-  const drink = (id, x, z, y, label) => interactables.push({
+  const drink = (id, x, z, y, label, rot = 0) => interactables.push({
     id, kind: 'water', position: { x, z }, markerY: y,
     get enabled() { return deps.canDrinkAt ? deps.canDrinkAt(label) : true; },
     prompt: () => (deps.flaskFull() ? 'E — drink water' : 'E — fill flask'),
-    interact() { deps.onWater(label, { x, z }); },
+    interact() { deps.onWater(label, { x, z, rot }); },
   });
   waters.forEach((w, i) => {
     solidMesh(barrelGeo(), w.x, w.z, w.rot);
     colliders.push({ x: w.x, z: w.z, r: 0.5 });
-    drink(`water-${i}`, w.x, w.z, heightAt(w.x, w.z) + 1.75, 'barrel');
+    drink(`water-${i}`, w.x, w.z, heightAt(w.x, w.z) + 1.75, 'barrel', w.rot);
   });
   // The pond is good water too: fill up anywhere along its edge.
   for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, x = POND.x + Math.cos(a) * (POND.rw - 0.6), z = POND.z + Math.sin(a) * (POND.rw - 0.6); drink(`pond-${i}`, x, z, 0.9, 'pond'); }

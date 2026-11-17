@@ -37,6 +37,7 @@ export function createProps(scene, deps) {
   const hangers = []; // things hanging free that swing in the wind and when brushed (driven by src/world/react.js)
   const bellListeners = [];
   let flagState = null;
+  const hooks = { fire: null }; // set by src/world/play.js
 
   // ---- Small particles: falling leaves, fruit, smoke (sparks fly in the shared pool, src/world/particles.js)
   const particles = [];
@@ -306,12 +307,14 @@ export function createProps(scene, deps) {
     const burning = () => { const h = (((deps.dayTime() % 1) + 1) % 1) * 24; return h >= 18 || h < 6; };
     const fire = { lit: scheduled ? burning() : f.lit, level: 0, sparkTimer: 0, boost: 0, scheduled, damp: wx.forced ? wx.rain : 0 };
     fire.level = fire.lit ? 1 : 0;
+    const rec = { x: f.x, z: f.z, y, fire, big, reach: big ? 9 : 5, loud: big ? 1 : 0.55 };
+    // A lit fire hands E to src/world/play.js (hooks.fire): tap to add a log, hold to roast a marshmallow.
     interactables.push({
       id: f.id, kind: 'campfire', position: { x: f.x, z: f.z }, markerY: y + (big ? 3.1 : 1.7),
-      prompt: () => (scheduled ? (fire.lit ? 'Camp fire burns until 06:00' : 'Camp fire is lit at 18:00') : fire.lit ? 'E — put out fire' : 'E — light fire'),
-      interact() { if (scheduled) return; fire.lit = !fire.lit; audio.play('fire'); },
+      prompt: () => (hooks.fire && fire.lit && hooks.fire.prompt(rec)) || (scheduled ? (fire.lit ? 'Camp fire burns until 06:00' : 'Camp fire is lit at 18:00') : fire.lit ? 'E — put out fire' : 'E — light fire'),
+      interact() { if (hooks.fire && fire.lit && hooks.fire.interact(rec)) return; if (scheduled) return; fire.lit = !fire.lit; audio.play('fire'); },
     });
-    fires.push({ x: f.x, z: f.z, y, fire, big, reach: big ? 9 : 5, loud: big ? 1 : 0.55 });
+    fires.push(rec);
     let shadowAge = 99, shadowWas = false;
     updaters.push((dt, elapsed) => {
       if (scheduled) fire.lit = burning();
@@ -384,6 +387,7 @@ export function createProps(scene, deps) {
   return {
     interactables,
     hangers,
+    hooks,
     onBell(cb) { bellListeners.push(cb); },
     // Lamps placed by other areas: [{ x, y, z }] in world space. They light up after dusk on their own.
     addLamps(points) { for (const p of points) outside.push({ pos: new THREE.Vector3(p.x, p.y, p.z), glow: 0, flicker: 1 }); },

@@ -37,6 +37,7 @@ import { createFinish } from './finish.js';
 import { createParticles } from './world/particles.js';
 import { createReact } from './world/react.js';
 import { createContactShadows } from './world/contact.js';
+import { createPlay } from './world/play.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
 import { createPhotoCamera } from './photo.js';
@@ -182,9 +183,9 @@ const pickups = createPickups(scene, {
   audio, give, groundAt, note: (t) => { say(t); audio.play('nope'); },
   flaskFull: () => sips >= FLASK_SIPS,
   canDrinkAt: (where) => where === 'barrel' || sips < FLASK_SIPS,
-  onWater() {
+  onWater(label, at) {
     player.gesture('drink', 1.2);
-    if (sips < FLASK_SIPS) { sips = FLASK_SIPS; vitals.add({ water: 18 }); audio.play('pour'); say('Flask filled to the top.', '@bottle'); refreshBag(); }
+    if (sips < FLASK_SIPS) { sips = FLASK_SIPS; vitals.add({ water: 18 }); if (label === 'barrel') play.pour(at); else audio.play('pour'); say('Flask filled to the top.', '@bottle'); refreshBag(); }
     else { vitals.add({ water: 45 }); audio.play('gulp'); say('Ahh. Cold water.', '💧'); }
     discover('drink');
   },
@@ -239,12 +240,9 @@ function useItem(id, plain = false) {
     later(0.45, () => { props.stoke(f); audio.play('fire'); });
     vitals.add({ cheer: 6 }); discover('stoke');
   } else if (item.use === 'skip') {
-    bag.remove(id, 1); player.gesture('throw', 0.9); busy(0.8);
-    const fx = player.facing.x, fz = player.facing.z;
-    let wet = 0;
-    for (let k = 1; k <= 4; k++) { const x = p.x + fx * (3 + k * 2.6), z = p.z + fz * (3 + k * 2.6); if (heightAt(x, z) < 0) { wet++; effects.ripple(x, z, 0.75 - wet * 0.1, 0.4 + wet * 0.22); } else if (wet) break; }
-    if (wet) { later(0.6, () => audio.play('splash')); vitals.add({ cheer: wet * 2 }); say(wet > 1 ? `${wet} skips!` : 'Plop.', '🪨'); }
-    else later(0.6, () => { effects.puff(p.x + fx * 6, groundAt(p.x + fx * 6, p.z + fz * 6), p.z + fz * 6, 4, 0xe9d3a0, 0.3, 0.4); audio.play('step:dirt'); });
+    // Skimmed where the camera looks (src/world/play.js): flat and fast, it skips across the water.
+    if (!play.throwStone()) return;
+    bag.remove(id, 1); busy(0.8);
   } else if (item.use === 'keepsake') {
     player.gesture(id === 'feather' ? 'laugh' : id === 'shell' ? 'yawn' : 'eat', 1.3); busy(1.0); say(item.say, item.icon);
     if (elapsed - keepsakeAt > 25) { keepsakeAt = elapsed; vitals.add({ cheer: 6 }); ui.emote(overHead(), 'heart'); }
@@ -321,6 +319,10 @@ const areaDeps = {
   now: () => elapsed, dayTime: () => timeOfDay,
   crowd,                                   // the camp timetable, for people who follow it (src/world/areas/storyCast.js)
   story: { check: (c) => !!(storyRt && storyRt.story.check(c)) }, // ask the story (a condition string, see src/story/engine.js)
+  has: (id) => bag.count(id),              // how many of a thing are in the backpack
+  take: (id) => { if (!bag.count(id)) return false; bag.remove(id, 1); refreshBag(); return true; }, // use one up
+  hear: (p) => villagers.hearBell(p),      // people nearby glance toward p (the tower siren)
+  fed: () => play && play.noticed('ducks-bread'),
 };
 const areas = AREA_LIST.map((m) => m.create(scene, areaDeps) || {});
 for (const a of areas) if (a.lamps) props.addLamps(a.lamps); // village and pier lamps light the ground round them at night
@@ -332,7 +334,15 @@ const openStatic = allStatic.filter((c) => !c.building);
 // Soft contact shadows under everything solid, and under people's feet (src/world/contact.js).
 const contact = createContactShadows(scene, { groundAt });
 contact.addStatic([...allStatic, ...areaColliders()]);
-const interactables = [...litter.interactables, ...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
+// ---- Things to use with E (src/world/play.js, milestone V4): stones, chimes, crates, the rope swing, fishing, stargazing, the campfire.
+const play = createPlay(scene, {
+  audio, ui, player, effects, groundAt, input, camera, props, keepClear,
+  now: () => elapsed, later: (s, fn) => later(s, fn), nightF: () => nightFactor(timeOfDay),
+  say: (t, pic) => say(t, pic), tip: (id, t) => tip(id, t), reward: (r) => hud.reward(r), progress: (e) => progress(e),
+  give: (id, n, at) => give(id, n, at), has: (id) => bag.count(id), take: (id) => { if (!bag.count(id)) return false; bag.remove(id, 1); refreshBag(); return true; },
+  keyOf: (id) => keyOf(bag.slots, id), itemName: (id) => ITEMS[id].name, cheer: (n) => vitals.add({ cheer: n }), eat: (e) => vitals.add(e),
+});
+const interactables = [...play.interactables, ...litter.interactables, ...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 // ---- The digital camera (src/photo.js): a photo of an animal in the focus box fills its field-guide entry.
 const photo = createPhotoCamera({
   camera, input, canvas, groundAt, audio, player, interactables, scene, particles, finish,
@@ -377,7 +387,8 @@ const GESTURES = {
   lantern: ['reachUp', 0.8], door: ['push', 0.7], bell: ['pull', 1.1], flag: ['pull', 1.3], tree: ['shake', 0.9], campfire: ['crouch', 1.0],
   pickup: ['crouch', 0.8], station: ['reach', 0.8], litter: ['crouch', 0.8], repair: ['reach', 1.2],
   chickens: ['shoo', 0.9], cat: ['crouch', 1.1], sheep: ['pat', 0.9], telescope: ['peer', 1.5],
-  local: ['wave', 0.9], goat: ['pat', 0.9], buffalo: ['pat', 0.9], ducks: ['shoo', 0.9], monkey: ['peer', 1.2], view: ['peer', 1.5],
+  local: ['wave', 0.9], goat: ['pat', 0.9], buffalo: ['pat', 0.9], monkey: ['peer', 1.2], view: ['peer', 1.5],
+  pebbles: ['crouch', 0.8], chimes: ['reachUp', 0.8], crate: ['crouch', 0.9], siren: ['push', 0.6], // V4 (src/world/play.js)
 };
 const GREETINGS = [['wave', 0.9], ['salute', 0.9], ['cheer', 1.0], ['clap', 0.9]];
 let greetings = 0;
@@ -821,7 +832,7 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders, react.colliders, litter.colliders);
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders, react.colliders, litter.colliders, play.colliders);
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
     player.update(dt, (filming || talking || scope.active || photo.active) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
@@ -836,6 +847,7 @@ function step() {
     litter.update(dt, elapsed);
     wilds.update(elapsed, night, player.position);
     for (const a of areas) if (a.update) a.update(dt, elapsed, player, night);
+    play.update(dt, elapsed);
     if (!sleeping && !talking) feel(dt);
     storyRt.update(dt);
     for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] <= elapsed) { const fn = pending[i][1]; pending.splice(i, 1); fn(); }
@@ -900,6 +912,7 @@ function step() {
       const g = target.kind === 'villager' ? GREETINGS[greetings++ % GREETINGS.length] : GESTURES[target.kind];
       if (g) player.gesture(g[0], g[1], target.position);
       target.interact();
+      play.noticed(target.kind);
       if (target.kind === 'villager') {
         const who = target.speaker || 'Scout', lines = target.lines || (Math.random() < 0.5 && STAFF_CHATTER[who] ? STAFF_CHATTER[who] : CHATTER[block.id] || CHATTER.free);
         hud.say(who, lines[chatter++ % lines.length]);

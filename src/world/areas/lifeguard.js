@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createFigure } from '../../actors/figure.js';
+import { markGlow } from '../../finish.js';
 
 export const TOWER = { x: -5, z: 24 };
 const CAMP = { x: 10, z: 8 }, BEACH = { x: -24.5, z: 42.5 }; // the two ends of what the lifeguard watches (the camp centre is the big fire)
@@ -256,7 +257,7 @@ export function create(scene, deps) {
       // The searchlight sweeps slowly across the camp after dark, its lens lit.
       const dark = night > 0.45;
       head.rotation.y = face + Math.sin(elapsed * 0.22) * 1.25; head.rotation.x = dark ? 0.24 + Math.sin(elapsed * 0.13) * 0.06 : 0.1;
-      beam.visible = dark && head.visible; lens.material.color.setHex(dark ? 0xfff6d8 : 0x9a9a8a);
+      beam.visible = dark && head.visible; lens.material.color.setHex(dark ? 0xfff6d8 : 0x9a9a8a); markGlow(lens.material, dark ? 1.6 : 0);
       guard.group.visible = onDuty() && near < 110;
       if (!guard.group.visible) return;
       // Scanning from the hill round to the beach; every half minute or so a look back over the camp; binoculars now and then.

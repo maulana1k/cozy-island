@@ -93,7 +93,10 @@ export function createFlames(size = 1, count = TONGUES.length) {
   const material = new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uBright: { value: 1 }, uWind: WIND },
     vertexShader: VERT, fragmentShader: FRAG,
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
+    // Additive light; the picture's alpha is left alone, so the finishing pass (src/finish.js) blooms the
+    // fire only where its light runs past white, not across its whole soft halo.
+    blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
   });
   const mesh = new THREE.Mesh(geo, material);
   mesh.castShadow = false; mesh.receiveShadow = false; mesh.renderOrder = 2; mesh.frustumCulled = true;

@@ -3,6 +3,7 @@ import { skyColors, sunDirection, nightFactor } from '../logic/dayCycle.js';
 import { createRng } from '../logic/rng.js';
 import { SEED } from '../config.js';
 import './toon.js'; // gentle cel shading and aerial haze for every lit material: must run before anything compiles
+import { markGlow } from '../finish.js';
 
 const SUN_SCALE = 1.0;
 const AMBIENT_SCALE = 1.25;
@@ -109,6 +110,7 @@ export function createSky(scene, renderer) {
   const stars = buildStars(rng);
   const clouds = buildClouds(rng);
   const sunDisc = buildDisc(0xfff2c8, 34);
+  markGlow(sunDisc.material, 0); // glows low in the sky (Graphics: High, src/finish.js)
   const moonDisc = buildDisc(0xeef2ff, 20);
 
   const sunLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -119,7 +121,7 @@ export function createSky(scene, renderer) {
   cam.near = 1; cam.far = 260;
   sunLight.shadow.bias = -0.0004;
   sunLight.shadow.normalBias = 0.018; // about one texel: enough against acne without lifting shadows off their feet
-  sunLight.shadow.radius = 1; // a clean edge, filtered a little so it is smooth rather than stair-stepped
+  sunLight.shadow.radius = 2.5; // a soft edge a few centimetres wide (PCF taps spread this many texels; toon.js keeps it from going mushy)
   if ('intensity' in sunLight.shadow) sunLight.shadow.intensity = 0.75; // one even shadow tone everywhere
 
   const ambient = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
@@ -181,6 +183,7 @@ export function createSky(scene, renderer) {
       sunDisc.lookAt(0, 0, 0);
       sunDisc.material.color.setHex(c.sun).lerp(tmp.set(0xffffff), 0.45);
       sunDisc.material.opacity = THREE.MathUtils.clamp(s.y * 6 + 0.6, 0, 1);
+      sunDisc.material.blendAlpha = 1.4 * THREE.MathUtils.smoothstep(0.32 - s.y, 0, 0.27); // a warm glow round the sun near the horizon only
       moonDisc.position.set(-s.x * 820, -s.y * 820, s.z * 820);
       moonDisc.lookAt(0, 0, 0);
       moonDisc.material.opacity = THREE.MathUtils.clamp(-s.y * 6 + 0.2, 0, 1) * 0.95;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GRAVITY } from '../config.js';
+import { markGlow } from '../finish.js';
 
 const DARK = 0x3f3330;
 const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 });
@@ -64,6 +65,9 @@ let frameCount = 0;
 // The ground under any spot, so feet can be planted on it. Set once by the game.
 let groundUnder = null;
 export function setGround(fn) { groundUnder = fn; }
+// Every figure made, for the soft contact shadows under feet (src/world/contact.js). A figure taken out
+// of the scene simply has no parent and is skipped.
+export const FIGURES = [];
 const solePoint = new THREE.Vector3();
 // A smooth curve through a few keys (w rising 0..1), with no allocation: cubic Hermite, Catmull-Rom slopes.
 function keyed(W, V, w) {
@@ -358,7 +362,7 @@ export function createFigure({
   // A torch for the right hand, shown only while it is switched on.
   const torchProp = new THREE.Group(); torchProp.position.set(0, -P.fore + 0.01, 0.012); torchProp.rotation.x = Math.PI; torchProp.visible = false; torchProp.userData.keep = true; // lies along the forearm, lens leading
   { const barrel = part(new THREE.CylinderGeometry(0.02, 0.02, 0.13, 10), mat(0x3a3f47), 0, 0.035, 0, false), headT = part(new THREE.CylinderGeometry(0.036, 0.024, 0.05, 12), mat(0x8a9099), 0, 0.12, 0, false);
-    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false })); lens.position.y = 0.147;
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 12), markGlow(new THREE.MeshBasicMaterial({ color: 0xfff6c8, fog: false }), 1.6)); lens.position.y = 0.147;
     torchProp.add(barrel, headT, lens); armR.elbow.add(torchProp); }
 
   // The pack's shoulder straps, as skin: from the bottom corners of the pack round the sides of the ribs, up the
@@ -563,7 +567,7 @@ export function createFigure({
   const WK_D0 = -HEEL * (1 - Math.cos(WK_HU)) - ANK * Math.sin(WK_HU);      // the ankle against the flat foot's spot, heel down and toes up
   const WK_A = 0.45;                                                       // the share of the footprint ahead of the hip as the heel lands
   const walkC = (A) => (TH * Math.sin(A) + SH * Math.sin(A - WK_K0) - WK_D0) / WK_A;
-  const A_NOM = 0.42, A_MAX = 0.72, C_LO = 1.8, C_HI = 3.5;               // 24 and up to 41 degrees (2.1 m/s walks on ~0.55 m steps, ~3.7 a second); a natural cadence band (steps a second on a scout's legs)
+  const A_NOM = 0.42, A_MAX = 0.60, C_LO = 1.8, C_HI = 3.5;               // 24 and up to 41 degrees (1.95 m/s walks on ~0.55 m steps, ~3.5 a second); a natural cadence band (steps a second on a scout's legs)
   const gaitOut = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 }, gaitAsk = { r: 0, vk: 0, c: 0, S: 0, D: 0.6, A: 0 };
   let gDw = 0.6;
   const sOf = (A) => (walkC(A) * scale) / (2 * gDw);                      // a walking step at this angle (m)
@@ -684,6 +688,7 @@ export function createFigure({
   // Current joint angles, eased toward their targets every frame so no pose ever snaps.
   const pose = { thL: 0, thR: 0, knL: 0, knR: 0, shLx: 0, shRx: 0, shLz: -0.15, shRz: 0.15, elL: -0.15, elR: -0.15, spreadL: 0, spreadR: 0, py: 0, lean: 0, hy: 0, hp: 0, trunk: 0, fL: 0, fR: 0 };
 
+  FIGURES.push({ group, feet: [legL.foot, legR.foot], pelvis, scale });
   return {
     group,
     // How far to lower the figure so it sits on the ground, or on a seat of a given height.

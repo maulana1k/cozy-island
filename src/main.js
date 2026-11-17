@@ -32,6 +32,8 @@ import { clampDt } from './logic/time.js';
 import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector } from './cutscene.js';
+import { createFinish } from './finish.js';
+import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
 import { FLAGPOLE, VILLAGE_FIRE } from './logic/layout.js';
@@ -61,12 +63,18 @@ import { createStats, STAT_LABEL } from './logic/stats.js';
 import { heightAt } from './logic/terrain.js';
 
 const canvas = document.getElementById('game');
-// Drawing sharper than this heats the machine for little gain on a high-density screen.
-const MAX_RATIO = 1.5;
+// Graphics (pause menu, remembered): High draws up to the screen's own density (2 on a Retina screen)
+// through the finishing pass (src/finish.js: multisampled, glow on bright things); Low draws straight to
+// the screen as before, at most 1.5, which heats the machine less. ?graphics=low|high forces one.
+const RATIO_CAP = { high: 2, low: 1.5 };
+let graphics = 'high'; try { if (localStorage.getItem('graphics') === 'low') graphics = 'low'; } catch { /* private window */ }
+{ const g = new URLSearchParams(location.search).get('graphics'); if (g === 'low' || g === 'high') graphics = g; }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_RATIO));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, RATIO_CAP[graphics]));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.localClippingEnabled = true; // lets a tent be sliced open while you are inside it
+renderer.info.autoReset = false; // counted per picture below, the finishing pass's own draws included
+const finish = createFinish(renderer);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xf6d9b8);
@@ -296,6 +304,9 @@ const areaColliders = () => areas.flatMap((a) => (typeof a.colliders === 'functi
 // Buildings are hollow for the player (walls with a doorway); everyone else treats them as solid.
 const allStatic = getColliders();
 const openStatic = allStatic.filter((c) => !c.building);
+// Soft contact shadows under everything solid, and under people's feet (src/world/contact.js).
+const contact = createContactShadows(scene, { groundAt });
+contact.addStatic([...allStatic, ...areaColliders()]);
 const interactables = [...areas.flatMap((a) => a.interactables || []), ...pickups.interactables, ...props.interactables, ...buildings.interactables, ...zipline.interactables, ...villagers.interactables, ...activities.interactables, ...campLife.interactables, ...animals.interactables, ...wildlife.interactables];
 const playerXZ = { x: 0, z: 0 };
 const hintList = [];
@@ -463,6 +474,7 @@ const hud = createHUD({
   onToggleGuide: toggleGuide,
   onToggleFilms: () => { filmsOn = !filmsOn; hud.setFilms(filmsOn); audio.play('ui'); },
   onToggleSaver: () => { saver = !saver; hud.setSaver(saver); audio.play('ui'); try { localStorage.setItem('saver', saver ? '1' : '0'); } catch { /* private window */ } },
+  onToggleGraphics: () => { setGraphics(graphics === 'high' ? 'low' : 'high'); hud.setGraphics(graphics); audio.play('ui'); try { localStorage.setItem('graphics', graphics); } catch { /* private window */ } },
   onUseItem: (id, plain) => useItem(id, plain),
   onDropItem: (id) => dropItem(id),
   describeItem: (id) => describeItem(id),
@@ -501,7 +513,7 @@ storyRt = createStoryRuntime({
   },
 });
 hud.setContinue(storyRt.hasSave());
-refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setDaySpeed(daySpeed);
+refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setGraphics(graphics); hud.setDaySpeed(daySpeed);
 // What every scout sets out with.
 bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('biscuit', 2);
 refreshBag();
@@ -583,7 +595,7 @@ if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0,
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });
 
 function onResize() {
-  renderer.setPixelRatio(Math.min(ratio, window.devicePixelRatio, MAX_RATIO));
+  renderer.setPixelRatio(ratio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -591,24 +603,37 @@ function onResize() {
 window.addEventListener('resize', onResize);
 // Moving between a Retina and a normal display changes the pixel ratio without a resize.
 let lastRatio = window.devicePixelRatio;
-setInterval(() => { if (window.devicePixelRatio !== lastRatio) { lastRatio = window.devicePixelRatio; onResize(); } }, 1000);
+setInterval(() => { if (window.devicePixelRatio !== lastRatio) { lastRatio = window.devicePixelRatio; buildLadder(); applyRung(); onResize(); } }, 1000);
 
 const stats = { frames: 0, total: 0, worst: 0 };
 let lastBlock = null;
 
-// ---- Keeping it smooth: if frames start taking too long, draw at a slightly lower resolution;
-// when there is headroom again, sharpen back up.
-const maxRatio = Math.min(window.devicePixelRatio, MAX_RATIO);
-let ratio = maxRatio, slow = 0, quick = 0;
+// ---- Keeping it smooth: a ladder of settings, sharpest first: the pixel ratio from the cap down to 1 in
+// quarter steps (2, 1.75, 1.5, 1.25, 1 on a Retina screen at High), then, on High, the glow off. Frames
+// that take too long step down a rung; a long run of quick ones steps back up. A rung that proved too slow
+// waits twice as long each time before it is tried again, so the picture does not keep flipping.
+let ladder = [], rung = 0, ratio = 1, slow = 0, quick = 0;
+const failed = new Map(); // rung -> how many times it was too slow
+function buildLadder() {
+  const cap = Math.min(window.devicePixelRatio, RATIO_CAP[graphics]), high = graphics === 'high';
+  ladder = [{ ratio: cap, bloom: high }];
+  for (let r = Math.floor((cap - 0.001) * 4) / 4; r >= 1; r -= 0.25) ladder.push({ ratio: r, bloom: high });
+  if (high) ladder.push({ ratio: ladder[ladder.length - 1].ratio, bloom: false });
+  rung = 0; failed.clear();
+}
+function applyRung() {
+  const r = ladder[rung]; finish.bloom = r.bloom; slow = 0; quick = 0;
+  if (r.ratio !== ratio) { ratio = r.ratio; renderer.setPixelRatio(ratio); }
+}
+buildLadder(); applyRung();
+function setGraphics(g) { graphics = g; buildLadder(); applyRung(); }
 function tuneResolution(raw) {
   if (raw > 0.25) return; // a hitch from switching tabs, not a slow machine
   const want = 1 / frameRate(); // judged against the rate we are aiming for, not a fixed 60
   slow = raw > want * 1.25 ? slow + raw : Math.max(0, slow - raw * 2);
   quick = raw < want * 1.04 ? quick + raw : 0;
-  let next = ratio;
-  if (slow > 1.2 && ratio > 1) next = Math.max(1, ratio - 0.25);
-  else if (quick > 8 && ratio < maxRatio) next = Math.min(maxRatio, ratio + 0.25);
-  if (next !== ratio) { ratio = next; slow = 0; quick = 0; renderer.setPixelRatio(ratio); }
+  if (slow > 1.2 && rung < ladder.length - 1) { failed.set(rung, (failed.get(rung) || 0) + 1); rung++; applyRung(); }
+  else if (rung > 0 && quick > 8 * 2 ** Math.min(4, failed.get(rung - 1) || 0)) { rung--; applyRung(); }
 }
 let last = performance.now();
 
@@ -843,7 +868,9 @@ function step() {
   sky.sunLight.shadow.autoUpdate = false;
   sky.sunLight.shadow.needsUpdate = saver || (stats.frames & 1) === 0;
   renderer.shadowMap.needsUpdate = true;
-  renderer.render(scene, camera);
+  contact.update(camera);
+  renderer.info.reset();
+  if (graphics === 'high') finish.render(scene, camera); else renderer.render(scene, camera);
   // Counted over two pictures, since only every other one redraws the shadows.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;
   drawn.lastCalls = renderer.info.render.calls; drawn.lastTris = renderer.info.render.triangles;
@@ -867,6 +894,7 @@ requestAnimationFrame(frame);
 // Handles for automated checks in the browser.
 window.__game = {
   wilds, areas, player, rig, input, stats, vitals, story: storyRt, director, film, begin, bag, give, useItem, pickups, scene, camera, renderer, audio, interactables, villagers, props, hud, journal, buildings, zipline,
-  get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather,
+  get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather, finish, contact,
+  get graphics() { return graphics; }, set graphics(g) { setGraphics(g); }, get rung() { return ladder[rung]; },
 };
-if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio }); }, 300);
+if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio, graphics, bloom: graphics === 'high' && finish.bloom }); }, 300);

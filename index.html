@@ -137,7 +137,7 @@
     /* Things you hold up: the notebook and the map */
     #hud .sheet { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto; background: rgba(30, 40, 60, 0.18); transition: opacity 0.3s ease; text-shadow: none; }
     #hud .sheet.off { opacity: 0; pointer-events: none; }
-    #hud .sheet.off .page, #hud .sheet.off .paper, #hud .sheet.off .rings { transform: translateY(60px) rotate(4deg); }
+    #hud .sheet.off .page, #hud .sheet.off .rings { transform: translateY(60px) rotate(4deg); }
     #hud .book { grid-template-columns: auto; }
     #hud .page { position: relative; width: min(92vw, 470px); height: min(86vh, 660px); background: #fffdf8; color: var(--ink); border-radius: 8px 22px 22px 8px; padding: 26px 30px 16px 62px; box-sizing: border-box;
       display: flex; flex-direction: column; box-shadow: 0 18px 50px rgba(20, 30, 50, 0.35); transform: rotate(-1.5deg); transition: transform 0.4s cubic-bezier(.2, 1.2, .3, 1);
@@ -156,8 +156,13 @@
     #hud .item.done .tip { color: var(--accent); font-weight: 700; }
     #hud .item:not(.done) .label { color: #5d6875; }
     #hud .foot { padding-top: 10px; font-size: 12px; color: #8a95a3; font-weight: 500; }
-    #hud .paper { background: #fff; padding: 16px; border-radius: 4px; box-shadow: 0 20px 55px rgba(20, 30, 50, 0.4); transform: rotate(1.6deg); transition: transform 0.4s cubic-bezier(.2, 1.2, .3, 1); cursor: pointer; }
-    #hud .paper canvas { display: block; width: min(84vh, 84vw, 720px); height: min(84vh, 84vw, 720px); }
+    #hud .paper { --s: min(92vh, 92vw, 800px); position: relative; width: var(--s); height: var(--s); padding: 0; background: none; cursor: pointer; transform-origin: 50% 50%;
+      transform: perspective(1500px) rotateX(3deg) rotateY(-1.5deg) rotate(0.8deg); filter: drop-shadow(0 18px 22px rgba(30, 20, 8, 0.5)) drop-shadow(0 3px 4px rgba(30, 20, 8, 0.3));
+      transition: transform 0.4s cubic-bezier(.2, .9, .3, 1); }
+    #hud .paper canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+    #hud .paper canvas.mp { left: 5%; top: 5%; width: 90%; height: 90%; }
+    /* the sheet opens from folded: squeezed along its columns and tipped back, then flattens */
+    #hud .sheet.off .paper { transform: perspective(1100px) translateY(40px) rotateX(58deg) rotateY(-10deg) scale(0.42, 0.7); }
 
     /* Backpack: a canvas flap with stitched pockets */
     #hud .pack { width: min(94vw, 520px); max-height: 90vh; overflow-y: auto; box-sizing: border-box; background: #f4ead2; color: var(--ink); border-radius: 26px 26px 34px 34px; padding: 22px 26px 22px; box-shadow: 0 18px 50px rgba(20, 30, 50, 0.38), inset 0 0 0 6px #f4ead2, inset 0 0 0 8px rgba(150, 110, 70, 0.0);

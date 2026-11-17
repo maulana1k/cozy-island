@@ -31,10 +31,16 @@ const ICONS = {
 };
 
 // Custom drawn icons for things no emoji shows well, named '@name' in ITEMS.
-const ITEM_ICONS = { bottle: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='25' y='4' width='14' height='8' rx='2' fill='#3f6f4a'/><rect x='27' y='11' width='10' height='6' fill='#b9c4c9'/><path d='M22 20 Q22 16 27 16 H37 Q42 16 42 20 V56 Q42 60 38 60 H26 Q22 60 22 56 Z' fill='#cfe6f2' stroke='#5b8fb0' stroke-width='2.5'/><path d='M24.5 32 H39.5 V55 Q39.5 57.5 37 57.5 H27 Q24.5 57.5 24.5 55 Z' fill='#5fb3e3'/><rect x='22' y='38' width='20' height='9' fill='#4f7a46'/><rect x='27' y='21' width='3' height='9' rx='1.5' fill='#ffffff' opacity='.8'/></svg>`) };
+const ITEM_ICONS = { bottle: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='25' y='4' width='14' height='8' rx='2' fill='#3f6f4a'/><rect x='27' y='11' width='10' height='6' fill='#b9c4c9'/><path d='M22 20 Q22 16 27 16 H37 Q42 16 42 20 V56 Q42 60 38 60 H26 Q22 60 22 56 Z' fill='#cfe6f2' stroke='#5b8fb0' stroke-width='2.5'/><path d='M24.5 32 H39.5 V55 Q39.5 57.5 37 57.5 H27 Q24.5 57.5 24.5 55 Z' fill='#5fb3e3'/><rect x='22' y='38' width='20' height='9' fill='#4f7a46'/><rect x='27' y='21' width='3' height='9' rx='1.5' fill='#ffffff' opacity='.8'/></svg>`),
+  // A small modern digital camera: mint body, big lens, flash and shutter button.
+  camera: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='40' y='11' width='12' height='6' rx='2' fill='#e8563f'/><path d='M8 20 Q8 16 12 16 H22 L25 12 H35 L38 16 H52 Q56 16 56 20 V48 Q56 52 52 52 H12 Q8 52 8 48 Z' fill='#8fd3c1' stroke='#2f6f69' stroke-width='2.5'/><rect x='8' y='24' width='48' height='4' fill='#2f6f69' opacity='.18'/><circle cx='32' cy='35' r='12.5' fill='#f6f2e7' stroke='#2f6f69' stroke-width='2.5'/><circle cx='32' cy='35' r='8' fill='#33475b'/><circle cx='32' cy='35' r='4' fill='#1d2a36'/><circle cx='29' cy='32' r='2.2' fill='#ffffff' opacity='.85'/><rect x='13' y='20' width='7' height='5' rx='1.5' fill='#fff6c8' stroke='#2f6f69' stroke-width='1.5'/></svg>`),
+  // A paper litter bag with a recycling leaf.
+  litterbag: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M14 20 H50 L46 58 Q46 60 44 60 H20 Q18 60 18 58 Z' fill='#d9b98a' stroke='#7a5a38' stroke-width='2.5'/><path d='M14 20 L18 12 H46 L50 20' fill='#e8d2a8' stroke='#7a5a38' stroke-width='2.5' stroke-linejoin='round'/><path d='M24 18 Q24 6 32 6 Q40 6 40 18' fill='none' stroke='#7a5a38' stroke-width='2.5'/><path d='M32 48 Q22 46 25 34 Q34 32 39 28 Q42 42 32 48 Z' fill='#4f9a5a'/><path d='M30 46 Q31 38 37 32' fill='none' stroke='#e8f4dc' stroke-width='1.6'/></svg>`),
+};
 const el = (tag, cls, text) => {
   const e = document.createElement(tag); if (cls) e.className = cls;
   if (typeof text === 'string' && text[0] === '@' && ITEM_ICONS[text.slice(1)]) { const i = document.createElement('img'); i.src = ITEM_ICONS[text.slice(1)]; i.alt = ''; i.style.cssText = 'width:1.15em;height:1.15em;vertical-align:-0.15em'; e.append(i); }
+  else if (typeof text === 'string' && text.startsWith('data:image/')) { const i = document.createElement('img'); i.src = text; i.alt = ''; i.className = 'photo'; e.append(i); } // a photo from the camera (src/photo.js)
   else if (text !== undefined) e.textContent = text;
   return e;
 };
@@ -144,6 +150,11 @@ function drawPaperMap(c) {
   c.lineCap = 'round'; c.lineJoin = 'round';
   // ---- The sea: one flat light blue, a few ripples, a white surf line round the coast
   c.fillStyle = '#a8dcf2'; c.fillRect(0, 0, MAP, MAP);
+  // printed sea: fine wavy hatch lines, and thin contour rings that follow the coast
+  c.strokeStyle = 'rgba(60,120,160,0.2)'; c.lineWidth = 0.7;
+  for (let y = 4; y < MAP; y += 5) { c.beginPath(); c.moveTo(0, y); for (let x = 12; x <= MAP; x += 12) c.lineTo(x, y + Math.sin(x * 0.07 + y * 0.9) * 1.1); c.stroke(); }
+  c.strokeStyle = 'rgba(40,100,150,0.42)'; c.lineWidth = 0.9;
+  for (const iso of [62, 72, 90]) c.stroke(trace(sr, iso).line);
   c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1.4;
   for (const [iso, dash] of [[69, [10, 34]], [78, [7, 52]]]) { c.setLineDash(dash); c.stroke(trace(sr, iso).line); }
   c.setLineDash([]);
@@ -229,20 +240,39 @@ function drawPaperMap(c) {
   c.save(); c.translate(150, 250); c.rotate(-0.06); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `22px ${HAND}`;
   c.lineWidth = 4; c.strokeStyle = 'rgba(70,100,50,0.55)'; c.strokeText('Wild jungle', 0, 0); c.fillStyle = '#fbf7e4'; c.fillText('Wild jungle', 0, 0);
   c.font = `15px ${HAND}`; c.strokeText('keep out!', 0, 22); c.fillStyle = '#ffe2d6'; c.fillText('keep out!', 0, 22); c.restore();
-  // ---- Title and compass
-  const title = { x: 580, y: 670, w: 230, h: 46 }, compass = { x: 44, y: 676, w: 64, h: 64 };
-  c.font = `36px ${HAND}`; const tw = c.measureText('Scout Camp Island').width, ts = Math.min(1, title.w / tw);
-  c.save(); c.translate(title.x, title.y); c.rotate(-0.035); c.scale(ts, ts); c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.lineWidth = 6; c.strokeStyle = 'rgba(255,255,255,0.7)'; c.strokeText('Scout Camp Island', 0, 0); c.fillStyle = '#2f6f9e'; c.fillText('Scout Camp Island', 0, 0); c.restore();
-  c.save(); c.translate(compass.x, compass.y); c.fillStyle = '#2f6f9e'; c.strokeStyle = '#2f6f9e'; c.lineWidth = 1.2;
-  c.beginPath(); c.moveTo(0, -17); c.lineTo(4, 0); c.lineTo(0, 17); c.lineTo(-4, 0); c.closePath(); c.fill();
-  c.beginPath(); c.moveTo(-17, 0); c.lineTo(0, -4); c.lineTo(17, 0); c.lineTo(0, 4); c.closePath(); c.stroke();
-  c.fillStyle = '#ffffff'; c.beginPath(); c.arc(0, 0, 1.6, 0, Math.PI * 2); c.fill();
-  c.fillStyle = '#2f6f9e'; c.font = `11px ${HAND}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('N', 0, -25); c.fillText('S', 0, 25); c.fillText('W', -25, 0); c.fillText('E', 25, 0); c.restore();
+  // ---- Title cartouche, ornate compass rose, scale bar: printed in dark blue ink
+  const INK = '#27506f', SERIF = '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif';
+  const title = { x: 575, y: 664, w: 250, h: 56 }, compass = { x: 52, y: 664, w: 84, h: 84 }, scale = { x: 232, y: 690, w: 250, h: 34 };
+  c.save(); c.translate(title.x, title.y); c.rotate(-0.012);
+  c.fillStyle = 'rgba(247,238,212,0.92)'; c.strokeStyle = INK;
+  c.beginPath(); c.roundRect(-title.w / 2, -title.h / 2, title.w, title.h, 7); c.fill(); c.lineWidth = 2; c.stroke();
+  c.lineWidth = 0.8; c.beginPath(); c.roundRect(-title.w / 2 + 4, -title.h / 2 + 4, title.w - 8, title.h - 8, 4); c.stroke();
+  c.fillStyle = INK; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = `bold 21px ${SERIF}`; const tw = c.measureText('SCOUT CAMP ISLAND').width, ts = Math.min(1, (title.w - 26) / tw);
+  c.save(); c.scale(ts, ts); c.fillText('SCOUT CAMP ISLAND', 0, -6); c.restore();
+  c.font = `italic 11px ${SERIF}`; c.fillText('a little camp by the sea', 0, 14);
+  for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx * 108, 14); c.lineTo(sx * 95, 14); c.stroke(); c.beginPath(); c.arc(sx * 112, 14, 1.8, 0, Math.PI * 2); c.fill(); }
+  c.restore();
+  c.save(); c.translate(compass.x, compass.y); c.fillStyle = INK; c.strokeStyle = INK;
+  c.lineWidth = 1; c.beginPath(); c.arc(0, 0, 23, 0, Math.PI * 2); c.stroke(); c.lineWidth = 0.6; c.beginPath(); c.arc(0, 0, 20, 0, Math.PI * 2); c.stroke();
+  for (let i = 0; i < 16; i++) { const a = (i * Math.PI) / 8; c.lineWidth = i % 2 ? 0.5 : 0.8; c.beginPath(); c.moveTo(Math.sin(a) * 20, -Math.cos(a) * 20); c.lineTo(Math.sin(a) * 23, -Math.cos(a) * 23); c.stroke(); }
+  const star = (len, w, rot, half) => { c.save(); c.rotate(rot); for (let k = 0; k < 4; k++) { c.rotate(Math.PI / 2);
+    c.beginPath(); c.moveTo(0, 0); c.lineTo(w, -w); c.lineTo(0, -len); c.closePath(); c.fillStyle = INK; c.fill();
+    c.beginPath(); c.moveTo(0, 0); c.lineTo(-w, -w); c.lineTo(0, -len); c.closePath(); c.fillStyle = half; c.fill(); c.lineWidth = 0.7; c.stroke(); } c.restore(); };
+  star(14, 3.2, Math.PI / 4, '#efe3c0'); star(26, 4, 0, '#efe3c0');
+  c.fillStyle = '#efe3c0'; c.beginPath(); c.arc(0, 0, 2.2, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.fillStyle = INK; c.font = `bold 13px ${SERIF}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('N', 0, -35); c.font = `10px ${SERIF}`; c.fillText('S', 0, 33); c.fillText('W', -33, 1); c.fillText('E', 33, 1);
+  c.beginPath(); c.moveTo(0, -46); c.lineTo(-3, -42); c.lineTo(3, -42); c.closePath(); c.fill(); c.restore();
+  // scale bar: 100 m, alternating black and paper blocks
+  c.save(); c.translate(scale.x - 110, scale.y - 4); const sw = 100 * MK;
+  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#f3e8c8' : INK; c.fillRect((sw / 4) * i, 0, sw / 4, 5); }
+  c.strokeStyle = INK; c.lineWidth = 0.9; c.strokeRect(0, 0, sw, 5);
+  c.fillStyle = INK; c.font = `10px ${SERIF}`; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  c.fillText('0', 0, -3); c.fillText('50', sw / 2, -3); c.fillText('100 m', sw, -3); c.restore();
   // ---- Place tags: white paper, a slight tilt, a short leader; nudged apart so none overlap
-  c.font = `14px ${TAG_FONT}`;
-  const tags = LABELS.map(([text, p, dx, dy], i) => { const ax = mx(p.x), ay = mz(p.z); return { text, ax, ay, x: ax + dx, y: ay + dy, w: c.measureText(text).width + 16, h: 22, tilt: (rnd(i + 1) - 0.5) * 0.09 }; });
-  const keepOut = [{ x: title.x, y: title.y, w: title.w + 10, h: title.h }, { x: compass.x, y: compass.y, w: compass.w, h: compass.h }];
+  c.font = `italic 14px ${SERIF}`;
+  const tags = LABELS.map(([text, p, dx, dy], i) => { const ax = mx(p.x), ay = mz(p.z); return { text, ax, ay, x: ax + dx, y: ay + dy, w: c.measureText(text).width + 8, h: 18, tilt: (rnd(i + 1) - 0.5) * 0.09 }; });
+  const keepOut = [{ x: title.x, y: title.y, w: title.w + 10, h: title.h }, { x: compass.x, y: compass.y, w: compass.w, h: compass.h }, { x: scale.x, y: scale.y - 4, w: scale.w, h: scale.h }];
   for (let it = 0; it < 80; it++) {
     let moved = false;
     for (let a = 0; a < tags.length; a++) {
@@ -256,22 +286,98 @@ function drawPaperMap(c) {
         if (ox < oy) { const s = A.x < B.x ? -1 : 1; A.x += s * ox * k; if (!B.fixed) B.x -= s * ox * k; }
         else { const s = A.y < B.y ? -1 : 1; A.y += s * oy * k; if (!B.fixed) B.y -= s * oy * k; }
       }
-      A.x = Math.max(A.w / 2 + 6, Math.min(MAP - A.w / 2 - 6, A.x)); A.y = Math.max(A.h / 2 + 6, Math.min(MAP - A.h / 2 - 6, A.y));
+      A.x = Math.max(A.w / 2 + 16, Math.min(MAP - A.w / 2 - 16, A.x)); A.y = Math.max(A.h / 2 + 16, Math.min(MAP - A.h / 2 - 16, A.y));
     }
     if (!moved) break;
   }
   c.textAlign = 'center'; c.textBaseline = 'middle';
   for (const t of tags) {
     const ex = Math.max(t.x - t.w / 2, Math.min(t.x + t.w / 2, t.ax)), ey = Math.max(t.y - t.h / 2, Math.min(t.y + t.h / 2, t.ay));
-    c.strokeStyle = 'rgba(70,60,50,0.25)'; c.lineWidth = 3.2; c.beginPath(); c.moveTo(ex, ey); c.lineTo(t.ax, t.ay); c.stroke();
-    c.strokeStyle = '#ffffff'; c.lineWidth = 1.6; c.stroke();
-    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(t.ax, t.ay, 2.4, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(45,35,25,0.65)'; c.lineWidth = 0.8; c.setLineDash([2, 2]); c.beginPath(); c.moveTo(ex, ey); c.lineTo(t.ax, t.ay); c.stroke(); c.setLineDash([]);
+    c.fillStyle = '#3a2f25'; c.beginPath(); c.arc(t.ax, t.ay, 1.9, 0, Math.PI * 2); c.fill();
   }
-  for (const t of tags) {
+  c.lineJoin = 'round';
+  for (const t of tags) { // printed names: dark ink with a paper-coloured halo, no boxes
     c.save(); c.translate(t.x, t.y); c.rotate(t.tilt);
-    c.shadowColor = 'rgba(50,60,80,0.22)'; c.shadowBlur = 4; c.shadowOffsetY = 1.5; c.fillStyle = '#fffdf8'; c.fillRect(-t.w / 2, -t.h / 2, t.w, t.h);
-    c.shadowColor = 'transparent'; c.fillStyle = '#3d4656'; c.fillText(t.text, 0, 1); c.restore();
+    c.lineWidth = 4.5; c.strokeStyle = 'rgba(247,238,212,0.92)'; c.strokeText(t.text, 0, 1);
+    c.fillStyle = '#2f2519'; c.fillText(t.text, 0, 1); c.restore();
   }
+  // ---- Print look: a touch desaturated and warmer, inked on paper (the sheet's grain is laid over it by the page)
+  const tmp = document.createElement('canvas'); tmp.width = c.canvas.width; tmp.height = c.canvas.height;
+  const tc = tmp.getContext('2d'); tc.drawImage(c.canvas, 0, 0);
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, tmp.width, tmp.height);
+  c.filter = 'saturate(0.8) sepia(0.2) contrast(0.96)'; c.drawImage(tmp, 0, 0); c.filter = 'none';
+  c.globalCompositeOperation = 'multiply'; c.fillStyle = '#f6ead0'; c.fillRect(0, 0, tmp.width, tmp.height); c.restore();
+  // trim to the neat-line and print the border (margin outside it is the paper's)
+  c.save(); c.setTransform(dpr0(c), 0, 0, dpr0(c), 0, 0); c.globalCompositeOperation = 'destination-in'; c.fillRect(6, 6, MAP - 12, MAP - 12); c.restore();
+  c.save(); c.strokeStyle = '#27506f'; c.lineWidth = 2.4; c.strokeRect(6, 6, MAP - 12, MAP - 12); c.lineWidth = 0.8; c.strokeRect(11, 11, MAP - 22, MAP - 22);
+  c.fillStyle = '#27506f'; for (const [x, y] of [[6, 6], [MAP - 6, 6], [6, MAP - 6], [MAP - 6, MAP - 6]]) c.fillRect(x - 3, y - 3, 6, 6); c.restore();
+}
+const dpr0 = (c) => c.canvas.width / MAP;
+
+// ---- The sheet itself: cream paper with fibres, aged deckled edges and a 3 x 2 grid of folds ----------------
+// Painted once into two canvases the same size: the paper under the map, and a see-through layer over it
+// (panel shading, creases, wear, grain) so the print looks like it is on the folded paper.
+const SHEET = 800;
+function paintSheet(bg, ov, dpr) {
+  let seed = 7; const R = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const S = SHEET, cols = 3, rows = 2;
+  // grain tile: random light and dark specks
+  const tile = document.createElement('canvas'); tile.width = tile.height = 192; const tcx = tile.getContext('2d'), id = tcx.createImageData(192, 192);
+  for (let i = 0; i < id.data.length; i += 4) { const v = R(), dark = v < 0.5; id.data[i] = dark ? 90 : 255; id.data[i + 1] = dark ? 70 : 252; id.data[i + 2] = dark ? 40 : 240; id.data[i + 3] = Math.abs(v - 0.5) * 70; }
+  tcx.putImageData(id, 0, 0);
+  // slightly irregular worn outline
+  const pts = [], M = 14, step = 8, ph = [R() * 6, R() * 6, R() * 6, R() * 6];
+  const wob = (t, k) => Math.sin(t * 0.045 + ph[k]) * 1.6 + Math.sin(t * 0.17 + ph[k] * 2) * 0.9 + (R() - 0.5) * 1.6;
+  for (let t = M; t < S - M; t += step) pts.push([t, M + wob(t, 0)]);
+  for (let t = M; t < S - M; t += step) pts.push([S - M + wob(t, 1), t]);
+  for (let t = S - M; t > M; t -= step) pts.push([t, S - M + wob(t, 2)]);
+  for (let t = S - M; t > M; t -= step) pts.push([M + wob(t, 3), t]);
+  const outline = (c) => { c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); };
+  const grain = (c, a) => { c.save(); c.globalAlpha = a; c.fillStyle = c.createPattern(tile, 'repeat'); c.fillRect(0, 0, S, S); c.restore(); };
+  // ---- under the map
+  bg.setTransform(dpr, 0, 0, dpr, 0, 0); bg.save(); outline(bg); bg.clip();
+  const g = bg.createRadialGradient(S * 0.45, S * 0.4, 60, S / 2, S / 2, S * 0.75); g.addColorStop(0, '#f6eed6'); g.addColorStop(1, '#ecdfbf');
+  bg.fillStyle = g; bg.fillRect(0, 0, S, S);
+  for (let i = 0; i < 46; i++) { const x = R() * S, y = R() * S, r = 50 + R() * 140, b = bg.createRadialGradient(x, y, 0, x, y, r), warm = R() < 0.6; b.addColorStop(0, warm ? 'rgba(190,150,90,0.07)' : 'rgba(255,255,245,0.12)'); b.addColorStop(1, 'rgba(255,255,255,0)'); bg.fillStyle = b; bg.fillRect(x - r, y - r, r * 2, r * 2); }
+  bg.lineWidth = 0.6; for (let i = 0; i < 2600; i++) { const x = R() * S, y = R() * S, a = R() * Math.PI, l = 3 + R() * 9; bg.strokeStyle = R() < 0.5 ? 'rgba(130,100,60,0.12)' : 'rgba(255,255,250,0.28)'; bg.beginPath(); bg.moveTo(x, y); bg.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + R() * 2, y + Math.sin(a) * l * 0.5 + R() * 2, x + Math.cos(a) * l, y + Math.sin(a) * l); bg.stroke(); }
+  grain(bg, 0.9);
+  for (const [x0, y0, x1, y1] of [[0, 0, 0, 90], [0, 0, 90, 0], [S, 0, S - 90, 0], [0, S, 0, S - 90]]) { // browner toward each edge
+    const e = bg.createLinearGradient(x0, y0, x1, y1); e.addColorStop(0, 'rgba(150,105,55,0.4)'); e.addColorStop(1, 'rgba(150,105,55,0)'); bg.fillStyle = e; bg.fillRect(0, 0, S, S);
+  }
+  bg.restore(); bg.strokeStyle = 'rgba(110,80,45,0.5)'; bg.lineWidth = 1.1; outline(bg); bg.stroke();
+  // ---- over the map
+  ov.setTransform(dpr, 0, 0, dpr, 0, 0); ov.save(); outline(ov); ov.clip();
+  const pw = (S - 2 * M) / cols, ph2 = (S - 2 * M) / rows, X = (i) => M + i * pw, Y = (j) => M + j * ph2;
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { // each panel tilted a little differently to the light
+    const lit = (R() - 0.45) * 0.1, a = R() * Math.PI * 2, pg = ov.createLinearGradient(X(i) + pw / 2 + Math.cos(a) * pw / 2, Y(j) + ph2 / 2 + Math.sin(a) * ph2 / 2, X(i) + pw / 2 - Math.cos(a) * pw / 2, Y(j) + ph2 / 2 - Math.sin(a) * ph2 / 2);
+    const hi = lit > 0 ? `rgba(255,250,230,${lit * 1.4})` : `rgba(60,40,20,${-lit})`, lo = lit > 0 ? 'rgba(255,250,230,0)' : 'rgba(60,40,20,0)';
+    pg.addColorStop(0, hi); pg.addColorStop(1, lo); ov.fillStyle = pg; ov.fillRect(X(i), Y(j), pw, ph2);
+  }
+  const crease = (horiz, p, flip) => { // soft shadow on one side, highlight on the other, a crisp line between
+    const A = M, B = S - M, jit = [], n = Math.ceil((B - A) / 10); for (let k = 0; k <= n; k++) jit.push((R() - 0.5) * 0.7);
+    const at = (t) => A + t * (B - A);
+    for (const [w, col0, col1, side] of [[9, 'rgba(70,45,20,0.26)', 'rgba(70,45,20,0)', -flip], [6, 'rgba(255,252,238,0.7)', 'rgba(255,252,238,0)', flip]]) {
+      const gr = horiz ? ov.createLinearGradient(0, p, 0, p + side * w) : ov.createLinearGradient(p, 0, p + side * w, 0); gr.addColorStop(0, col0); gr.addColorStop(1, col1); ov.fillStyle = gr;
+      const lo = Math.min(0, side * w), hh = Math.abs(w);
+      if (horiz) ov.fillRect(A, p + lo, B - A, hh); else ov.fillRect(p + lo, A, hh, B - A);
+    }
+    ov.strokeStyle = 'rgba(75,52,28,0.42)'; ov.lineWidth = 0.9; ov.beginPath();
+    for (let k = 0; k <= n; k++) { const t = at(k / n), o = jit[k]; if (horiz) ov.lineTo(t, p + o); else ov.lineTo(p + o, t); if (!k) { /* first lineTo acts as moveTo */ } }
+    ov.stroke();
+    ov.strokeStyle = 'rgba(255,255,250,0.6)'; ov.lineWidth = 0.7; ov.setLineDash([5, 9, 2, 14]); ov.beginPath(); // whitened, worn stretches
+    for (let k = 0; k <= n; k++) { const t = at(k / n), o = jit[k] + flip * 0.9; if (horiz) ov.lineTo(t, p + o); else ov.lineTo(p + o, t); }
+    ov.stroke(); ov.setLineDash([]);
+  };
+  for (let i = 1; i < cols; i++) crease(false, X(i), i % 2 ? 1 : -1);
+  for (let j = 1; j < rows; j++) crease(true, Y(j), 1);
+  for (let i = 1; i < cols; i++) for (let j = 1; j < rows; j++) { // tiny wear where creases cross
+    const x = X(i), y = Y(j), w = ov.createRadialGradient(x, y, 0, x, y, 26); w.addColorStop(0, 'rgba(255,252,240,0.6)'); w.addColorStop(1, 'rgba(255,252,240,0)'); ov.fillStyle = w; ov.fillRect(x - 26, y - 26, 52, 52);
+    ov.lineWidth = 0.8; for (let k = 0; k < 14; k++) { const a = R() * Math.PI * 2, r0 = 3 + R() * 10, l = 2 + R() * 5; ov.strokeStyle = R() < 0.6 ? 'rgba(255,255,248,0.75)' : 'rgba(110,80,45,0.35)'; ov.beginPath(); ov.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); ov.lineTo(x + Math.cos(a) * (r0 + l), y + Math.sin(a) * (r0 + l)); ov.stroke(); }
+  }
+  grain(ov, 0.55);
+  const vg = ov.createRadialGradient(S / 2, S / 2, S * 0.42, S / 2, S / 2, S * 0.72); vg.addColorStop(0, 'rgba(120,85,40,0)'); vg.addColorStop(1, 'rgba(120,85,40,0.22)'); ov.fillStyle = vg; ov.fillRect(0, 0, S, S);
+  ov.restore();
 }
 
 export function createHUD(handlers) {
@@ -354,9 +460,11 @@ export function createHUD(handlers) {
   const baseMap = document.createElement('canvas'); baseMap.width = baseMap.height = MAP * dpr;
   const bctx = baseMap.getContext('2d'); bctx.scale(dpr, dpr);
   let mapDrawn = false; // the sheet is painted the first time it is opened (it samples the whole island)
-  const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.height = MAP * dpr;
+  const mapCanvas = document.createElement('canvas'); mapCanvas.width = mapCanvas.height = MAP * dpr; mapCanvas.className = 'mp';
   const mctx = mapCanvas.getContext('2d');
-  paper.append(mapCanvas); sheet.append(paper);
+  const sheetBg = document.createElement('canvas'), sheetOv = document.createElement('canvas'); sheetOv.className = 'ov';
+  sheetBg.width = sheetBg.height = sheetOv.width = sheetOv.height = SHEET * dpr;
+  paper.append(sheetBg, mapCanvas, sheetOv); sheet.append(paper);
 
   // ---- Start screen: the name of the place, Continue (when there is a save), New game, or explore without the guide
   const start = el('div', 'overlay start');
@@ -698,16 +806,16 @@ export function createHUD(handlers) {
     // Marks where you and the other scouts are, on the paper map while it is open.
     drawMap(player, facing, villagers) {
       if (!hud.mapOpen || frame++ % 3) return;
-      if (!mapDrawn) { drawPaperMap(bctx); mapDrawn = true; }
+      if (!mapDrawn) { drawPaperMap(bctx); paintSheet(sheetBg.getContext('2d'), sheetOv.getContext('2d'), dpr); mapDrawn = true; }
       mctx.setTransform(1, 0, 0, 1, 0, 0);
       mctx.drawImage(baseMap, 0, 0);
       mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      mctx.fillStyle = '#ffffff'; mctx.strokeStyle = 'rgba(60,50,70,0.7)'; mctx.lineWidth = 1.2;
+      mctx.fillStyle = '#f7eed4'; mctx.strokeStyle = 'rgba(45,35,25,0.85)'; mctx.lineWidth = 1.2;
       for (const v of villagers) { mctx.beginPath(); mctx.arc(mx(v.x), mz(v.z), 2.6, 0, Math.PI * 2); mctx.fill(); mctx.stroke(); }
       mctx.save(); mctx.translate(mx(player.x), mz(player.z));
       mctx.fillStyle = 'rgba(255,90,60,0.22)'; mctx.beginPath(); mctx.arc(0, 0, 13 + Math.sin(performance.now() / 300) * 3, 0, Math.PI * 2); mctx.fill();
       mctx.rotate(Math.atan2(facing.x, -facing.z));
-      mctx.fillStyle = '#ff5a3c'; mctx.strokeStyle = '#ffffff'; mctx.lineWidth = 2.5;
+      mctx.fillStyle = '#d9442c'; mctx.strokeStyle = '#f7eed4'; mctx.lineWidth = 2.5;
       mctx.beginPath(); mctx.moveTo(0, -10); mctx.lineTo(7, 7); mctx.lineTo(0, 3); mctx.lineTo(-7, 7); mctx.closePath(); mctx.stroke(); mctx.fill();
       mctx.restore();
     },

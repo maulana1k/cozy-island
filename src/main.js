@@ -31,7 +31,7 @@ import { advance, nightFactor, phaseAt } from './logic/dayCycle.js';
 import { clampDt } from './logic/time.js';
 import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
-import { createDirector } from './cutscene.js';
+import { createDirector, placeFor } from './cutscene.js';
 import { createFinish } from './finish.js';
 import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
@@ -354,34 +354,50 @@ function toggleGuide() { guideOn = !guideOn; refreshQuest(); audio.play('ui'); s
 // Something happened that the story cares about (src/story/runtime.js turns it into quest progress).
 function progress(event) { if (storyRt) storyRt.event(event); }
 const on = (p) => ({ x: p.x, y: groundAt(p.x, p.z), z: p.z });
+const up = (p, h) => () => { const q = typeof p === 'function' ? p() : p; return { x: q.x, y: q.y + h, z: q.z }; }; // a point h above another (which may move)
+const ring = (p, a, r, h) => ({ x: p.x + Math.cos(a) * r, y: p.y + h, z: p.z + Math.sin(a) * r }); // a point on a circle round p
 const wildAngle = Math.atan2(WILD.z, WILD.x);
+// The films. Shot format and camera moves: src/cutscene.js. Titles sit on each shot's empty side; the
+// subject is in focus (depth of field on High), and a few shots pull focus from you to what you see.
 const FILMS = {
-  intro: () => { const back = Math.atan2(-player.position.z, -player.position.x); return [
-    { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 104, h: 74, h1: 54, a0: 0.5, a1: 1.25, lookH: 0, dur: 6.5, title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
-    { at: on(FLAGPOLE), r: 19, r1: 15, h: 7, h1: 5, a0: 2.3, a1: 1.5, lookH: 1.5, dur: 5.5, title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
-    // From the pier: the ferry at its moorings, closing in on you at the top of the gangway.
-    { at: () => player.position, r: 17, r1: 6, h: 6, h1: 2.2, a0: back - 0.75, a1: back - 0.2, lookH: 1.4, dur: 6, title: 'Your ferry has just come in', sub: 'Welcome to camp, scout' },
+  intro: () => { const back = Math.atan2(-player.position.z, -player.position.x), flag = on(FLAGPOLE); return [
+    // A slow aerial drift over the whole island, the lens easing in.
+    { at: { x: -12, y: 0, z: -10 }, r: 128, r1: 106, h: 74, h1: 56, a0: 0.5, a1: 1.15, lookH: 0, fov: 52, fov1: 47, dur: 6.5, drift: 0.6, aperture: 0.35, place: 'center', title: 'Scout Camp Island', sub: 'A small camp at the edge of a great wild jungle' },
+    // A low dolly across the parade ground, the flagpole sliding past.
+    { move: 'dolly', p0: ring(flag, 2.35, 18, 3.2), p1: ring(flag, 1.6, 13.5, 2.4), look: up(flag, 1.6), look1: up(flag, 2.4), dur: 5.5, aperture: 1.1, place: 'upper-left', title: 'Sixty scouts, one summer', sub: 'Exercise at dawn, the flag, lessons, games, and songs round the fire' },
+    // From the pier: the ferry at its moorings, then a slow push in on you at the top of the gangway.
+    { move: 'push', at: () => player.position, a0: back - 0.7, a1: back - 0.35, r: 16, r1: 6.5, h: 5.5, h1: 2.2, lookH: 1.4, fov: 55, fov1: 44, dur: 6, aperture: 1.2, place: 'lower-right', title: 'Your ferry has just come in', sub: 'Welcome to camp, scout' },
   ]; },
-  exercise: () => [{ at: on({ x: 8.5, z: 17.3 }), r: 15, r1: 12, h: 5, h1: 3.5, a0: 2.6, a1: 1.7, lookH: 1, dur: 7, title: 'Morning exercise', sub: 'One, two, three, four!' }],
-  ceremony: () => [{ at: on(FLAGPOLE), r: 13, r1: 10, h: 2.2, h1: 3.2, a0: 2.4, a1: 1.6, lookH: 3.6, dur: 7, title: 'Flag ceremony', sub: 'The whole camp stands for the flag' }],
-  lunch: () => [{ at: on({ x: 15, z: 23 }), r: 14, r1: 11, h: 6, h1: 4, a0: -0.4, a1: 0.5, lookH: 0.8, dur: 6, title: 'Lunch', sub: 'Camp stew for everyone' }],
-  campfire: () => [{ at: on(VILLAGE_FIRE), r: 11, r1: 8.5, h: 3.4, h1: 2.6, a0: 0.3, a1: 1.6, lookH: 1.2, dur: 8, title: 'Campfire night', sub: 'Songs and stories round the big fire' }],
-  sleep: () => [{ at: on({ x: 10, z: 8 }), r: 38, r1: 32, h: 17, h1: 14, a0: 0.9, a1: 1.5, lookH: 0, dur: 6, title: 'Lights out', sub: 'Two scouts keep the night watch' }],
-  summit: () => [{ at: on(LOOKOUT), r: 15, r1: 13, h: 9.5, h1: 10.5, a0: wildAngle + Math.PI - 0.6, a1: wildAngle + Math.PI + 0.5, lookH: 0.5, dur: 7, title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
-  // The cliff lookout: round the front past the waterfall, then over your shoulder to the lake, the river and the village.
-  cliff: () => [
-    { at: on(AREAS.lookout), r: 18, r1: 14, h: 3, h1: 6, a0: 1.05, a1: 1.85, lookH: -2, dur: 6, title: 'The cliff lookout', sub: 'The river starts here, at the foot of the falls' },
-    { at: on(AREAS.lookout), r: 6, r1: 7.5, h: 3.2, h1: 4.2, a0: -1.85, a1: -1.3, lookH: 0.4, dur: 6, title: '', sub: 'The village and the far shore, all the way to the sea' },
-  ],
-  flag: () => [{ at: on(FLAGPOLE), r: 7.5, r1: 6, h: 1.3, h1: 1.8, a0: 2.4, a1: 2.0, lookH: 4.4, dur: 4.5, title: 'The flag goes up', sub: '' }],
-  finale: () => [{ at: () => player.position, r: 5, r1: 10, h: 2, h1: 6, a0: 0, a1: 3.1, lookH: 1, dur: 7, title: 'A true scout', sub: 'Your first day is done. The island is yours.' }],
+  // A low tracking shot along the front row.
+  exercise: () => { const p = on({ x: 8.5, z: 17.3 }); return [{ move: 'dolly', p0: ring(p, -0.55, 13, 1.5), p1: ring(p, -1.3, 10.5, 1.9), look: up(p, 1.0), look1: up(p, 1.2), dur: 7, aperture: 1.25, place: 'upper-right', title: 'Morning exercise', sub: 'One, two, three, four!' }]; },
+  // A crane up the flagpole from the ranks to the flag.
+  ceremony: () => [{ move: 'crane', at: on(FLAGPOLE), a0: 2.3, a1: 2.0, r: 12.5, r1: 10.5, h: 1.1, h1: 4.4, lookH: 2.0, lookH1: 4.6, fov: 50, dur: 7, aperture: 1.1, place: 'upper-left', title: 'Flag ceremony', sub: 'The whole camp stands for the flag' }],
+  // A slow push in over the tables.
+  lunch: () => [{ move: 'push', at: on({ x: 15, z: 23 }), a0: -0.1, a1: 0.2, r: 15, r1: 10, h: 6, h1: 3.8, lookH: 0.8, fov: 54, fov1: 45, dur: 6, aperture: 1.2, place: 'upper-right', title: 'Lunch', sub: 'Camp stew for everyone' }],
+  // Low round the fire at sitting height, shallow focus on the flames.
+  campfire: () => [{ at: on(VILLAGE_FIRE), r: 9.5, r1: 7.5, h: 1.7, h1: 2.3, a0: 0.3, a1: 1.35, lookH: 1.0, fov: 48, dur: 8, aperture: 1.4, place: 'upper-left', title: 'Campfire night', sub: 'Songs and stories round the big fire' }],
+  // The crane comes down over the sleeping camp.
+  sleep: () => [{ move: 'crane', at: on({ x: 10, z: 8 }), a0: 1.25, a1: 1.4, r: 34, r1: 29, h: 21, h1: 12, lookH: 0, lookH1: 1, dur: 6, drift: 0.7, aperture: 0.7, place: 'upper-left', title: 'Lights out', sub: 'Two scouts keep the night watch' }],
+  // Rising behind the summit, the jungle beyond the rope.
+  summit: () => [{ move: 'crane', at: on(LOOKOUT), r: 15, r1: 13, h: 6.5, h1: 10.5, a0: wildAngle + Math.PI - 0.5, a1: wildAngle + Math.PI + 0.35, lookH: 0.5, lookH1: 0.2, dur: 7, aperture: 0.9, place: 'lower-right', title: 'The summit', sub: 'Beyond the rope lies the wild jungle' }],
+  // The cliff lookout: round the front past the waterfall, then over your shoulder to the lake, the river
+  // and the village, the focus pulling from you to the view.
+  cliff: () => { const look = on(AREAS.lookout), far = { x: look.x + Math.cos(1.5) * 80, y: look.y - 8, z: look.z + Math.sin(1.5) * 80 }; return [
+    { move: 'crane', at: look, r: 18, r1: 14, h: 3, h1: 6, a0: 1.05, a1: 1.8, lookH: -2, lookH1: -1, dur: 6, aperture: 0.9, place: 'upper-left', title: 'The cliff lookout', sub: 'The river starts here, at the foot of the falls' },
+    { move: 'ots', who: () => player.position, to: far, back: 2.6, back1: 1.9, up: 2.1, up1: 1.9, side: 1, lookH: 0, dur: 6, blend: 1.4, focus: up(() => player.position, 1.4), focus1: far, rack: [0.15, 0.6], aperture: 1.1, place: 'lower-right', title: '', sub: 'The village and the far shore, all the way to the sea' },
+  ]; },
+  // Over your shoulder up the pole, the focus pulling from your hands to the flag.
+  flag: () => { const pole = on(FLAGPOLE); return [{ move: 'ots', who: () => player.position, to: pole, back: 2.3, back1: 1.8, up: 1.5, up1: 1.25, side: 1, sideOff: 0.7, lookH: 3.6, lookH1: 4.8, fov: 50, dur: 4.5, focus: up(() => player.position, 1.3), focus1: up(pole, 5), rack: [0.2, 0.65], aperture: 1.3, place: 'lower-right', title: 'The flag goes up', sub: '' }]; },
+  // Pulling back and rising from you as the day ends.
+  finale: () => { const a = Math.atan2(player.facing.z, player.facing.x); return [{ at: () => player.position, r: 4, r1: 11, h: 1.6, h1: 6.5, a0: a - 0.2, a1: a + 1.4, lookH: 1.3, lookH1: 0.9, fov: 44, fov1: 54, dur: 7, aperture: 1.2, place: 'upper-left', title: 'A true scout', sub: 'Your first day is done. The island is yours.' }]; },
 };
 // Plays a little film: the camera leaves you for a few seconds, then comes back.
 function film(id, opts = {}) {
   if ((!filmsOn && id !== 'intro') || director.active || player.riding || sleeping || hud.menuOpen) return false;
   if (hud.bagOpen) hud.toggleBag(); if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap();
   hud.setCine(true); filmsSeen.add(id);
-  director.play(FILMS[id](), { onShot: (s) => hud.setCaption(s.title, s.sub), onEnd: () => { hud.setCine(false); if (opts.onEnd) opts.onEnd(); } });
+  if (graphics === 'high') finish.useDepth(true); // depth of field (src/finish.js) reads the scene's depth
+  director.play(FILMS[id](), { onShot: (s) => hud.setCaption(s.title, s.sub, placeFor(s), s.dur), onEnd: () => { hud.setCine(false); finish.dof = null; finish.useDepth(false); if (opts.onEnd) opts.onEnd(); } });
   if (id === 'campfire') audio.play('song');
   if (id === 'ceremony' || id === 'flag') audio.play('bugle');
   if (id === 'exercise') audio.play('whistle');
@@ -887,6 +903,7 @@ function step() {
   renderer.shadowMap.needsUpdate = true;
   contact.update(camera);
   renderer.info.reset();
+  finish.dof = director.active && graphics === 'high' ? director.focus : null; // depth of field in films only
   if (graphics === 'high') finish.render(scene, camera); else renderer.render(scene, camera);
   // Counted over two pictures, since only every other one redraws the shadows.
   drawn.calls = (drawn.lastCalls + renderer.info.render.calls) / 2; drawn.tris = (drawn.lastTris + renderer.info.render.triangles) / 2;

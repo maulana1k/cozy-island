@@ -11,6 +11,7 @@ import { paintNewGround, gridSlopes, groundChanges, buildStreamWater } from './g
 import { TREE_KINDS, bushGeometry, rockGeometry, fernGeometry, tuftGeometry } from './scatter.js';
 import { facetShade } from '../kit/plants.js';
 import { windSway, wetSurface } from './weather.js';
+import { brushable } from './react.js';
 import { WILD, GRASS_RADIUS, ISLAND_RADIUS, SEED, PALETTE, AREAS } from '../config.js';
 
 const smooth = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
@@ -68,8 +69,9 @@ export function createWilds(scene) {
   const lumps = pool(lumpGeo, crown, 26000, false);
   const leaves = windSway(flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), 0.02);
   const lightBush = mergeGeometries([[0.62, 0, 0.42, 0], [0.42, 0.42, 0.32, 0.12], [0.44, -0.4, 0.3, -0.1]].map(([r, x, y, z]) => { const g = new THREE.IcosahedronGeometry(r, 0); g.scale(1, 0.78, 1); g.translate(x, y, z); return g; }));
-  const bushes = pool(facetShade(lightBush, 5), faceted, 2400), rocks = pool(rockGeometry(), white, 700);
-  const ferns = pool(fernGeometry(), leaves, 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
+  // Bushes and ferns part round legs (src/world/react.js): their own materials, so the tree crowns are left alone.
+  const bushes = pool(facetShade(lightBush, 5), brushable(windSway(flat(0xffffff, { vertexColors: true }), 0.012), true), 2400), rocks = pool(rockGeometry(), white, 700);
+  const ferns = pool(fernGeometry(), brushable(windSway(flat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }), 0.02), true), 3600, false), tufts = pool(tuftGeometry(), leaves, 5200, false);
 
   // ---- One tile: its ground and a list of what grows on it. Made once, then kept while it is near.
   const C = (hex) => new THREE.Color(hex);

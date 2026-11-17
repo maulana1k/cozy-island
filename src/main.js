@@ -34,6 +34,7 @@ import { createPickups } from './world/pickups.js';
 import { createDirector, placeFor } from './cutscene.js';
 import { createFinish } from './finish.js';
 import { createParticles } from './world/particles.js';
+import { createReact } from './world/react.js';
 import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
@@ -139,6 +140,7 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
+const react = createReact(scene, { props, audio, player, groundAt }); // V3: plants part, loose things roll, hanging things swing, tents ripple
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
 const say = (text, pic) => hud.note(text, pic);
@@ -754,7 +756,7 @@ function step() {
   }
 
   if (!paused) {
-    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders);
+    const colliders = openStatic.concat(pickups.colliders, wilds.colliders, areaColliders(), buildings.colliders(), villagers.colliders(), activities.colliders(), campLife.colliders(), wildlife.colliders(), campProps.colliders, scatter.colliders, react.colliders);
     zipline.update(dt, elapsed, player);
     // Being walked back out of the jungle, nothing may snag you: trees are ignored for those few seconds.
     player.update(dt, (filming || talking || scope.active) && !player.auto ? idleInput : input, rig.yaw, player.auto ? openStatic : colliders, elapsed);
@@ -894,6 +896,7 @@ function step() {
   props.update(dt, elapsed, night);
   effects.update(dt);
   particles.update(dt, night);
+  react.update(dt, elapsed);
   ui.update(dt, elapsed);
 
   // Shadows are redrawn every second picture at the smooth rate: nobody sees a shadow one frame late.

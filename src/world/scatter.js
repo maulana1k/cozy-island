@@ -9,6 +9,7 @@ import { facetShade, meadowClump } from '../kit/plants.js';
 import { campDrift, vegDist } from './ground.js';
 import { PALETTE, SEED } from '../config.js';
 import { WIND, WIND_GLSL, windSway } from './weather.js';
+import { brushable } from './react.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, flatShading: true, ...extra });
 const SHAKE_TIME = 1.1;
@@ -217,7 +218,7 @@ export function createScatter(scene) {
   dummy.rotation.order = 'XYZ';
 
   // ---- Spiky bushes
-  const bushes = new THREE.InstancedMesh(bushGeometry(), windSway(flat(0xffffff, { vertexColors: true }), 0.03), data.bushes.length);
+  const bushes = new THREE.InstancedMesh(bushGeometry(), brushable(windSway(flat(0xffffff, { vertexColors: true }), 0.03), true), data.bushes.length); // parts round legs (src/world/react.js)
   bushes.castShadow = true; bushes.receiveShadow = true;
   data.bushes.forEach((b, i) => {
     dummy.position.set(b.x, heightAt(b.x, b.z) - 0.05, b.z); dummy.rotation.set(0, b.rot, 0); dummy.scale.setScalar(b.scale * 1.15); dummy.updateMatrix();
@@ -290,7 +291,7 @@ export function createScatter(scene) {
   grass.count = placed;
 
   // ---- Ferns carpet the jungle floor
-  const ferns = new THREE.InstancedMesh(fernGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true }), FERNS);
+  const ferns = new THREE.InstancedMesh(fernGeometry(), brushable(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide, vertexColors: true }), true), FERNS);
   ferns.receiveShadow = true;
   let fernCount = 0; guard = 0;
   while (fernCount < FERNS && guard++ < FERNS * 40) {

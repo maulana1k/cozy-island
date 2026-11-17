@@ -199,6 +199,10 @@ export function createAudio(makeContext = () => new AudioContext()) {
     },
     sit() { tone(G5 / 2, { dur: 0.35, gain: 0.08 }); },
     rustle() { hiss({ freq: 3200, q: 0.5, dur: 0.35, gain: 0.05 }); hiss({ freq: 2400, q: 0.5, dur: 0.3, gain: 0.04, delay: 0.14 }); },
+    // Leaves brushing past the legs: a soft, quiet swish (src/world/react.js).
+    brush() { hiss({ freq: 2600 + Math.random() * 900, q: 0.6, dur: 0.22, gain: 0.016 }); hiss({ freq: 1900 + Math.random() * 600, q: 0.6, dur: 0.18, gain: 0.011, delay: 0.09 }); },
+    // Something small knocked along the ground: a little dry tick.
+    knock() { hiss({ type: 'highpass', freq: 3800, q: 0.7, dur: 0.05, gain: 0.02 }); },
     fire() { hiss({ type: 'lowpass', freq: 700, dur: 0.6, gain: 0.09 }); tone(G5 / 2, { dur: 0.5, gain: 0.07 }); tone(D5, { dur: 0.5, gain: 0.05, delay: 0.1 }); },
     squeak() { tone(680, { type: 'sine', dur: 0.14, gain: 0.1, to: 1150 }); tone(D5 * 2, { type: 'sine', dur: 0.2, gain: 0.04, delay: 0.1 }); },
     cluck() { for (let i = 0; i < 3; i++) tone(520 + Math.random() * 180, { type: 'triangle', dur: 0.07, gain: 0.07, delay: i * 0.1 + Math.random() * 0.03, to: 380 }); },

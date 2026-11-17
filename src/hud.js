@@ -481,6 +481,7 @@ export function createHUD(handlers) {
         feelRows[k].fill.style.width = `${v}%`; feelRows[k].n.textContent = v; feelRows[k].r.classList.toggle('low', low);
       }
       statRows.energy.row.classList.toggle('low', s.winded || s.energy < LOW);
+    closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     },
     // view: { slots: [{ id, count, label? }], capacity }. Redraws the belt and the pockets.
     setBag(view) {

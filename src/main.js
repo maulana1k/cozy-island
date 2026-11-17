@@ -1031,6 +1031,15 @@ function frame(now) {
   if (!noLimit && now - lastDraw < 1000 / frameRate() - 3) return;
   lastDraw = now;
   step();
+  if (loadMs === null) reportLoad();
+}
+// Load time: page start to the first drawn frame (the title screen). Logged, shown in the ?dbg title, and the
+// "Building the island…" text in index.html is removed.
+let loadMs = null;
+function reportLoad() {
+  loadMs = Math.round(performance.now());
+  console.info(`[scout-camp-island] first frame after ${(loadMs / 1000).toFixed(1)} s`);
+  const boot = document.getElementById('boot'); if (boot) boot.remove();
 }
 // Debug aid for screenshots: ?settle runs a few seconds of game time before the first picture.
 if (params.has('settle')) for (let i = 0, n = (Number(params.get('settle')) || 3.5) / 0.05; i < n; i++) { last = performance.now() - 50; step(); }
@@ -1042,4 +1051,4 @@ window.__game = {
   get timeOfDay() { return timeOfDay; }, set timeOfDay(v) { timeOfDay = v; }, weather, finish, contact,
   get graphics() { return graphics; }, set graphics(g) { setGraphics(g); }, get rung() { return ladder[rung]; },
 };
-if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio, graphics, bloom: graphics === 'high' && finish.bloom }); }, 300);
+if (params.has('dbg')) setInterval(() => { document.title = JSON.stringify({ loadMs, calls: Math.round(drawn.calls), tris: Math.round(drawn.tris), ratio, graphics, bloom: graphics === 'high' && finish.bloom }); }, 300);

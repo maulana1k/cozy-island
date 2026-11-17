@@ -7,6 +7,8 @@ import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
 import { beltOf, BELT_SIZE, TOOLS } from './logic/belt.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
+import { VERSION_LABEL, FEEDBACK_URL } from './config.js';
+import { settings } from './settings.js';
 
 const WEATHERS = [['Auto', 'auto'], ['Sunny', 'sun'], ['Windy', 'wind'], ['Rainy', 'rain'], ['Foggy', 'fog']];
 const TIMES = [['Morning', 0.2], ['Midday', 0.45], ['Afternoon', 0.64], ['Sunset', 0.78], ['Night', 0.95]];
@@ -474,7 +476,7 @@ export function createHUD(handlers) {
   const startCont = el('button', 'word cont', 'Continue'), startJourney = el('button', 'word go', 'New game'), startFree = el('button', 'word', 'Explore freely');
   const contWhat = el('p', 'what', 'Carry on where you left off.');
   startCont.style.display = contWhat.style.display = 'none';
-  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), startCont, contWhat, startJourney, el('p', 'what', 'Choose your name and look, then start your first day at camp.'), startFree, el('p', 'what', 'A new game with no guide on screen.'), el('p', 'press', 'Enter to start'));
+  start.append(el('h1', null, 'Scout Camp Island'), el('p', 'sub', 'a little camp by the sea'), startCont, contWhat, startJourney, el('p', 'what', 'Choose your name and look, then start your first day at camp.'), startFree, el('p', 'what', 'A new game with no guide on screen.'), el('p', 'press', 'Enter to start'), el('p', 'ver', VERSION_LABEL));
   startCont.addEventListener('click', () => handlers.onStart('continue'));
   startJourney.addEventListener('click', () => handlers.onStart('journey'));
   startFree.addEventListener('click', () => handlers.onStart('free'));
@@ -513,8 +515,13 @@ export function createHUD(handlers) {
   const resume = el('button', 'word', 'Resume');
   // One option row: a label on the left, its value on the right. row.val holds the value's text.
   const opt = (label) => { const row = el('button', 'orow'); row.val = el('b'); row.append(el('span', null, label), row.val); return row; };
-  const guideRow = opt('Journey guide'), filmRow = opt('Cutscenes'), saverRow = opt('Battery saver'), speedRow = opt('Day speed'), lookRow = opt('Camera'), soundRow = opt('Sound'), gfxRow = opt('Graphics'), timeRow = opt('Time of day'), weatherRow = opt('Weather'), keysRow = opt('Controls');
+  const guideRow = opt('Journey guide'), filmRow = opt('Cutscenes'), saverRow = opt('Battery saver'), speedRow = opt('Day speed'), lookRow = opt('Camera'), soundRow = opt('Sound'), gfxRow = opt('Graphics'), invertRow = opt('Invert zoom scroll'), timeRow = opt('Time of day'), weatherRow = opt('Weather'), keysRow = opt('Controls');
   keysRow.val.textContent = '›';
+  const showInvert = () => { invertRow.val.textContent = settings.invertZoom ? 'On' : 'Off'; };
+  showInvert();
+  invertRow.addEventListener('click', () => { settings.invertZoom = !settings.invertZoom; showInvert(); });
+  const feedbackRow = FEEDBACK_URL ? el('button', 'word', 'Send feedback') : null;
+  if (feedbackRow) feedbackRow.addEventListener('click', () => { try { window.open(FEEDBACK_URL, '_blank', 'noopener'); } catch { /* popup blocked */ } });
   // Time of day and Weather step through their choices (Auto for the random weather). Time shows the nearest preset when the menu opens.
   let timeAt = 1, wxAt = 0;
   weatherRow.val.textContent = WEATHERS[0][0];
@@ -527,8 +534,8 @@ export function createHUD(handlers) {
   for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 8', 'Quick bar: 1 flask, 2 torch, 3 bugle, 4 camera, 5 litter bag, 6 – 8 other things'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal (Notes are inside)'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Tab', 'Menu'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
-  const gamePanel = el('div', 'panel'); gamePanel.append(el('h3', null, 'Game'), resume, speedRow, timeRow, weatherRow, keysRow);
-  const setPanel = el('div', 'panel'); setPanel.append(el('h3', null, 'Settings'), guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow);
+  const gamePanel = el('div', 'panel'); gamePanel.append(el('h3', null, 'Game'), resume, speedRow, timeRow, weatherRow, keysRow, ...(feedbackRow ? [feedbackRow] : []));
+  const setPanel = el('div', 'panel'); setPanel.append(el('h3', null, 'Settings'), guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow, invertRow, el('p', 'ver', VERSION_LABEL));
   const mbody = el('div', 'mbody'); mbody.append(gamePanel, setPanel);
   const backRow = el('button', 'word', 'Back');
   const keyPanel = el('div', 'panel ctl'); keyPanel.append(el('h3', null, 'Controls'), controls, backRow);
@@ -543,7 +550,7 @@ export function createHUD(handlers) {
   timeRow.addEventListener('click', () => stepTime(1));
   weatherRow.addEventListener('click', () => stepWeather(1));
   // Keyboard highlight: cols[0] is the Game panel, cols[1] the Settings panel; the key list has only Back.
-  const cols = [[resume, speedRow, timeRow, weatherRow, keysRow], [guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow]];
+  const cols = [[resume, speedRow, timeRow, weatherRow, keysRow, ...(feedbackRow ? [feedbackRow] : [])], [guideRow, filmRow, saverRow, lookRow, soundRow, gfxRow, invertRow]];
   let col = 0, row = 0, inKeys = false;
   const allItems = cols[0].concat(cols[1], [backRow]);
   function paintCursor() { const cur = inKeys ? backRow : cols[col][row]; for (const o of allItems) o.classList.toggle('sel', o === cur); }

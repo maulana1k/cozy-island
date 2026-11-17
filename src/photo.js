@@ -15,6 +15,7 @@ import { FIGURES } from './actors/figure.js';
 import { createViewfinder } from './photoHud.js';
 import { surfaceAt } from './logic/surface.js';
 import { CAMPFIRES } from './logic/layout.js';
+import { settings } from './settings.js';
 const FIREFLY_GROUND = new Set(['meadow', 'grass', 'mud', 'forest']);
 
 const MIN_ZOOM = 1, MAX_ZOOM = 4, BOX_X = 0.2, BOX_Y = 0.26; // the focus box: half size in screen units (-1..1)
@@ -204,7 +205,7 @@ export function createPhotoCamera(deps) {
       // Steadiness: how fast the view is still swinging (radians a second, eased); a blur risk when high.
       shake += ((Math.hypot(dy, dp) / Math.max(dt, 1e-3)) * zoom - shake) * (1 - Math.exp(-dt * 8));
       // Zoom: the wheel or + / - set it; the lens eases there with a motor whirr.
-      const wheel = input.consumeZoom(); // scroll direction flipped on purpose (owner's request)
+      const wheel = input.consumeZoom() * settings.zoomSign; // scroll direction flipped on purpose (owner's request); the pause-menu option flips it back
       let z = wantZoom + wheel * 0.003;
       if (keys.has('Equal') || keys.has('NumpadAdd')) z += dt * 1.5;
       if (keys.has('Minus') || keys.has('NumpadSubtract')) z -= dt * 1.5;

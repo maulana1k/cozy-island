@@ -299,3 +299,8 @@ export const NUDGE_COOLDOWN = 1.5;
 export const BELL_HEAR_RANGE = 25;
 export const BELL_LOOK_TIME = 2;
 export const MIN_DRY_HEIGHT = 0.3;
+
+// Playtest build
+export const VERSION_LABEL = 'Playtest 1';
+// Where "Send feedback" in the pause menu opens. Leave empty to hide the button.
+export const FEEDBACK_URL = '';

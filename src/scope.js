@@ -4,6 +4,7 @@
 // new power with a motor whirr and a click at each step. Leave with E or Esc (the follow camera blends back). Whatever sits under the crosshair is named with its distance ("Bayu · 48 m"), and the first
 // sighting of each thing is noted. Used by the guard tower's telescope (src/world/areas/lifeguard.js).
 import * as THREE from 'three';
+import { settings } from './settings.js';
 
 const MIN_ZOOM = 3, MAX_ZOOM = 12;
 const FLIP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
@@ -90,7 +91,7 @@ export function createScope(deps) {
       const follow = 1 - Math.exp(-dt * 3.2);
       yaw += (aimYaw - yaw) * follow; pitch += (aimPitch - pitch) * follow;
       // Zoom: the wheel or + / - set the power; the lens eases there with a whirr and a click at every step.
-      let z = wantZoom + input.consumeZoom() * 0.006;
+      let z = wantZoom + input.consumeZoom() * settings.zoomSign * 0.006;
       if (keys.has('Equal') || keys.has('NumpadAdd')) z += dt * 3;
       if (keys.has('Minus') || keys.has('NumpadSubtract')) z -= dt * 3;
       z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));

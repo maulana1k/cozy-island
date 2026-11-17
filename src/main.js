@@ -140,7 +140,7 @@ let sips = FLASK_SIPS, torchOn = false, busyUntil = 0, keepsakeAt = -99;
 const torch = new THREE.SpotLight(0xfff0c8, 0, 34, 0.4, 0.55, 0.6); scene.add(torch, torch.target);
 const torchAim = new THREE.Vector3();
 const particles = createParticles(scene, { groundAt, weather, props, player, torch, graphics: () => graphics }); // dust, sparks, pollen, fireflies, butterflies, birds, Low halos
-const react = createReact(scene, { props, audio, player, groundAt }); // V3: plants part, loose things roll, hanging things swing, tents ripple
+const react = params.has('noreact') ? { colliders: [], update() {} } : createReact(scene, { props, audio, player, groundAt }); // V3: plants part, loose things roll, hanging things swing, tents ripple (?noreact: off, for measuring)
 const pending = []; // things that happen a moment later: [time, fn]
 const later = (seconds, fn) => pending.push([elapsed + seconds, fn]);
 const say = (text, pic) => hud.note(text, pic);

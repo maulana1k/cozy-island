@@ -39,7 +39,7 @@ export function createPond(scene) {
     disc.rotation.x = -Math.PI / 2; disc.material.side = THREE.DoubleSide; pad.add(disc);
     if (i % 3 === 0) pad.add(ball(0.1, i % 2 ? 0xf7b7cf : 0xffffff, 0, 0.07, 0, 1), ball(0.045, 0xffd75a, 0, 0.13, 0, 0));
     pad.position.set(POND.x + Math.cos(a) * r, 0.03, POND.z + Math.sin(a) * r); pad.rotation.y = rng() * 6;
-    pad.userData.phase = rng() * 6; pads.push(pad); g.add(pad);
+    pad.userData = { phase: rng() * 6, hx: pad.position.x, hz: pad.position.z, vx: 0, vz: 0, bob: 0, r: padR }; pads.push(pad); g.add(pad);
     waterObstacles.add(pad.position.x, pad.position.z, padR, 2); // a lapping ring round each pad (world/water.js)
   }
   // Flat stepping stones across one side (welded into one draw)
@@ -73,7 +73,23 @@ export function createPond(scene) {
       const near = !viewer || (viewer.x - POND.x) ** 2 + (viewer.z - POND.z) ** 2 < 70 * 70;
       for (const p of pads) p.visible = near;
       for (const k of ducks) k.d.visible = near;
-      for (const p of pads) { p.position.y = 0.03 + Math.sin(elapsed * 1.1 + p.userData.phase) * 0.012; p.rotation.y += dt * 0.03 * Math.sin(p.userData.phase); }
+      // Lily pads: a slow bob; a duck or the player passing close pushes them aside (they bob harder for a
+      // moment, turn a little) and they drift back to where they float (src/world/react.js, milestone V3).
+      for (const p of pads) {
+        const u = p.userData;
+        if (near && dt > 0) {
+          let fx = (u.hx - p.position.x) * 0.35, fz = (u.hz - p.position.z) * 0.35;
+          const shove = (x, z, reach, k) => { const dx = p.position.x - x, dz = p.position.z - z, d = Math.hypot(dx, dz); if (d < reach && d > 1e-3) { const f = (1 - d / reach) * k; fx += (dx / d) * f; fz += (dz / d) * f; u.bob = Math.min(1, u.bob + f * dt * 1.5); } };
+          for (const k of ducks) shove(k.d.position.x, k.d.position.z, 0.75 + u.r, 1.2);
+          if (viewer) shove(viewer.x, viewer.z, 0.9 + u.r, 2.5);
+          u.vx += (fx - u.vx * 1.6) * dt; u.vz += (fz - u.vz * 1.6) * dt;
+          p.position.x += u.vx * dt; p.position.z += u.vz * dt;
+          u.bob = Math.max(0, u.bob - dt * 0.6);
+        }
+        p.position.y = 0.03 + Math.sin(elapsed * 1.1 + u.phase) * 0.012 + Math.sin(elapsed * 6 + u.phase) * 0.02 * u.bob;
+        p.rotation.y += dt * (0.03 * Math.sin(u.phase) + (u.vx * 0.7 - u.vz * 0.5));
+        p.rotation.x = Math.sin(elapsed * 5 + u.phase) * 0.06 * u.bob;
+      }
       for (const k of ducks) {
         const a = elapsed * k.speed + k.phase;
         k.d.position.set(POND.x + Math.cos(a) * k.r, 0.02 + Math.sin(elapsed * 2 + k.phase) * 0.015, POND.z + Math.sin(a) * k.r);

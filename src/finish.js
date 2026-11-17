@@ -158,6 +158,97 @@ const FOCUS = new THREE.ShaderMaterial({
     }`,
   depthTest: false, depthWrite: false,
 });
+// Sun glare and light shafts (Graphics: High; src/sunfx.js works out the numbers each frame and hands them over
+// as `finish.sun`). Everything here is drawn from the scene's depth, kept on High for this:
+// - visibility: a 1x1 picture that counts how much of the sun's disc is open sky (13 depth taps), eased toward the
+//   new value over a few frames so a leaf crossing the sun does not make the glare flicker;
+// - shafts: at quarter size, open sky near the sun (depth = far) is the light, everything nearer is the shadow;
+//   two radial blurs toward the sun's place on the picture stretch it into soft rays through gaps in trees and tents;
+// - in the output pass: a warm halo round the disc, a faint streak, a few soft ghost discs and hexes on the line from
+//   the sun through the centre, a little veiling glare, and the golden-hour grade. All scaled by the visibility.
+const SKY_GLSL = /* glsl */`
+  uniform sampler2D tDepth; uniform float uNear; uniform float uFar;
+  float skyAt(vec2 uv) { float d = texture2D(tDepth, clamp(uv, 0.001, 0.999)).x; float z = (uNear * uFar) / (uFar - (uFar - uNear) * d); return step(uFar * 0.9, z); }`;
+const skyUniforms = () => ({ tDepth: { value: null }, uNear: { value: 0.1 }, uFar: { value: 1000 } });
+const VIS = new THREE.ShaderMaterial({
+  uniforms: { ...skyUniforms(), tPrev: { value: null }, uSun: { value: new THREE.Vector2() }, uAspect: { value: 1 }, uR: { value: 0.02 }, uEase: { value: 1 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: SKY_GLSL + /* glsl */`
+    uniform sampler2D tPrev; uniform vec2 uSun; uniform float uAspect; uniform float uR; uniform float uEase;
+    void main() {
+      float s = skyAt(uSun);
+      for (int i = 0; i < 12; i++) { float a = float(i) * 0.5236, r = uR * (i < 6 ? 0.5 : 1.0); s += skyAt(uSun + vec2(cos(a) / uAspect, sin(a)) * r); }
+      gl_FragColor = vec4(vec3(mix(texture2D(tPrev, vec2(0.5)).r, s / 13.0, uEase)), 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+// Quarter size: open sky, brightest close to the sun, averaged over a 2x2 of full-size depth taps.
+const SHAFT_SRC = new THREE.ShaderMaterial({
+  uniforms: { ...skyUniforms(), uSun: { value: new THREE.Vector2() }, uAspect: { value: 1 }, uTexel: { value: new THREE.Vector2() } },
+  vertexShader: QUAD_VS,
+  fragmentShader: SKY_GLSL + /* glsl */`
+    uniform vec2 uSun; uniform float uAspect; uniform vec2 uTexel; varying vec2 vUv;
+    void main() {
+      vec2 o = uTexel * 1.5;
+      float s = (skyAt(vUv + vec2(-o.x, -o.y)) + skyAt(vUv + vec2(o.x, -o.y)) + skyAt(vUv + vec2(-o.x, o.y)) + skyAt(vUv + o)) * 0.25;
+      float r = length((vUv - uSun) * vec2(uAspect, 1.0));
+      gl_FragColor = vec4(vec3(s * (exp(-r * r * 9.0) * 0.8 + exp(-r * 2.6) * 0.2)), 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+// The radial blur toward the sun, with a jittered start (the second, shorter pass smooths the grain).
+const shaftBlur = (TAPS) => new THREE.ShaderMaterial({
+  uniforms: { tSrc: { value: null }, uSun: { value: new THREE.Vector2() }, uLen: { value: 0.9 }, uDecay: { value: 0.96 } },
+  vertexShader: QUAD_VS,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tSrc; uniform vec2 uSun; uniform float uLen; uniform float uDecay; varying vec2 vUv;
+    void main() {
+      vec2 step = (uSun - vUv) * uLen / ${TAPS}.0;
+      float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      vec2 p = vUv + step * j; float w = 1.0, sum = 0.0, ws = 0.0;
+      for (int i = 0; i < ${TAPS}; i++) { sum += texture2D(tSrc, p).r * w; ws += w; w *= uDecay; p += step; }
+      gl_FragColor = vec4(vec3(sum / ws), 1.0);
+    }`,
+  depthTest: false, depthWrite: false,
+});
+const SHAFTS = [shaftBlur(28), shaftBlur(10)];
+// The output pass's sun part: grade, shafts, halo, streak, ghosts, veil.
+const SUN_GLSL = /* glsl */`
+  uniform float uSunOn; uniform vec2 uSunUv; uniform float uSunAspect; uniform vec3 uSunTint; uniform sampler2D tVis; uniform sampler2D tShaft;
+  uniform float uGlare; uniform float uShaft; uniform float uGhost; uniform float uStreak; uniform float uVeil; uniform float uGrade;
+  float hexd(vec2 q) { q = abs(q); return max(q.x * 0.866 + q.y * 0.5, q.y); }
+  vec3 sunFx(vec3 c) {
+    // Golden hour: warmer, a touch of pink in the shade, the lightest tones a little creamier.
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 g = c * vec3(1.05, 0.985, 0.9) + vec3(0.05, 0.012, 0.03) * (1.0 - l) * (1.0 - l);
+    c = mix(c, g, uGrade);
+    // ...and the open sky richer: more saturated, a touch deeper overhead, hotter low down near the sun.
+    if (uGrade > 0.0 && -viewZ(vUv) > uFar * 0.9) {
+      float sl = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      vec3 sat = clamp(mix(vec3(sl), c, 1.0 + 0.9 * uGrade), 0.0, 1.0);
+      c = mix(c, sat * (0.82 + 0.3 * smoothstep(0.3, 0.8, sl)), uGrade); // mid and dark sky deeper, the glow round the sun stays bright
+    }
+    float vis = texture2D(tVis, vec2(0.5)).r;
+    vec2 d = (vUv - uSunUv) * vec2(uSunAspect, 1.0); float r = length(d);
+    vec3 add = uSunTint * texture2D(tShaft, vUv).r * uShaft;
+    add += uSunTint * vis * uGlare * (exp(-r * r * 90.0) * 0.55 + exp(-r * 6.5) * 0.3 + exp(-r * 1.8) * 0.1 + exp(-r * r * 1500.0) * 0.6);
+    add += uSunTint * vis * uStreak * exp(-(vUv.y - uSunUv.y) * (vUv.y - uSunUv.y) * 9000.0) * exp(-abs(d.x) * 2.2);
+    if (uGhost > 0.0) {
+      vec2 axis = vec2(0.5) - uSunUv;
+      for (int i = 0; i < 5; i++) {
+        float f = i == 0 ? 0.45 : i == 1 ? 0.8 : i == 2 ? 1.2 : i == 3 ? 1.55 : 1.95;
+        float sz = i == 0 ? 0.035 : i == 1 ? 0.07 : i == 2 ? 0.045 : i == 3 ? 0.11 : 0.06;
+        vec3 tint = i == 0 ? vec3(1.0, 0.75, 0.5) : i == 1 ? vec3(1.0, 0.6, 0.62) : i == 2 ? vec3(0.95, 0.85, 0.55) : i == 3 ? vec3(0.8, 0.7, 0.9) : vec3(1.0, 0.8, 0.6);
+        vec2 q = (vUv - (uSunUv + axis * f)) * vec2(uSunAspect, 1.0);
+        float dist = (i == 1 || i == 3) ? hexd(q) : length(q);
+        add += tint * smoothstep(sz, sz * 0.55, dist) * (0.55 + 0.45 * smoothstep(sz * 0.4, sz, dist)) * uGhost * vis * (i == 3 ? 0.6 : 1.0);
+      }
+    }
+    c = 1.0 - (1.0 - c) * (1.0 - min(add, 1.0)); // screen: never past white
+    return c + (1.0 - c) * uSunTint * uVeil * vis;
+  }`;
+const sunUniforms = () => ({ uSunOn: { value: 0 }, uSunUv: { value: new THREE.Vector2() }, uSunAspect: { value: 1 }, uSunTint: { value: new THREE.Color() }, tVis: { value: null }, tShaft: { value: null }, uGlare: { value: 0 }, uShaft: { value: 0 }, uGhost: { value: 0 }, uStreak: { value: 0 }, uVeil: { value: 0 }, uGrade: { value: 0 } });
+
 export function createFinish(renderer) {
   const size = new THREE.Vector2(-1, -1), now = new THREE.Vector2();
   const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, depthBuffer: true, stencilBuffer: false, resolveDepthBuffer: false });
@@ -171,10 +262,10 @@ export function createFinish(renderer) {
   const half = () => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   const cocTarget = half(), blurTarget = half();
   const out = new THREE.ShaderMaterial({
-    uniforms: { tScene: { value: target.texture }, tBloom: { value: null }, uBloom: { value: 0 }, tBlur: { value: blurTarget.texture }, uDof: { value: 0 }, ...dofUniforms() },
+    uniforms: { tScene: { value: target.texture }, tBloom: { value: null }, uBloom: { value: 0 }, tBlur: { value: blurTarget.texture }, uDof: { value: 0 }, ...dofUniforms(), ...sunUniforms() },
     vertexShader: QUAD_VS,
     fragmentShader: COC_GLSL + /* glsl */`
-      uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform sampler2D tBlur; uniform float uDof; varying vec2 vUv;
+      uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform sampler2D tBlur; uniform float uDof; varying vec2 vUv;` + SUN_GLSL + /* glsl */`
       void main() {
         vec3 c = clamp(texture2D(tScene, vUv).rgb, 0.0, 1.0);
         if (uDof > 0.0) {
@@ -183,6 +274,7 @@ export function createFinish(renderer) {
           c = mix(c, clamp(b.rgb, 0.0, 1.0), k);
         }
         if (uBloom > 0.0) { vec3 b = min(texture2D(tBloom, vUv).rgb * uBloom, 1.0); c = 1.0 - (1.0 - c) * (1.0 - b); } // screen: never past white
+        if (uSunOn > 0.0) c = sunFx(c);
         gl_FragColor = vec4(c, 1.0);
       }`,
     depthTest: false, depthWrite: false,
@@ -203,6 +295,39 @@ export function createFinish(renderer) {
   const focusTarget = new THREE.WebGLRenderTarget(FOCUS_PTS.length, 1, { type: THREE.UnsignedByteType, depthBuffer: false, stencilBuffer: false });
   const focusBytes = new Uint8Array(FOCUS_PTS.length * 4);
   let focusReading = false;
+  // The sun's targets: quarter-size shaft pictures and two 1x1 visibility pictures used in turn (last frame's is read).
+  const quarter = () => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const shaftA = quarter(), shaftB = quarter();
+  const vis = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false }));
+  let visI = 0, userDepth = false, keepDepth = false;
+  function syncDepth() {
+    const on = userDepth || keepDepth;
+    if (!!target.depthTexture === on) return;
+    target.depthTexture = on ? new THREE.DepthTexture(Math.max(1, size.x), Math.max(1, size.y)) : null;
+    target.resolveDepthBuffer = on;
+    target.dispose(); // rebuilt with the new attachments on next use
+  }
+  const sunU = out.uniforms;
+  function drawSun(sun, camera) {
+    const on = !!(sun && sun.on && target.depthTexture && !finish.lite);
+    sunU.uSunOn.value = on ? 1 : 0;
+    if (!on) return;
+    const aspect = size.x / Math.max(1, size.y);
+    for (const m of [VIS, SHAFT_SRC]) { const u = m.uniforms; u.tDepth.value = target.depthTexture; u.uNear.value = camera.near; u.uFar.value = camera.far; u.uSun.value.copy(sun.uv); u.uAspect.value = aspect; }
+    // how much of the disc is open sky, eased (about 0.12 s)
+    VIS.uniforms.uR.value = sun.radius; VIS.uniforms.tPrev.value = vis[visI].texture; VIS.uniforms.uEase.value = sun.fresh ? 1 : 1 - Math.exp(-sun.dt * 8);
+    visI ^= 1; pass(VIS, vis[visI]);
+    sunU.tVis.value = vis[visI].texture;
+    if (sun.shaft > 0.002) {
+      pass(SHAFT_SRC, shaftA);
+      const [a, b] = SHAFTS;
+      a.uniforms.tSrc.value = shaftA.texture; a.uniforms.uSun.value.copy(sun.uv); a.uniforms.uLen.value = 0.85; a.uniforms.uDecay.value = 0.97; pass(a, shaftB);
+      b.uniforms.tSrc.value = shaftB.texture; b.uniforms.uSun.value.copy(sun.uv); b.uniforms.uLen.value = 0.12; b.uniforms.uDecay.value = 1; pass(b, shaftA);
+    }
+    sunU.tShaft.value = shaftA.texture; sunU.tDepth.value = target.depthTexture; sunU.uNear.value = camera.near; sunU.uFar.value = camera.far;
+    sunU.uSunUv.value.copy(sun.uv); sunU.uSunAspect.value = aspect; sunU.uSunTint.value.copy(sun.tint);
+    sunU.uGlare.value = sun.glare; sunU.uShaft.value = sun.shaft > 0.002 ? sun.shaft : 0; sunU.uGhost.value = sun.ghost; sunU.uStreak.value = sun.streak; sunU.uVeil.value = sun.veil; sunU.uGrade.value = sun.grade;
+  }
 
   const finish = {
     bloom: true,          // the slow-frame ladder's last step switches it off
@@ -213,12 +338,10 @@ export function createFinish(renderer) {
     focusAt: 0,           // performance.now() of the last reading
     target,
     get depthTexture() { return target.depthTexture; },
-    useDepth(on) {
-      if (!!target.depthTexture === on) return;
-      target.depthTexture = on ? new THREE.DepthTexture(Math.max(1, size.x), Math.max(1, size.y)) : null;
-      target.resolveDepthBuffer = on;
-      target.dispose(); // rebuilt with the new attachments on next use
-    },
+    sun: null,            // the sun's glare and shafts (src/sunfx.js), High only; null = off
+    useDepth(on) { userDepth = on; syncDepth(); },
+    keepDepth(on) { keepDepth = on; syncDepth(); }, // on High the depth stays on for the sun's shafts and glare
+
     render(scene, camera) {
       renderer.getDrawingBufferSize(now);
       if (!now.equals(size)) {
@@ -226,6 +349,8 @@ export function createFinish(renderer) {
         const hw = Math.max(1, size.x >> 1), hh = Math.max(1, size.y >> 1);
         cocTarget.setSize(hw, hh); blurTarget.setSize(hw, hh);
         COC.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
+        const qw = Math.max(1, size.x >> 2), qh = Math.max(1, size.y >> 2);
+        shaftA.setSize(qw, qh); shaftB.setSize(qw, qh); SHAFT_SRC.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
       }
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
@@ -247,6 +372,7 @@ export function createFinish(renderer) {
           finish.focusAt = performance.now();
         }).catch(() => { finish.probeFocus = false; }).finally(() => { focusReading = false; });
       }
+      drawSun(finish.sun, camera);
       const bloom = finish.bloom && !finish.lite;
       if (bloom) glow.run(renderer, target.texture);
       out.uniforms.uBloom.value = bloom ? 1 : 0;

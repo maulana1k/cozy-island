@@ -34,6 +34,7 @@ import { START_TIME, POND, AREAS, PLAYER_START } from './config.js';
 import { createPickups } from './world/pickups.js';
 import { createDirector, placeFor } from './cutscene.js';
 import { createFinish } from './finish.js';
+import { createSunFx, goldenHour } from './sunfx.js';
 import { createParticles } from './world/particles.js';
 import { createReact } from './world/react.js';
 import { createContactShadows } from './world/contact.js';
@@ -102,6 +103,7 @@ const ui = createUI(scene);
 const effects = createEffects(scene, groundAt);
 const island = createIsland(scene);
 const sky = createSky(scene, renderer);
+const sunFx = createSunFx(scene); // the sun's glare and light shafts (High, drawn by finish.js), a sprite halo on Low
 sky.sunLight.shadow.camera.layers.enable(SUN_PROXIES); // the welded still casters near the player (src/world/shadowProxy.js), next to layer 0
 const weather = createWeather(scene, params, audio); // random weather; ?weather=rain|wind|fog|sun forces one
 weather.setGround(groundAt); // rain rings land on decks and bridges too
@@ -884,7 +886,9 @@ function step() {
   }
   // Fog thickens among the big trees, and the sea is loud only near the shore.
   const wn = wildness(player.position.x, player.position.z);
-  scene.fog.density = sky.fogDensity * (1 + wn * 1.6);
+  // At sunrise and sunset in clear weather the haze thins, so the horizon reads crisp (fog and rain keep theirs).
+  const crisp = 1 - 0.6 * goldenHour(timeOfDay) * Math.max(0, 1 - weather.fog * 2 - weather.rain * 2);
+  scene.fog.density = sky.fogDensity * (1 + wn * 1.6) * crisp;
   audio.setRain(weather.rain, !!buildings.inside);
   audio.setSea(Math.min(1, Math.max(0, (shoreR(player.position.x, player.position.z) - 34) / 22)));
   ambience.update(dt, { player, camera, timeOfDay, night, weather, inside: !!buildings.inside, paused });
@@ -971,7 +975,7 @@ function step() {
   sky.update(timeOfDay, elapsed, player.position, weather);
   weather.setMistColor(sky.fogColor);
   island.update(elapsed);
-  island.setLight(sky.waterLight, sky.fogColor, scene.fog.density, sky.sunLight, weather.rain);
+  island.setLight(sky.waterLight, sky.fogColor, scene.fog.density, sky.sunLight, weather.rain, sunFx.trueDir, goldenHour(timeOfDay) * sunFx.clearness(weather));
   village.update(elapsed);
   village.setNight(night);
   buildings.setNight(night, timeOfDay);
@@ -991,6 +995,8 @@ function step() {
   renderer.info.reset();
   finish.dof = director.active ? (graphics === 'high' ? director.focus : null) : photo.active ? photo.dof : null; // depth of field in films (High) and through the camera (High and Low)
   finish.lite = graphics !== 'high'; // Low still draws through the finishing pass while the camera is up: no glow, a cheaper blur
+  finish.keepDepth(graphics === 'high'); // the sun's shafts and glare read the scene's depth
+  finish.sun = sunFx.update(clampDt(raw), camera, timeOfDay, weather, graphics === 'high', photo.active ? 1.5 : 1);
   if (graphics === 'high' || photo.active) finish.render(scene, camera); else renderer.render(scene, camera);
   photo.afterRender(); // a photo just taken: this frame becomes its thumbnail
   // Averaged over two pictures, to steady the readout.

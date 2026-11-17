@@ -47,13 +47,17 @@ const NIGHT = { top: 0x070b24, horizon: 0x18203f, sun: 0x8fa4e6, ambient: 0x5666
 const KEYS = [
   [0.00, NIGHT],
   [0.06, NIGHT],
-  [0.10, { top: 0x3e4a92, horizon: 0xd0949c, sun: 0xc0a0c0, ambient: 0x9f90c4, ground: 0xb08ca4, fog: 0x8a74a0, sunIntensity: 0.12, ambientIntensity: 0.9 }],
-  [0.14, { top: 0x5f7cc4, horizon: 0xffc8aa, sun: 0xffc49a, ambient: 0xd9c4d6, ground: 0xe8c0b0, fog: 0xecc8b8, sunIntensity: 1.3, ambientIntensity: 0.8 }],
-  [0.25, { top: 0x4ea6e6, horizon: 0xe6f2ee, sun: 0xfff2da, ambient: 0xd8e8ff, ground: 0xe0dcc4, fog: 0xc8dcea, sunIntensity: 2.6, ambientIntensity: 0.9 }],
+  // Sunrise and sunset are the dramatic hours: deep indigo overhead, hot orange low down, a strong warm sun and a
+  // cooler, dimmer shade for contrast (the long warm rim). src/main.js also thins the haze then in clear weather.
+  [0.10, { top: 0x2b2c7a, horizon: 0xff7a4a, sun: 0xff9a5c, ambient: 0x7f80c0, ground: 0xc0809a, fog: 0xb86a86, sunIntensity: 0.5, ambientIntensity: 0.7 }],
+  [0.14, { top: 0x2a3592, horizon: 0xff8a48, sun: 0xffa060, ambient: 0x9aa0d6, ground: 0xf0a888, fog: 0xe0806e, sunIntensity: 2.2, ambientIntensity: 0.62 }],
+  [0.23, { top: 0x2f4cb0, horizon: 0xff9c58, sun: 0xffb478, ambient: 0xaab8e6, ground: 0xf0bc98, fog: 0xe89a7c, sunIntensity: 2.6, ambientIntensity: 0.68 }],
+  [0.32, { top: 0x4ea6e6, horizon: 0xe6f2ee, sun: 0xfff2da, ambient: 0xd8e8ff, ground: 0xe0dcc4, fog: 0xc8dcea, sunIntensity: 2.6, ambientIntensity: 0.9 }],
   [0.48, { top: 0x3f9ce0, horizon: 0xe2f1f0, sun: 0xfff4e0, ambient: 0xd6e6ff, ground: 0xdcdcc0, fog: 0xc0d9ea, sunIntensity: 3.0, ambientIntensity: 0.95 }],
   [0.66, { top: 0x4aa2e0, horizon: 0xf0eedc, sun: 0xffeac4, ambient: 0xd9e4fb, ground: 0xe2d8bc, fog: 0xd0dde0, sunIntensity: 3.0, ambientIntensity: 0.9 }],
-  [0.80, { top: 0x6a6fb8, horizon: 0xff9d7a, sun: 0xffb088, ambient: 0xf2cdd0, ground: 0xf0b498, fog: 0xf0a58c, sunIntensity: 2.0, ambientIntensity: 1.0 }],
-  [0.88, { top: 0x3a3f85, horizon: 0xa878a8, sun: 0xb090c0, ambient: 0x8f86c0, ground: 0x8a76a4, fog: 0x6f5f94, sunIntensity: 0.12, ambientIntensity: 0.85 }],
+  [0.74, { top: 0x4a7ed0, horizon: 0xffc88e, sun: 0xffc890, ambient: 0xc2cdee, ground: 0xecc6a2, fog: 0xe8c0a2, sunIntensity: 2.8, ambientIntensity: 0.78 }],
+  [0.80, { top: 0x2f3392, horizon: 0xff7a40, sun: 0xff9a58, ambient: 0xa498d0, ground: 0xf0a888, fog: 0xe0806c, sunIntensity: 2.4, ambientIntensity: 0.7 }],
+  [0.88, { top: 0x2a2a70, horizon: 0xc0508a, sun: 0xd08098, ambient: 0x7f7cb8, ground: 0x8a6aa0, fog: 0x7a4c88, sunIntensity: 0.15, ambientIntensity: 0.75 }],
   [0.93, NIGHT],
   [1.00, NIGHT],
 ];

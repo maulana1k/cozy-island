@@ -166,13 +166,23 @@ function hillside(x, z, h, slope, g) {
 export function paintNewGround(c, x, z, h, slope) {
   const g = groundKind(x, z);
   if (!g) return false;
-  const near = g.locals > 0.01 || g.rock > 0.01 || g.river < 7 || g.lake < 7 || g.oldTrail < 1.6;
+  // Every colour below fades to nothing before these limits, so the gate leaves no hard edge (a hard
+  // cut here, sampled on the 0.68 m vertex grid, drew a staircase of green and sand along the bank).
+  const near = g.locals > 0.01 || g.rock > 0.01 || g.river < 22 || g.lake < 7 || g.oldTrail < 2.4;
   if (!near) return false;
   if (slope === undefined) { const e = 0.6; slope = Math.hypot(heightAt(x + e, z) - heightAt(x - e, z), heightAt(x, z + e) - heightAt(x, z - e)) / (2 * e); }
   // The locals' side. The beaches stay beach: only the grass gets the hillside's colours.
   if (g.locals > 0.01 && h > 0.15) c.lerp(hillside(x, z, h, slope, g), g.locals * smooth((h - 0.35) / 0.4));
   // The camp's side of the river was its beach: grass now runs down to a narrow sandy bank.
-  if (g.river < 16 && g.mouth < 0.5 && g.locals < 0.01 && h > 0.2) c.lerp(campGrass, smooth((g.river - 2.5) / 3) * smooth((16 - g.river) / 4) * (1 - g.mouth * 2));
+  // Its edges wander (noise), so grass, sand and mud meet in soft, ragged, painterly bands.
+  if (g.river < 22 && g.mouth < 0.5 && g.locals < 0.01 && h > 0.1) {
+    const n1 = fbm(x / 3.1 + 21, z / 3.1 + 4), n2 = vnoise(x / 1.3 + 5, z / 1.3 + 17);
+    const reach = g.river - 2.1 - (n1 - 0.5) * 2.6 - (n2 - 0.5) * 0.8; // metres of grass past its ragged foot
+    const k = smooth(reach / 2.4) * smooth((22 - g.river) / 6) * smooth((h - 0.1) / 0.3) * (1 - g.mouth * 2);
+    // Lush and deep near the water, with paler and drier tufts further up.
+    t.copy(campGrass).lerp(lush, smooth((7 - g.river) / 4) * (0.35 + 0.4 * n2)).lerp(olive, smooth((n1 - 0.6) / 0.2) * 0.4);
+    c.lerp(t, k);
+  }
   // Rock: pale on the ledges, darker on the steep faces, mossy where the top levels off.
   if (g.rock > 0.01) {
     t.copy(rockLedge).lerp(rockFace, smooth((slope - 0.5) / 0.9)).lerp(rockDark, smooth((slope - 1.6) / 1.5) * 0.6);
@@ -182,12 +192,18 @@ export function paintNewGround(c, x, z, h, slope) {
   // Sandy banks along the river and round the lake, wet at the water, a dark bed beneath it.
   const water = Math.min(g.river === Infinity ? 99 : g.river, g.lake);
   if (water < 7 && g.rock < 0.6) {
+    const n = vnoise(x / 1.7 + 9, z / 1.7 + 2);
     t.copy(bankSand).lerp(bankWet, smooth(1 - (h - 0.05) / 0.35));
+    // A band of dark wet sand and mud at the waterline, ragged, wider in the slow, low places.
+    if (g.river < 3 && g.locals < 0.5) t.lerp(mud, smooth((1.4 + (n - 0.5) * 1.2 - Math.abs(water - 0.15)) / 0.9) * 0.55).lerp(damp, smooth((0.6 - Math.abs(water)) / 0.6) * 0.3);
     if (h < 0) t.lerp(bed, smooth(-h / 0.6));
-    c.lerp(t, smooth((5.5 - water) / 3) * (1 - g.mouth * 0.7));
+    // On the camp's side the grass comes down closer: a narrower strip of sand.
+    const reach = g.locals < 0.5 && g.lake > 7 ? 3.8 : 5.5;
+    c.lerp(t, smooth((reach - water + (n - 0.5) * 1.2) / (reach * 0.55)) * (1 - g.mouth * 0.7));
   }
   // The camp-side trails: a plain pale band with a clean edge, no border.
-  if (g.oldTrail < 1.6) c.lerp(trail, smooth((1.02 - g.oldTrail) / 0.1));
+  // Its edge is soft (about a metre) and wanders a little, so the 0.68 m vertex grid cannot step it.
+  if (g.oldTrail < 2.4) c.lerp(trail, smooth((1.45 + (vnoise(x * 0.8 + 3, z * 0.8 + 7) - 0.5) * 0.45 - g.oldTrail) / 0.9));
   // Stamps: paths, the square, yards, and whatever the areas add.
   if (g.locals > 0.01 && h > 0.05) applyStamps(c, x, z);
   if (h > 0.1) vegTone(c, x, z, g.locals < 0.5);

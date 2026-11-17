@@ -96,6 +96,60 @@ export function fish(m, x, y, z, ry, len = 0.32, k = 0) {
   m.at(new THREE.ConeGeometry(len * 0.17, len * 0.26, 3), back, tx, y + len * 0.07, tz, 0, ry, Math.PI / 2, 1, 1, 0.35);
   m.at(new THREE.SphereGeometry(0.5, 5, 3), back, x, y + len * 0.12, z, 0, ry, 0, len * 0.7, len * tall * 0.45, len * 0.1);
 }
+// A crab, about `r` across, its claws toward local +z (rx tilts it).
+export function crab(m, x, y, z, ry = 0, r = 0.12, hex = 0xd9583a) {
+  m.push(x, y, z, ry);
+  m.sph(r * 0.55, hex, 0, r * 0.22, 0, 1.25, 0.45, 1, 7, 4);
+  const dk = new THREE.Color(hex).multiplyScalar(0.8).getHex();
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 3; k++) m.rod([s * r * 0.5, r * 0.18, -r * 0.2 + k * r * 0.22], [s * r * 1.05, 0.0, -r * 0.35 + k * r * 0.3], r * 0.06, r * 0.04, dk, 3);
+    m.rod([s * r * 0.4, r * 0.22, r * 0.35], [s * r * 0.55, r * 0.25, r * 0.85], r * 0.08, r * 0.08, dk, 4);
+    m.sph(r * 0.2, hex, s * r * 0.55, r * 0.25, r * 0.95, 0.8, 0.6, 1.3, 5, 3);
+  }
+  m.pop();
+}
+// A squid lying flat: a pale mantle with a fin and a fan of short arms (toward local -x).
+export function squid(m, x, y, z, ry = 0, len = 0.34, hex = 0xf1d6d0) {
+  m.push(x, y, z, ry);
+  m.at(new THREE.ConeGeometry(len * 0.16, len * 0.62, 6), hex, len * 0.12, len * 0.07, 0, 0, 0, -Math.PI / 2, 1, 1, 0.55);
+  m.at(new THREE.SphereGeometry(len * 0.11, 6, 3), 0xe9c2b8, -len * 0.22, len * 0.06, 0, 0, 0, 0, 1, 0.6, 1);
+  for (let k = 0; k < 6; k++) { const a = (k / 5 - 0.5) * 0.9; m.rod([-len * 0.26, len * 0.05, 0], [-len * 0.26 - Math.cos(a) * len * 0.36, len * 0.02, Math.sin(a) * len * 0.3], len * 0.025, len * 0.012, 0xe2b0a6, 3); }
+  m.pop();
+}
+// A ray (pari) laid flat: a broad diamond with a long thin tail toward local -x.
+export function ray(m, x, y, z, ry = 0, w = 0.5, hex = 0x8a8f7a) {
+  m.push(x, y, z, ry);
+  const top = [0, w * 0.06, 0], f = [w * 0.42, 0, 0], b = [-w * 0.3, 0, 0], l = [0, 0, -w * 0.5], r = [0, 0, w * 0.5];
+  m.tris([[top, f, l], [top, r, f], [top, l, b], [top, b, r]], hex);
+  m.tris([[f, [0, -0.005, 0], l], [r, [0, -0.005, 0], f], [l, [0, -0.005, 0], b], [b, [0, -0.005, 0], r]], 0xe8e2d4);
+  m.rod([-w * 0.28, 0.01, 0], [-w * 1.05, 0.01, w * 0.05], w * 0.025, w * 0.008, new THREE.Color(hex).multiplyScalar(0.8).getHex(), 3);
+  m.pop();
+}
+// Small clams and cockles heaped in a round of radius r.
+export function clams(m, x, y, z, r = 0.2, n = 14) {
+  for (let i = 0; i < n; i++) { const a = i * 2.39996, rr = r * Math.sqrt((i + 0.5) / n) * 0.85; m.sph(0.035, [0xd8c8b0, 0x9a8a78, 0xe8d8c0, 0x6f6458][i % 4], x + Math.cos(a) * rr, y + 0.02 + (i % 3) * 0.012, z + Math.sin(a) * rr, 1.2, 0.6, 1, 5, 3); }
+}
+// A stack of ice blocks under a sack, along x.
+export function iceBlocks(m, x, y, z, ry = 0, n = 3) {
+  m.push(x, y, z, ry);
+  for (let i = 0; i < n; i++) m.box(0.42, 0.26, 0.3, i % 2 ? COL.ice : COL.iceBlue, -0.24 * (n - 1) + i * 0.48, 0.13, (i % 2) * 0.05);
+  if (n > 1) m.box(0.42, 0.26, 0.3, COL.ice, 0, 0.39, 0.02);
+  m.box(0.7, 0.03, 0.5, 0xc9b080, 0.15, 0.53, 0.0, 0, 0.1, 0.06); // a sack thrown over, to keep it cold
+  m.pop();
+}
+// A small iron anchor lying on the sand with its rope running off toward local +z.
+export function anchor(m, x, y, z, ry = 0, ropeLen = 1.6) {
+  m.push(x, y, z, ry);
+  m.rod([0, 0.05, -0.35], [0, 0.05, 0.35], 0.03, 0.03, COL.iron, 5);
+  m.at(new THREE.TorusGeometry(0.08, 0.018, 4, 8), COL.iron, 0, 0.05, 0.43, Math.PI / 2, 0, 0);
+  for (const s of [-1, 1]) m.rod([0, 0.05, -0.35], [s * 0.28, 0.12, -0.15], 0.025, 0.02, COL.iron, 4);
+  m.rod([0, 0.05, -0.33], [0, 0.03, -0.33], 0.02, 0.02, COL.iron, 3);
+  m.rod([-0.2, 0.05, 0.3], [0.2, 0.05, 0.3], 0.018, 0.018, COL.iron, 4);
+  m.bend([[0, 0.05, 0.5], [0.08, 0.03, 0.5 + ropeLen * 0.4], [-0.05, 0.03, 0.5 + ropeLen * 0.75], [0.04, 0.03, 0.5 + ropeLen]], 0.016, COL.rope, 3);
+  m.pop();
+}
+// Where a jukung blocks the way (its local frame): the hull and the two floats.
+export const JUKUNG_COLLIDERS = [{ x: 0, z: 0, hw: 0.42, hd: 2.75 }, { x: -1.95, z: 0, hw: 0.1, hd: 1.95 }, { x: 1.95, z: 0, hw: 0.1, hd: 1.95 }];
 // A heap of fish over a round of radius r (on ice, in a basket or a tray), `n` of them.
 function fishHeap(m, x, y, z, r, n, kinds, seed) {
   for (let i = 0; i < n; i++) {
@@ -241,7 +295,9 @@ export function jukung(m, { hull = HULLS[0], sail = -1, outriggers = true, gear 
 // Front (the counter) toward +z at z = 0; the stall goes back to z = -D; width W along x. The awning reaches out
 // over the aisle. kind: 0 striped cloth, 1 tin, 2 plain cloth. Returns colliders and lantern spots (local).
 const CLOTH = [[0xe8503a, 0xf4efe2], [0x3f9fb0, 0xf4efe2], [0xf2b63b, 0xe07a3a], [0x5fa86a, 0xf2e29a], [0x9a6ad0, 0xf4efe2], [0xd9463a, 0xf2c03b]];
-export function marketStall(m, { W = 4.6, D = 2.5, kind = 0, colour = 0, seed = 0, goods = 0 } = {}) {
+// special: 'shellfish' (crabs, squid, a ray and clams), 'dried' (salted fish in trays and strings), 'ice' (ice blocks
+// and tools) change what lies on the table; otherwise fresh fish on ice.
+export function marketStall(m, { W = 4.6, D = 2.5, kind = 0, colour = 0, seed = 0, goods = 0, special = null } = {}) {
   const glow = [], cols = [];
   const pf = 2.5, pb = 2.15, reach = 1.25;
   // Bamboo posts and beams.
@@ -282,7 +338,25 @@ export function marketStall(m, { W = 4.6, D = 2.5, kind = 0, colour = 0, seed = 
   for (const sx of [-W / 2, W / 2]) { cols.push({ x: sx, z: 0.2, r: 0.1 }, { x: sx, z: -D, r: 0.1 }); }
   // What is on the table.
   const top = ty + 0.03, K = [[0, 1, 4], [2, 6, 5], [3, 0, 1], [1, 4, 2]][goods % 4];
-  if (goods % 2 === 0) {
+  if (special === 'shellfish') {
+    m.cyl(0.34, 0.31, 0.06, 0xd8b878, -tw * 0.34, top + 0.03, tz + 0.05, 10);
+    for (let k = 0; k < 5; k++) crab(m, -tw * 0.34 + Math.cos(k * 1.3) * 0.17, top + 0.06, tz + 0.05 + Math.sin(k * 1.3) * 0.15, k * 1.1, 0.11 + (k % 2) * 0.03, k % 3 ? 0xd9583a : 0x8a6a4a);
+    iceBox(m, -tw * 0.02, top, tz + 0.05, 0.03, seed, 0.6);
+    for (let k = 0; k < 4; k++) squid(m, -tw * 0.06 + k * 0.13, top + 0.34, tz + 0.02 + (k % 2) * 0.08, 1.4 + k * 0.2, 0.26);
+    m.cyl(0.3, 0.27, 0.06, 0xd8b878, tw * 0.33, top + 0.03, tz + 0.08, 10); clams(m, tw * 0.33, top + 0.06, tz + 0.08, 0.25, 18);
+    ray(m, tw * 0.05, top + 0.01, tz + 0.38, 0.1, 0.62);
+  } else if (special === 'dried') {
+    for (let i = 0; i < 3; i++) {
+      const x = -tw * 0.33 + i * tw * 0.33; m.cyl(0.36, 0.34, 0.04, 0xd8b878, x, top + 0.02, tz + 0.04, 10);
+      for (let k = 0; k < 9; k++) { const a = k * 0.7 + i, rr = 0.26 * Math.sqrt((k + 0.5) / 9); fish(m, x + Math.cos(a) * rr, top + 0.04, tz + 0.04 + Math.sin(a) * rr, a, 0.15 + (i % 2) * 0.04, 5 + (k % 2)); }
+    }
+    basket(m, tw * 0.42, top, tz + 0.3, 0.2, [5, 0], seed + 3);
+    fish(m, -tw * 0.1, top + 0.01, tz + 0.4, 0.05, 0.5, 5);
+  } else if (special === 'ice') {
+    iceBlocks(m, -tw * 0.2, top, tz + 0.02, 0.05, 2); iceBlocks(m, tw * 0.22, top, tz + 0.05, -0.1, 1);
+    for (let k = 0; k < 3; k++) m.at(new THREE.TorusGeometry(0.12, 0.02, 4, 10), [COL.net, COL.netOr, COL.netBlue][k], tw * 0.38, top + 0.03 + k * 0.03, tz - 0.25, Math.PI / 2, 0, 0);
+    ropeCoil(m, -tw * 0.4, top, tz - 0.2, 0.17);
+  } else if (goods % 2 === 0) {
     iceBox(m, -tw * 0.3, top, tz + 0.05, 0.05, seed); iceBox(m, tw * 0.12, top, tz + 0.05, -0.04, seed + 3);
     tray(m, tw * 0.4, top, tz + 0.1, 0.3, K, seed + 1);
   } else {
@@ -290,7 +364,7 @@ export function marketStall(m, { W = 4.6, D = 2.5, kind = 0, colour = 0, seed = 
     basket(m, tw * 0.3, top, tz + 0.05, 0.25, K, seed + 4); iceBox(m, tw * 0.3, top, tz - 0.3, 0, seed + 5, 0.5);
   }
   // A big fish laid out alone at the counter's edge (the catch of the day).
-  fish(m, tw * (goods % 2 ? 0.08 : -0.02), top + 0.01, tz + 0.38, 0.05, 0.62, (seed + 4) % 7);
+  if (!special) fish(m, tw * (goods % 2 ? 0.08 : -0.02), top + 0.01, tz + 0.38, 0.05, 0.62, (seed + 4) % 7);
   // The hanging scale off the front beam: a hook, the round dial and a pan on three strings.
   const sx = tw * (goods % 2 ? -0.38 : 0.35);
   m.rod([sx, pf, 0.2], [sx, pf - 0.25, 0.2], 0.008, 0.008, COL.iron, 3);
@@ -298,8 +372,9 @@ export function marketStall(m, { W = 4.6, D = 2.5, kind = 0, colour = 0, seed = 
   for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; m.rod([sx, pf - 0.42, 0.2], [sx + Math.cos(a) * 0.17, pf - 0.85, 0.2 + Math.sin(a) * 0.17], 0.004, 0.004, COL.iron, 3); }
   m.cyl(0.19, 0.16, 0.04, 0xb8b8b0, sx, pf - 0.86, 0.2, 10);
   // A string of small fish drying along one side, a lantern on the front beam, a sign on the beam's top.
-  const side = goods % 2 ? W / 2 : -W / 2;
-  for (let k = 0; k < 4; k++) { const z = -0.3 - k * 0.45; m.rod([side, 1.9, z], [side, 1.45, z], 0.004, 0.004, COL.rope, 3); fish(m, side, 1.42, z, 0, 0.18, (seed + k) % 7); }
+  for (const side of special === 'dried' ? [-W / 2, W / 2] : [goods % 2 ? W / 2 : -W / 2]) {
+    for (let k = 0; k < 4; k++) { const z = -0.3 - k * 0.45; m.rod([side, 1.9, z], [side, 1.45, z], 0.004, 0.004, COL.rope, 3); fish(m, side, 1.42, z, 0, 0.18, special === 'dried' ? 5 + (k % 2) : (seed + k) % 7); }
+  }
   lantern(m, -sx * 0.4, pf - 0.02, 0.24, glow);
   signboard(m, 0, pf + 0.42, 0.24, 0, Math.min(1.5, W * 0.34), 0.34, [0x3f8fbf, 0xd9463a, 0x3f9f6a, 0xf2b63b][(seed + colour) % 4], 0);
   // Behind the counter: crates, a stool, a bucket.

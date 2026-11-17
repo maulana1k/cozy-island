@@ -470,6 +470,7 @@ export function createHUD(handlers) {
       if (c === 'Enter' || c === 'NumpadEnter' || c === 'KeyE') { cur.click(); return true; }
       return false;
     },
+    closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     toggleJournal() { hud.journalOpen = !hud.journalOpen; book.classList.toggle('off', !hud.journalOpen); dot.classList.remove('on'); if (hud.journalOpen) renderJournal(); if (hud.journalOpen && hud.mapOpen) hud.toggleMap(); if (hud.journalOpen && hud.bagOpen) hud.toggleBag(); },
     toggleBag() { hud.bagOpen = !hud.bagOpen; packSheet.classList.toggle('off', !hud.bagOpen); if (hud.bagOpen) { if (hud.journalOpen) hud.toggleJournal(); if (hud.mapOpen) hud.toggleMap(); renderDetail(); } },
     // The bars top-left and the numbers in the backpack.
@@ -481,7 +482,6 @@ export function createHUD(handlers) {
         feelRows[k].fill.style.width = `${v}%`; feelRows[k].n.textContent = v; feelRows[k].r.classList.toggle('low', low);
       }
       statRows.energy.row.classList.toggle('low', s.winded || s.energy < LOW);
-    closeMenu() { hud.menuOpen = false; menu.classList.add('off'); },
     },
     // view: { slots: [{ id, count, label? }], capacity }. Redraws the belt and the pockets.
     setBag(view) {

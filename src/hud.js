@@ -5,7 +5,7 @@ import { heightAt, landR, shoreR, wildness, groundKind, coastRock } from './logi
 import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, getScatter } from './logic/layout.js';
 import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
-import { beltOf, keyOf, TOOLS } from './logic/belt.js';
+import { beltOf, BELT_SIZE, TOOLS } from './logic/belt.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
 
 const WEATHERS = [['Auto', 'auto'], ['Sunny', 'sun'], ['Windy', 'wind'], ['Rainy', 'rain'], ['Foggy', 'fog']];
@@ -425,7 +425,9 @@ export function createHUD(handlers) {
   const detail = el('div', 'detail');
   pack.append(packHead, feel, grid, detail);
   packSheet.append(pack);
-  let bagView = { slots: [], capacity: 12 }, selected = 0;
+  let bagView = { slots: [], capacity: 12 }, selected = 0, bagOrder = [];
+  // Backpack grid order = quick-bar order: slots 1..8 first (null = a tool not found yet, shown as a ghost), then the unkeyed rest.
+  const orderBag = (slots) => { const belt = beltOf(slots); return [...belt, ...slots.filter((s) => !belt.includes(s))]; };
 
   // ---- Bottom-right: what the keys do right now
   const hints = el('div', 'hints');
@@ -677,7 +679,8 @@ export function createHUD(handlers) {
       const sig = view.slots.map((s) => `${s.id}:${s.count}:${s.label || ''}`).join('|');
       if (lastBagSig !== null && sig !== lastBagSig) wake(['belt']);
       lastBagSig = sig;
-      if (selected >= view.slots.length) selected = Math.max(0, view.slots.length - 1);
+      bagOrder = orderBag(view.slots);
+      if (!bagOrder[selected]) { const f = bagOrder.findIndex(Boolean); selected = f < 0 ? 0 : f; }
       // The quick bar (src/logic/belt.js): tools in fixed slots 1-5 (a tool you do not have yet shows faintly in its
       // place), then the first other things.
       belt.replaceChildren(...beltOf(view.slots).map((s, i) => {
@@ -696,9 +699,11 @@ export function createHUD(handlers) {
       }));
       packCount.textContent = `${view.slots.length} of ${view.capacity} pockets`;
       const cells = [];
-      for (let i = 0; i < view.capacity; i++) {
-        const s = view.slots[i], c = el('button', s ? (i === selected ? 'cell on' : 'cell') : 'cell empty');
-        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); const key = keyOf(view.slots, s.id); if (key) c.append(el('em', null, String(key))); c.addEventListener('click', () => { selected = i; hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
+      const total = Math.max(view.capacity, bagOrder.length);
+      for (let i = 0; i < total; i++) {
+        const s = bagOrder[i], c = el('button', s ? (i === selected ? 'cell on' : 'cell') : 'cell empty');
+        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); if (i < BELT_SIZE) c.append(el('em', null, String(i + 1))); c.addEventListener('click', () => { selected = i; hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
+        else if (i < BELT_SIZE) { const tool = TOOLS[i]; c.title = tool ? `${ITEMS[tool].name} (not found yet)` : 'Empty'; c.append(el('span', 'pic', tool ? ITEMS[tool].icon : ''), el('b', null, ''), el('em', null, String(i + 1))); c.style.opacity = '0.3'; c.style.filter = 'grayscale(1)'; c.style.pointerEvents = 'none'; }
         cells.push(c);
       }
       grid.replaceChildren(...cells);
@@ -842,7 +847,7 @@ export function createHUD(handlers) {
   }
   // The card under the pockets: what the chosen thing is and what you can do with it.
   function renderDetail() {
-    const s = bagView.slots[selected];
+    const s = bagOrder[selected];
     if (!s) { detail.replaceChildren(el('p', 'none', 'Your backpack is empty. Look around: shells on the beach, sticks and mushrooms in the jungle, berries on the bushes.')); return; }
     const item = ITEMS[s.id], info = handlers.describeItem(s.id);
     const top = el('div', 'top'); const txt = el('div');

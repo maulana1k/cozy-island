@@ -5,6 +5,7 @@ import { heightAt, landR, shoreR, wildness, groundKind, coastRock } from './logi
 import { COTTAGES, PATHS, DOCK, TENTS, CAMPFIRES, WINDMILL, ZIPLINE, FLAGPOLE, LOOKOUT, CAMPFIRE, getScatter } from './logic/layout.js';
 import { CATEGORIES } from './logic/journal.js';
 import { ITEMS, KIND_LABEL } from './logic/items.js';
+import { beltOf, keyOf, TOOLS } from './logic/belt.js';
 import { STAT_KEYS, STAT_LABEL, LOW } from './logic/stats.js';
 
 const WEATHERS = [['Auto', 'auto'], ['Sunny', 'sun'], ['Windy', 'wind'], ['Rainy', 'rain'], ['Foggy', 'fog']];
@@ -30,12 +31,12 @@ const ICONS = {
   moon: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></svg>',
 };
 
-// Custom drawn icons for things no emoji shows well, named '@name' in ITEMS.
-const ITEM_ICONS = { bottle: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='25' y='4' width='14' height='8' rx='2' fill='#3f6f4a'/><rect x='27' y='11' width='10' height='6' fill='#b9c4c9'/><path d='M22 20 Q22 16 27 16 H37 Q42 16 42 20 V56 Q42 60 38 60 H26 Q22 60 22 56 Z' fill='#cfe6f2' stroke='#5b8fb0' stroke-width='2.5'/><path d='M24.5 32 H39.5 V55 Q39.5 57.5 37 57.5 H27 Q24.5 57.5 24.5 55 Z' fill='#5fb3e3'/><rect x='22' y='38' width='20' height='9' fill='#4f7a46'/><rect x='27' y='21' width='3' height='9' rx='1.5' fill='#ffffff' opacity='.8'/></svg>`),
-  // A small modern digital camera: mint body, big lens, flash and shutter button.
-  camera: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='40' y='11' width='12' height='6' rx='2' fill='#e8563f'/><path d='M8 20 Q8 16 12 16 H22 L25 12 H35 L38 16 H52 Q56 16 56 20 V48 Q56 52 52 52 H12 Q8 52 8 48 Z' fill='#8fd3c1' stroke='#2f6f69' stroke-width='2.5'/><rect x='8' y='24' width='48' height='4' fill='#2f6f69' opacity='.18'/><circle cx='32' cy='35' r='12.5' fill='#f6f2e7' stroke='#2f6f69' stroke-width='2.5'/><circle cx='32' cy='35' r='8' fill='#33475b'/><circle cx='32' cy='35' r='4' fill='#1d2a36'/><circle cx='29' cy='32' r='2.2' fill='#ffffff' opacity='.85'/><rect x='13' y='20' width='7' height='5' rx='1.5' fill='#fff6c8' stroke='#2f6f69' stroke-width='1.5'/></svg>`),
-  // A paper litter bag with a recycling leaf.
-  litterbag: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><path d='M14 20 H50 L46 58 Q46 60 44 60 H20 Q18 60 18 58 Z' fill='#d9b98a' stroke='#7a5a38' stroke-width='2.5'/><path d='M14 20 L18 12 H46 L50 20' fill='#e8d2a8' stroke='#7a5a38' stroke-width='2.5' stroke-linejoin='round'/><path d='M24 18 Q24 6 32 6 Q40 6 40 18' fill='none' stroke='#7a5a38' stroke-width='2.5'/><path d='M32 48 Q22 46 25 34 Q34 32 39 28 Q42 42 32 48 Z' fill='#4f9a5a'/><path d='M30 46 Q31 38 37 32' fill='none' stroke='#e8f4dc' stroke-width='1.6'/></svg>`),
+// Custom drawn icons for things no emoji shows well, named '@name' in ITEMS. Drawn in the glossy emoji style of the
+// other item icons: gradients for soft shading, a highlight, a darker underside for depth, a slight tilt, a soft shadow.
+const ITEM_ICONS = {
+  bottle: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#9fd2ee'/><stop offset='.45' stop-color='#e6f6fd'/><stop offset='1' stop-color='#5a9cc4'/></linearGradient><linearGradient id='w' x1='0' x2='1'><stop offset='0' stop-color='#2f8fd0'/><stop offset='.5' stop-color='#6cc6f2'/><stop offset='1' stop-color='#1f6aa6'/></linearGradient><linearGradient id='c' x1='0' x2='1'><stop offset='0' stop-color='#2e7d4a'/><stop offset='.45' stop-color='#7fd08f'/><stop offset='1' stop-color='#1d5a34'/></linearGradient><linearGradient id='l' x1='0' x2='1'><stop offset='0' stop-color='#3f7a3a'/><stop offset='.5' stop-color='#8fcf6a'/><stop offset='1' stop-color='#2f5f2c'/></linearGradient><radialGradient id='s' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='#000' stop-opacity='.35'/><stop offset='1' stop-color='#000' stop-opacity='0'/></radialGradient></defs><ellipse cx='33' cy='59' rx='15' ry='3.5' fill='url(#s)'/><g transform='rotate(9 32 34)'><rect x='25' y='3' width='14' height='9' rx='3' fill='url(#c)'/><rect x='25' y='9.5' width='14' height='2' fill='#16492a' opacity='.5'/><path d='M27 12 h10 v3 q6 2 7 7 v32 q0 5 -5 5 h-14 q-5 0 -5 -5 v-32 q1 -5 7 -7 z' fill='url(#g)'/><path d='M21.5 30 h21 v24 q0 3.5 -3.5 3.5 h-14 q-3.5 0 -3.5 -3.5 z' fill='url(#w)'/><ellipse cx='32' cy='30' rx='10.5' ry='1.8' fill='#bfe9fb'/><rect x='20' y='35' width='24' height='10' fill='url(#l)'/><path d='M27 40 q5 -6 10 0 q-5 6 -10 0z' fill='#e9f7d8' opacity='.85'/><path d='M24.5 20 q1 -3 3 -4 v36 q-3 -1 -3 -3 z' fill='#fff' opacity='.75'/><circle cx='39' cy='50' r='1.4' fill='#fff' opacity='.7'/></g></svg>`),
+  camera: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='b' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#b9efe0'/><stop offset='.55' stop-color='#6cc2ad'/><stop offset='1' stop-color='#3d8f7d'/></linearGradient><linearGradient id='d' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#2f7566'/><stop offset='1' stop-color='#1f4f45'/></linearGradient><linearGradient id='t' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#f3f6f7'/><stop offset='1' stop-color='#a9b6bd'/></linearGradient><radialGradient id='r' cx='.4' cy='.35' r='.7'><stop offset='0' stop-color='#ffffff'/><stop offset='.6' stop-color='#c9d2d8'/><stop offset='1' stop-color='#7d8a94'/></radialGradient><radialGradient id='k' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='#3a4f66'/><stop offset='1' stop-color='#0d141c'/></radialGradient><radialGradient id='g' cx='.35' cy='.3' r='.75'><stop offset='0' stop-color='#9ad8ff'/><stop offset='.35' stop-color='#4b6fd6'/><stop offset='.8' stop-color='#2a1f5a'/><stop offset='1' stop-color='#120e26'/></radialGradient><radialGradient id='u' cx='.4' cy='.3' r='.7'><stop offset='0' stop-color='#ff9a86'/><stop offset='1' stop-color='#c2321f'/></radialGradient><radialGradient id='s' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='#000' stop-opacity='.35'/><stop offset='1' stop-color='#000' stop-opacity='0'/></radialGradient></defs><ellipse cx='32' cy='58' rx='25' ry='4' fill='url(#s)'/><g transform='rotate(-7 32 34)'><rect x='38' y='10' width='11' height='6' rx='2.5' fill='url(#u)'/><rect x='40' y='11' width='5' height='1.6' rx='.8' fill='#fff' opacity='.6'/><rect x='7' y='17' width='50' height='35' rx='8' fill='url(#d)'/><rect x='7' y='15' width='50' height='34' rx='8' fill='url(#b)'/><rect x='7' y='15' width='50' height='9' rx='6' fill='url(#t)' opacity='.9'/><path d='M12 17 h40 q3 0 3 2 h-46 q0 -2 3 -2z' fill='#fff' opacity='.8'/><rect x='12' y='27' width='9' height='6' rx='2' fill='#fff7c9' stroke='#e2d38a' stroke-width='.8'/><rect x='13' y='28' width='3' height='2' rx='.6' fill='#fff'/><circle cx='33' cy='35' r='14' fill='#235a4e' opacity='.45'/><circle cx='32' cy='33.5' r='13.5' fill='url(#r)'/><circle cx='32' cy='33.5' r='10' fill='url(#k)'/><circle cx='32' cy='33.5' r='7' fill='url(#g)'/><ellipse cx='29' cy='30.5' rx='3' ry='2' fill='#fff' opacity='.85'/><circle cx='35.5' cy='37' r='1.1' fill='#fff' opacity='.5'/><path d='M10 44 q0 4 4 4 h36 q4 0 4 -4' fill='none' stroke='#2f7566' stroke-width='1.2' opacity='.6'/></g></svg>`),
+  litterbag: "data:image/svg+xml," + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='p' x1='0' x2='1'><stop offset='0' stop-color='#b48a57'/><stop offset='.45' stop-color='#ecd2a2'/><stop offset='1' stop-color='#a07443'/></linearGradient><linearGradient id='q' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#f6e3bd'/><stop offset='1' stop-color='#cfae7a'/></linearGradient><radialGradient id='f' cx='.35' cy='.3' r='.8'><stop offset='0' stop-color='#9be08e'/><stop offset='1' stop-color='#2f7f3a'/></radialGradient><radialGradient id='s' cx='.5' cy='.5' r='.5'><stop offset='0' stop-color='#000' stop-opacity='.35'/><stop offset='1' stop-color='#000' stop-opacity='0'/></radialGradient></defs><ellipse cx='32' cy='59' rx='19' ry='3.5' fill='url(#s)'/><g transform='rotate(-5 32 34)'><path d='M24 19 q0 -13 8 -13 q8 0 8 13' fill='none' stroke='#7a5a38' stroke-width='3' stroke-linecap='round'/><path d='M14 20 h36 l-4 37 q0 2.5 -2.5 2.5 h-23 q-2.5 0 -2.5 -2.5 z' fill='url(#p)'/><path d='M14 20 l3 -7 h30 l3 7 z' fill='url(#q)'/><path d='M18 22 l3 34' stroke='#fff' stroke-width='2.2' opacity='.45' stroke-linecap='round'/><path d='M32 50 q-11 -2 -8 -14 q9 -2 15 -7 q4 15 -7 21z' fill='url(#f)'/><path d='M30 48 q1 -8 8 -15' fill='none' stroke='#e8f7dc' stroke-width='1.5'/><ellipse cx='28' cy='37' rx='2.2' ry='1.2' fill='#fff' opacity='.6' transform='rotate(-30 28 37)'/></g></svg>`),
 };
 const el = (tag, cls, text) => {
   const e = document.createElement(tag); if (cls) e.className = cls;
@@ -521,7 +522,7 @@ export function createHUD(handlers) {
   const stepWeather = (d) => { wxAt = (wxAt + d + WEATHERS.length) % WEATHERS.length; weatherRow.val.textContent = WEATHERS[wxAt][0]; handlers.onSetWeather && handlers.onSetWeather(WEATHERS[wxAt][1]); };
   timeRow.step = stepTime; weatherRow.step = stepWeather;
   const controls = el('div', 'keys');
-  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 6', 'Use what is in a pocket'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal (Notes are inside)'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Tab', 'Menu'], ['Esc', 'Pause']]) {
+  for (const [k, v] of [['W A S D', 'Move'], ['Shift', 'Switch walk / run'], ['Space', 'Hop'], ['E', 'Use / pick up / say hello'], ['B', 'Backpack'], ['G', 'Quest guide on / off'], ['1 – 8', 'Quick bar: 1 flask, 2 torch, 3 bugle, 4 camera, 5 litter bag, 6 – 8 other things'], ['F', 'Join in with the camp'], ['X', 'Sit down / stand up'], ['Mouse drag', 'Look around'], ['C', 'Free look on / off'], ['Scroll', 'Zoom'], ['J', 'Journal (Notes are inside)'], ['M', 'Map'], ['N', 'Sound'], ['T', 'Day speed 1× to 2×'], ['Tab', 'Menu'], ['Esc', 'Pause']]) {
     const r = el('div', 'key'); r.append(el('kbd', null, k), el('span', null, v)); controls.append(r);
   }
   const gamePanel = el('div', 'panel'); gamePanel.append(el('h3', null, 'Game'), resume, speedRow, timeRow, weatherRow, keysRow);
@@ -677,8 +678,18 @@ export function createHUD(handlers) {
       if (lastBagSig !== null && sig !== lastBagSig) wake(['belt']);
       lastBagSig = sig;
       if (selected >= view.slots.length) selected = Math.max(0, view.slots.length - 1);
-      belt.replaceChildren(...view.slots.slice(0, 6).map((s, i) => {
-        const b = el('button', 'slot'); b.title = ITEMS[s.id].name;
+      // The quick bar (src/logic/belt.js): tools in fixed slots 1-5 (a tool you do not have yet shows faintly in its
+      // place), then the first other things.
+      belt.replaceChildren(...beltOf(view.slots).map((s, i) => {
+        const b = el('button', 'slot');
+        if (!s) {
+          const tool = TOOLS[i];
+          b.title = tool ? `${ITEMS[tool].name} (not found yet)` : 'Empty';
+          b.append(el('span', 'pic', tool ? ITEMS[tool].icon : '·'), el('b', null, ''), el('em', null, String(i + 1)));
+          b.style.opacity = '0.3'; b.style.filter = 'grayscale(1)'; b.style.pointerEvents = 'none';
+          return b;
+        }
+        b.title = ITEMS[s.id].name;
         b.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : '')), el('em', null, String(i + 1)));
         b.addEventListener('click', () => handlers.onUseItem(s.id));
         return b;
@@ -687,7 +698,7 @@ export function createHUD(handlers) {
       const cells = [];
       for (let i = 0; i < view.capacity; i++) {
         const s = view.slots[i], c = el('button', s ? (i === selected ? 'cell on' : 'cell') : 'cell empty');
-        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); if (i < 6) c.append(el('em', null, String(i + 1))); c.addEventListener('click', () => { selected = i; hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
+        if (s) { c.append(el('span', 'pic', ITEMS[s.id].icon), el('b', null, s.label || (s.count > 1 ? String(s.count) : ''))); const key = keyOf(view.slots, s.id); if (key) c.append(el('em', null, String(key))); c.addEventListener('click', () => { selected = i; hud.setBag(bagView); }); c.addEventListener('dblclick', () => handlers.onUseItem(s.id)); }
         cells.push(c);
       }
       grid.replaceChildren(...cells);

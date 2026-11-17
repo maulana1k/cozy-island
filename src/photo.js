@@ -21,8 +21,24 @@ const PEOPLE = { villager: 'Scout', local: 'Villager' };
 const CSS = `
 #hud .cam { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s ease; z-index: 4; color: #fff; font-variant-numeric: tabular-nums; }
 #hud .cam.on { opacity: 1; }
-#hud .cam .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(10,16,24,.38) 100%); }
-#hud .cam .frame { position: absolute; inset: 5vh 4vw; transform: scale(1.08); transition: transform .5s cubic-bezier(.3,.7,.2,1); }
+#hud .cam .vig { position: absolute; inset: 16px 16px 54px; border-radius: 30px; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(10,16,24,.38) 100%); }
+/* The camera body round the picture: a dark bezel with a rounded screen cut out of it, a brand strip below. */
+#hud .cam .bezel { position: absolute; inset: 0; overflow: hidden; transform: scale(1.12); transition: transform .5s cubic-bezier(.3,.7,.2,1); }
+#hud .cam.on .bezel { transform: scale(1); }
+#hud .cam .screen { position: absolute; left: 16px; right: 16px; top: 16px; bottom: 54px; border-radius: 30px; box-shadow: 0 0 0 400px #1c2226, inset 0 0 0 2px rgba(255,255,255,.12), inset 0 0 50px rgba(0,0,0,.35); }
+#hud .cam .strip { position: absolute; left: 34px; right: 34px; bottom: 10px; height: 34px; display: flex; align-items: center; justify-content: space-between; color: #c9d3d8; text-shadow: none; }
+#hud .cam .brand { font-size: 13px; font-weight: 900; letter-spacing: 3px; color: #8fd3c1; }
+#hud .cam .brand i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e8563f; margin-right: 8px; vertical-align: 1px; box-shadow: 0 0 6px #e8563f; }
+#hud .cam .grid { position: absolute; left: 16px; right: 16px; top: 16px; bottom: 54px; opacity: 0; transition: opacity .2s ease; background:
+  linear-gradient(90deg, transparent calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% + .5px), transparent calc(66.66% + .5px)),
+  linear-gradient(0deg, transparent calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% - .5px), rgba(255,255,255,.35) calc(33.33% + .5px), transparent calc(33.33% + .5px), transparent calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% - .5px), rgba(255,255,255,.35) calc(66.66% + .5px), transparent calc(66.66% + .5px)); border-radius: 30px; }
+#hud .cam .grid.on { opacity: 1; }
+#hud .cam .info { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); display: flex; gap: 18px; font-size: 13px; font-weight: 800; letter-spacing: .6px; text-shadow: 0 1px 3px rgba(0,0,0,.5); white-space: nowrap; }
+#hud .cam .info span { opacity: .92; }
+#hud .cam .rec { color: #ff7a66; }
+#hud .cam .rec i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ff4a33; margin-right: 6px; vertical-align: 0; animation: camrec 1.2s steps(2, jump-none) infinite; }
+@keyframes camrec { 0% { opacity: 1; } 100% { opacity: .15; } }
+#hud .cam .frame { position: absolute; inset: calc(16px + 4vh) calc(16px + 3vw) calc(54px + 4vh); transform: scale(1.08); transition: transform .5s cubic-bezier(.3,.7,.2,1); }
 #hud .cam.on .frame { transform: scale(1); }
 #hud .cam .c { position: absolute; width: 46px; height: 46px; border: 0 solid rgba(255,255,255,.9); filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
 #hud .cam .c.k1 { left: 0; top: 0; border-left-width: 4px; border-top-width: 4px; border-top-left-radius: 14px; }
@@ -38,23 +54,23 @@ const CSS = `
 #hud .cam .box.lock { transform: scale(.94); }
 #hud .cam .box.lock i { border-color: #7dffb0; }
 #hud .cam .dot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.8); }
-#hud .cam .top { position: absolute; left: 28px; right: 28px; top: 18px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 800; letter-spacing: .5px; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+#hud .cam .top { position: absolute; left: 44px; right: 44px; top: 30px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 800; letter-spacing: .5px; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
 #hud .cam .mode { display: flex; gap: 8px; align-items: center; }
 #hud .cam .mode b { background: #8fd3c1; color: #1d3b37; border-radius: 6px; padding: 1px 7px; text-shadow: none; font-size: 12px; }
 #hud .cam .bat { display: inline-block; width: 26px; height: 12px; border: 2px solid #fff; border-radius: 3px; position: relative; vertical-align: -2px; margin-left: 8px; }
 #hud .cam .bat::after { content: ""; position: absolute; right: -5px; top: 2px; width: 3px; height: 4px; background: #fff; border-radius: 0 1px 1px 0; }
 #hud .cam .bat i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 70%; background: #7dffb0; border-radius: 1px; }
-#hud .cam .zoom { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+#hud .cam .zoom { position: absolute; right: 46px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.45); }
 #hud .cam .zbar { width: 6px; height: 140px; border-radius: 3px; background: rgba(255,255,255,.3); position: relative; }
 #hud .cam .zbar i { position: absolute; left: -4px; width: 14px; height: 6px; border-radius: 3px; background: #fff; margin-top: -3px; }
 #hud .cam .spot { position: absolute; left: 50%; top: calc(${50 + BOX_Y * 50}% + 12px); transform: translateX(-50%); font-size: 15px; font-weight: 800; white-space: nowrap; padding: 3px 12px; border-radius: 999px; background: rgba(20,24,30,.45); opacity: 0; transition: opacity .2s ease; }
 #hud .cam .spot.on { opacity: 1; }
-#hud .cam .keys { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; gap: 14px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+#hud .cam .keys { display: flex; gap: 14px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 #hud .cam .keys kbd { margin-right: 5px; }
 #hud .cam .flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
 #hud .cam .flash.go { animation: camflash .45s ease-out; }
 @keyframes camflash { 0% { opacity: .95; } 100% { opacity: 0; } }
-#hud .cam .print { position: absolute; right: 70px; bottom: 64px; padding: 8px 8px 30px; background: #fffdf8; box-shadow: 0 10px 30px rgba(0,0,0,.35); transform: translateY(30px) rotate(4deg) scale(.9); opacity: 0; transition: opacity .25s ease, transform .4s cubic-bezier(.2,1.3,.3,1); color: #2b3440; text-shadow: none; }
+#hud .cam .print { position: absolute; right: 80px; bottom: 100px; padding: 8px 8px 30px; background: #fffdf8; box-shadow: 0 10px 30px rgba(0,0,0,.35); transform: translateY(30px) rotate(4deg) scale(.9); opacity: 0; transition: opacity .25s ease, transform .4s cubic-bezier(.2,1.3,.3,1); color: #2b3440; text-shadow: none; }
 #hud .cam .print.on { opacity: 1; transform: translateY(0) rotate(-3deg) scale(1); }
 #hud .cam .print img { display: block; width: 224px; height: 168px; object-fit: cover; background: #dde3e8; }
 #hud .cam .print .cap { position: absolute; left: 10px; right: 10px; bottom: 7px; font-size: 13px; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -67,6 +83,7 @@ const CSS = `
 // shot: { thumb, best: { guide, name, d } | null, grade 1..3 }
 export function createPhotoCamera(deps) {
   const { camera, input, groundAt, player } = deps;
+  let gridEl = null, isoEl = null, speedEl = null, gridOn = false;
   let root = null, zoomEl = null, zbarEl = null, spotEl = null, boxEl = null, flashEl = null, printEl = null, printImg = null, printCap = null, shotsEl = null;
   const BASE_FOV = 50;
   let active = false, yaw = 0, pitch = 0, aimYaw = 0, aimPitch = 0, zoom = 1, wantZoom = 1, clock = 0, enter = 1, whirrAt = -9, hold = 0, shots = 128;
@@ -78,7 +95,10 @@ export function createPhotoCamera(deps) {
   const focus = { dist: 8, aperture: 1.5 }; // read by main.js for the depth of field
   const play = (n) => { if (deps.audio) deps.audio.play(n); };
   const keys = new Set();
-  const onKey = (e) => { if (!active) return; if (e.type === 'keydown') keys.add(e.code); else keys.delete(e.code); };
+  const onKey = (e) => {
+    if (!active) return;
+    if (e.type === 'keydown') { keys.add(e.code); if (e.code === 'KeyG' && !e.repeat && gridEl) { gridOn = !gridOn; gridEl.classList.toggle('on', gridOn); play('click'); } } else keys.delete(e.code);
+  };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
   window.addEventListener('blur', () => keys.clear());
   // A click (a press that hardly moved) takes the photo; a drag only aims.
@@ -99,19 +119,30 @@ export function createPhotoCamera(deps) {
     const frame = mk('frame');
     for (const c of ['k1', 'k2', 'k3', 'k4']) frame.append(mk(`c ${c}`));
     boxEl = mk('box'); for (let i = 0; i < 4; i++) boxEl.append(document.createElement('i'));
-    const top = mk('top'), mode = mk('mode'), b = document.createElement('b'); b.textContent = 'AUTO'; mode.append(b, document.createTextNode('📷 Nature'));
+    const top = mk('top'), mode = mk('mode'), b = document.createElement('b'); b.textContent = 'AUTO';
+    const rec = document.createElement('span'); rec.className = 'rec'; rec.append(document.createElement('i'), document.createTextNode('REC'));
+    mode.append(rec, b, document.createTextNode('Nature'));
     const right = mk('right'); shotsEl = document.createElement('span'); const bat = document.createElement('span'); bat.className = 'bat'; bat.append(document.createElement('i')); right.append(shotsEl, bat);
     top.append(mode, right);
     const z = mk('zoom'); zoomEl = mk('zt'); zbarEl = document.createElement('i'); const bar = mk('zbar'); bar.append(zbarEl); z.append(mk('', 'T'), bar, mk('', 'W'), zoomEl);
     spotEl = mk('spot'); flashEl = mk('flash');
     printEl = mk('print'); printImg = document.createElement('img'); printImg.alt = ''; printCap = mk('cap'); printEl.append(printImg, printCap);
+    // Exposure readouts under the picture: ISO and shutter speed follow the light, then the aperture and zoom.
+    const info = mk('info'); isoEl = document.createElement('span'); speedEl = document.createElement('span'); const fEl = document.createElement('span'); fEl.textContent = 'F2.8'; const zEl2 = document.createElement('span'); info.append(isoEl, speedEl, fEl, zEl2); info.zEl = zEl2; root.info = info;
+    gridEl = mk(gridOn ? 'grid on' : 'grid');
+    const bezel = mk('bezel'); bezel.append(mk('screen'));
+    const strip = mk('strip'), brand = mk('brand'); brand.append(document.createElement('i'), document.createTextNode('SCOUTCAM'));
     const k = mk('keys');
-    for (const [key, what] of [['Space / click', 'take photo'], ['Drag / W A S D', 'aim'], ['Scroll / + −', 'zoom'], ['E / Esc', 'put away']]) { const s = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = key; s.append(kb, document.createTextNode(what)); k.append(s); }
-    root.append(mk('vig'), frame, boxEl, mk('dot'), top, z, spotEl, k, printEl, flashEl);
+    for (const [key, what] of [['Space / click', 'photo'], ['Drag / W A S D', 'aim'], ['Scroll / + −', 'zoom'], ['G', 'grid'], ['E / Esc', 'put away']]) { const s = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = key; s.append(kb, document.createTextNode(what)); k.append(s); }
+    strip.append(brand, k);
+    root.append(mk('vig'), gridEl, frame, boxEl, mk('dot'), top, z, spotEl, info, bezel, strip, printEl, flashEl);
     hud.append(root);
   }
   const fovNow = () => BASE_FOV / zoom;
-  function showZoom() { zoomEl.textContent = `${wantZoom.toFixed(1)}×`; zbarEl.style.top = `${(1 - (wantZoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`; shotsEl.textContent = `▣ ${shots}`; }
+  function showZoom() { zoomEl.textContent = `${wantZoom.toFixed(1)}×`; zbarEl.style.top = `${(1 - (wantZoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`; shotsEl.textContent = `▣ ${shots}`;
+    // Darker light, higher ISO and a slower shutter (deps.light: 0 night .. 1 bright day).
+    const L = deps.light ? deps.light() : 1, iso = L > 0.75 ? 100 : L > 0.5 ? 200 : L > 0.3 ? 400 : L > 0.15 ? 800 : 1600;
+    isoEl.textContent = `ISO ${iso}`; speedEl.textContent = `1/${iso >= 800 ? 60 : iso >= 400 ? 125 : 250}`; root.info.zEl.textContent = `${wantZoom.toFixed(1)}×`; }
   // The scout's own body would fill the bottom of the picture: hidden while the camera is up.
   function hideSelf(on) {
     if (on) {

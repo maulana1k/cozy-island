@@ -40,6 +40,7 @@ import { createContactShadows } from './world/contact.js';
 import { createStoryRuntime } from './story/runtime.js';
 import { createScope } from './scope.js';
 import { createPhotoCamera } from './photo.js';
+import { beltOf, keyOf } from './logic/belt.js';
 import { album } from './story/album.js';
 import { createLitter } from './world/litter.js';
 import { createPhotoBoard } from './world/photoBoard.js';
@@ -335,6 +336,7 @@ const interactables = [...litter.interactables, ...areas.flatMap((a) => a.intera
 // ---- The digital camera (src/photo.js): a photo of an animal in the focus box fills its field-guide entry.
 const photo = createPhotoCamera({
   camera, input, canvas, groundAt, audio, player, interactables, scene, particles,
+  light: () => (1 - nightFactor(timeOfDay)) * (1 - 0.4 * (weather.cloud || 0)),
   label: (s) => (s.guide && FIELD_GUIDE[s.guide] ? FIELD_GUIDE[s.guide].name : s.name || ''),
   onPhoto: (shot) => onPhoto(shot),
   onClose: () => { if (!director.active) { finish.dof = null; finish.useDepth(false); } storyRt.blendFrom(); syncLook(); },
@@ -606,7 +608,7 @@ storyRt = createStoryRuntime({
 hud.setContinue(storyRt.hasSave());
 refreshProgress(); refreshQuest(); hud.setFilms(true); hud.setSaver(saver); hud.setGraphics(graphics); hud.setDaySpeed(daySpeed);
 // What every scout sets out with.
-bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('camera'); bag.add('biscuit', 2); // the camera is in pocket 4
+bag.add('flask'); bag.add('torch'); bag.add('bugle'); bag.add('camera'); bag.add('biscuit', 2); // the camera is on quick-bar key 4
 album.load();
 refreshBag();
 const dockEnd = { x: DOCK.x + Math.sin(DOCK.rot) * (DOCK.length - 1.5), z: DOCK.z + Math.cos(DOCK.rot) * (DOCK.length - 1.5) };
@@ -648,7 +650,7 @@ window.addEventListener('keydown', (e) => {
   if (storyRt.key(e)) { if (/^(Digit|Numpad)\d$|^Escape$|^Space$|^Tab$/.test(e.code) && !(e.target && e.target.tagName === 'INPUT')) e.preventDefault(); return; }
   if (!hud.started) { storyRt.titleKey(e); return; }
   if (scope.active) { if (e.code === 'Escape' || e.code === 'KeyE') { scope.close(); input.consumeInteract(); } return; } // the telescope has the keys
-  if (photo.active) { if (e.code === 'Escape' || e.code === 'KeyE' || (/^Digit[1-6]$/.test(e.code) && bag.slots[Number(e.code.slice(5)) - 1]?.id === 'camera')) { photo.close(); input.consumeInteract(); } else if (e.code === 'Space' && !e.repeat) photo.shoot(); e.preventDefault(); return; } // the camera has the keys
+  if (photo.active) { if (e.code === 'Escape' || e.code === 'KeyE' || (/^Digit[1-8]$/.test(e.code) && beltOf(bag.slots)[Number(e.code.slice(5)) - 1]?.id === 'camera')) { photo.close(); input.consumeInteract(); } else if (e.code === 'Space' && !e.repeat) photo.shoot(); e.preventDefault(); return; } // the camera has the keys
   if (e.code === 'Tab') e.preventDefault(); // focus never moves, even on a held key
   if (e.repeat) return;
   // During a film any of these keys skips it; nothing else works until it is over.
@@ -661,7 +663,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !hud.menuOpen) toggleMap();
   if (e.code === 'KeyC' && !hud.menuOpen) toggleLook();
   if (e.code === 'KeyB' && !hud.menuOpen) toggleBag();
-  if (/^Digit[1-6]$/.test(e.code) && !hud.menuOpen) { const s = bag.slots[Number(e.code.slice(5)) - 1]; if (s) useItem(s.id); }
+  if (/^Digit[1-8]$/.test(e.code) && !hud.menuOpen) { const s = beltOf(bag.slots)[Number(e.code.slice(5)) - 1]; if (s) useItem(s.id); } // the quick bar (src/logic/belt.js)
   // Esc closes the pause menu, else the bag, journal or map, else opens the pause menu.
   if (e.code === 'Escape') {
     escActedAt = performance.now();
@@ -781,7 +783,7 @@ function step() {
   if (filmDue && elapsed >= filmDue.at && !paused) { if (filmDue.id === block.id && !buildings.inside) film(filmDue.id); filmDue = null; }
   const filming = director.active;
   if (filming) { input.consumeInteract(); input.consumeJoin(); input.consumeSit(); input.consumeLook(); input.consumeZoom(); }
-  if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${bag.slots.findIndex((s) => s.id === 'torch') + 1} to switch on your torch.`);
+  if (night > 0.5 && !paused) tip('torch', `It is getting dark. Press ${keyOf(bag.slots, 'torch')} to switch on your torch.`);
   setSleepy(night);
   // The scout's face shows how they are doing.
   player.mood = params.get('mood') || (vitals.hungry || vitals.thirsty ? 'sad' : vitals.winded ? 'effort' : vitals.cheer >= 85 ? 'happy' : null); // ?mood= is a debug aid

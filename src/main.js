@@ -708,11 +708,13 @@ if (params.has('found')) ['flag', 'bell', 'cat', 'place-beach', 'tree'].slice(0,
 // Leaving the window pauses the game, so nothing happens while you are away.
 window.addEventListener('blur', () => { if (hud.started && !hud.menuOpen) toggleMenu(); });
 
+let heldFrames = 0;
 function onResize() {
   renderer.setPixelRatio(ratio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
+  heldFrames = 0; // a resized canvas is blank: draw it again even while the menu holds the picture
 }
 window.addEventListener('resize', onResize);
 // Moving between a Retina and a normal display changes the pixel ratio without a resize.
@@ -998,10 +1000,17 @@ function step() {
 const drawn = { calls: 0, tris: 0, lastCalls: 0, lastTris: 0 };
 // ---- Not working harder than needed: a fast screen would otherwise have every refresh drawn.
 // Smooth is 60 pictures a second, saver 30; the title turns at 30 and the pause menu barely ticks over.
-function frameRate() { return hud.menuOpen ? 10 : !hud.started || saver ? 30 : 60; }
+function frameRate() { return !hud.started || saver ? 30 : 60; }
 let lastDraw = 0;
+// The pause menu stops the loop's heavy work: a couple of frames settle the picture under it, then the canvas
+// just keeps its last frame (only the HUD stays live). Resuming resets the clock so dt does not jump.
+let wasHeld = false;
 function frame(now) {
   requestAnimationFrame(frame);
+  if (hud.started && hud.menuOpen) {
+    if (heldFrames >= 2) { wasHeld = true; return; }
+    heldFrames++;
+  } else { heldFrames = 0; if (wasHeld) { wasHeld = false; last = performance.now(); lastDraw = now; } }
   // The 3 ms of slack lets a 60 Hz screen draw on every refresh, not every other one.
   if (!noLimit && now - lastDraw < 1000 / frameRate() - 3) return;
   lastDraw = now;
